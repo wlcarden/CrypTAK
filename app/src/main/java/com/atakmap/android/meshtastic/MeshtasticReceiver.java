@@ -18,6 +18,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 
+import com.atakmap.android.maps.tilesets.EquirectangularTilesetSupport;
 import com.atakmap.android.meshtastic.util.Constants;
 import com.atakmap.android.meshtastic.util.AckManager;
 import com.atakmap.android.meshtastic.util.FileTransferManager;
@@ -49,13 +50,14 @@ import com.atakmap.coremap.cot.event.CotPoint;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.coremap.maps.time.CoordinatedTime;
 
+import com.atakmap.map.projection.EquirectangularMapProjection;
 import com.geeksville.mesh.ATAKProtos;
 import com.geeksville.mesh.ConfigProtos;
-import com.geeksville.mesh.DataPacket;
+import org.meshtastic.core.model.DataPacket;
 
 import com.geeksville.mesh.LocalOnlyProtos;
-import com.geeksville.mesh.MessageStatus;
-import com.geeksville.mesh.NodeInfo;
+import org.meshtastic.core.model.MessageStatus;
+import org.meshtastic.core.model.NodeInfo;
 import com.geeksville.mesh.Portnums;
 import com.google.protobuf.InvalidProtocolBufferException;
 
@@ -72,6 +74,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
@@ -923,7 +926,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     }
 
                     // inform sender we're done recv
-                    DataPacket dp = new DataPacket(sender, new byte[]{'M', 'F', 'T'}, Portnums.PortNum.ATAK_FORWARDER_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, getHopLimit(), getChannelIndex(), getWantsAck());
+                    DataPacket dp = new DataPacket(sender, new byte[]{'M', 'F', 'T'}, Portnums.PortNum.ATAK_FORWARDER_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, getHopLimit(), getChannelIndex(), getWantsAck(), 0, 0f, 0, null);
                     MeshtasticMapComponent.sendToMesh(dp);
                     try {
                         Thread.sleep(3000);
@@ -1045,6 +1048,81 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     else if (team.equals("DarkGreen"))
                         team = "Dark Green";
                     groupDetail.setAttribute("name", team);
+
+/*
+            try {
+                    NodeInfo ni = intent.getParcelableExtra("com.geeksville.mesh.NodeInfo");
+                    Log.d(TAG, "NodeInfo: " + ni);
+                       String nodeName = "";
+                        String[] teamColor = {"Unknown", " -0"};
+                        if (ni != null) {
+                            nodeName = ni.getUser().getLongName();
+                            teamColor = nodeName.split("((?= -[0-9]*$))");
+                            Log.d(TAG, String.valueOf(teamColor.length));
+
+                            for (int i = 0; i < teamColor.length; i++) {
+                                Log.d(TAG, "teamColor[" + i + "]: " + teamColor[i]);
+                            }
+                            if (teamColor.length < 2) {
+                                teamColor = new String[]{nodeName, " -10"};
+                            }
+                            groupDetail.setAttribute("role", "Team Member");
+                            switch (teamColor[1]) {
+                                case " -0":
+                                case " -1":
+                                    groupDetail.setAttribute("name", "White");
+                                    break;
+                                case " -2":
+                                    groupDetail.setAttribute("name", "Yellow");
+                                    break;
+                                case " -3":
+                                    groupDetail.setAttribute("name", "Orange");
+                                    break;
+                                case " -4":
+                                    groupDetail.setAttribute("name", "Magenta");
+                                    break;
+                                case " -5":
+                                    groupDetail.setAttribute("name", "Red");
+                                    break;
+                                case " -6":
+                                    groupDetail.setAttribute("name", "Maroon");
+                                    break;
+                                case " -7":
+                                    groupDetail.setAttribute("name", "Purple");
+                                    break;
+                                case " -8":
+                                    groupDetail.setAttribute("name", "Dark Blue");
+                                    break;
+                                case " -9":
+                                    groupDetail.setAttribute("name", "Blue");
+                                    break;
+                                case " -10":
+                                    groupDetail.setAttribute("name", "Cyan");
+                                    break;
+                                case " -11":
+                                    groupDetail.setAttribute("name", "Teal");
+                                    break;
+                                case " -12":
+                                    groupDetail.setAttribute("name", "Green");
+                                    break;
+                                case " -13":
+                                    groupDetail.setAttribute("name", "Dark Green");
+                                    break;
+                                case " -14":
+                                    groupDetail.setAttribute("name", "Brown");
+                                    break;
+                                default:
+                                    groupDetail.setAttribute("name", "Black");
+                                    break;
+                            }
+                        } else {
+                            groupDetail.setAttribute("name", "Cyan");
+                        }
+                    } catch(Exception e){
+                        e.printStackTrace();
+                        return;
+                    }
+*/
                     cotDetail.addChild(groupDetail);
 
                     CotDetail statusDetail = new CotDetail("status");
@@ -1408,7 +1486,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     Log.d(TAG, "Total wire size for TAKPacket: " + tak_packet.build().toByteArray().length);
                     Log.d(TAG, "Sending: " + tak_packet.build().toString());
 
-                    dp = new DataPacket(DataPacket.ID_BROADCAST, tak_packet.build().toByteArray(), Portnums.PortNum.ATAK_PLUGIN_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck());
+                    dp = new DataPacket(DataPacket.ID_BROADCAST, tak_packet.build().toByteArray(), Portnums.PortNum.ATAK_PLUGIN_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null);
                     if (MeshtasticMapComponent.getMeshService() != null)
                         MeshtasticMapComponent.getMeshService().sendToMesh(dp);
                 } else if (cotDetail.getAttribute("contact") != null) {
@@ -1494,7 +1572,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                             Log.d(TAG, "Total wire size for TAKPacket: " + tak_packet.build().toByteArray().length);
                             Log.d(TAG, "Sending: " + tak_packet.build().toString());
 
-                            dp = new DataPacket(DataPacket.ID_BROADCAST, tak_packet.build().toByteArray(), Portnums.PortNum.ATAK_PLUGIN_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck());
+                            dp = new DataPacket(DataPacket.ID_BROADCAST, tak_packet.build().toByteArray(), Portnums.PortNum.ATAK_PLUGIN_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null);
                             if (MeshtasticMapComponent.getMeshService() != null)
                                 MeshtasticMapComponent.getMeshService().sendToMesh(dp);
                         }

@@ -1,7 +1,7 @@
 package com.atakmap.android.meshtastic.util;
 
 import com.atakmap.coremap.log.Log;
-import com.geeksville.mesh.MessageStatus;
+import org.meshtastic.core.model.MessageStatus;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;

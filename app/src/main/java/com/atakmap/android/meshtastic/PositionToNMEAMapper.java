@@ -1,6 +1,6 @@
 package com.atakmap.android.meshtastic;
 
-import com.geeksville.mesh.Position;
+import org.meshtastic.core.model.Position;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;

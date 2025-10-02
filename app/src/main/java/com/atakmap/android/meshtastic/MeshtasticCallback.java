@@ -17,9 +17,9 @@ import com.atakmap.android.missionpackage.file.task.MissionPackageBaseTask;
 import com.atakmap.coremap.filesystem.FileSystemUtils;
 import com.atakmap.coremap.log.Log;
 import com.geeksville.mesh.ConfigProtos;
-import com.geeksville.mesh.DataPacket;
+import org.meshtastic.core.model.DataPacket;
 import com.geeksville.mesh.LocalOnlyProtos;
-import com.geeksville.mesh.MessageStatus;
+import org.meshtastic.core.model.MessageStatus;
 import com.geeksville.mesh.Portnums;
 import com.google.protobuf.InvalidProtocolBufferException;
 
@@ -100,7 +100,7 @@ public class MeshtasticCallback implements SaveAndSendCallback {
                     ackManager.registerForAck(messageId);
 
                     Log.d(TAG, "Broadcasting switch command");
-                    DataPacket dp = new DataPacket(DataPacket.ID_BROADCAST, new byte[]{'S', 'W', 'T'}, Portnums.PortNum.ATAK_FORWARDER_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), messageId, MessageStatus.UNKNOWN, 3, channel, MeshtasticReceiver.getWantsAck());
+                    DataPacket dp = new DataPacket(DataPacket.ID_BROADCAST, new byte[]{'S', 'W', 'T'}, Portnums.PortNum.ATAK_FORWARDER_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), messageId, MessageStatus.UNKNOWN, 3, channel, MeshtasticReceiver.getWantsAck(), 0, 0f, 0, null);
                     MeshtasticMapComponent.sendToMesh(dp);
 
                     // Wait for ACK with timeout

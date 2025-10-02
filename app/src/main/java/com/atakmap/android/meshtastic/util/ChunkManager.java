@@ -3,9 +3,9 @@ package com.atakmap.android.meshtastic.util;
 import android.content.SharedPreferences;
 import com.atakmap.android.meshtastic.MeshtasticReceiver;
 import com.atakmap.coremap.log.Log;
-import com.geeksville.mesh.DataPacket;
-import com.geeksville.mesh.IMeshService;
-import com.geeksville.mesh.MessageStatus;
+import org.meshtastic.core.model.DataPacket;
+import org.meshtastic.core.service.IMeshService;
+import org.meshtastic.core.model.MessageStatus;
 import com.geeksville.mesh.Portnums;
 
 import java.util.ArrayList;
@@ -107,7 +107,7 @@ public class ChunkManager {
         
         // Send end marker
         DataPacket endPacket = new DataPacket(
-            DataPacket.ID_BROADCAST, 
+            DataPacket.ID_BROADCAST,
             Constants.CHUNK_END_MARKER,
             Portnums.PortNum.ATAK_FORWARDER_VALUE,
             DataPacket.ID_LOCAL,
@@ -116,7 +116,11 @@ public class ChunkManager {
             MessageStatus.UNKNOWN,
             3,
             channel,
-            MeshtasticReceiver.getWantsAck()
+            MeshtasticReceiver.getWantsAck(),
+            0,  // hopStart
+            0f, // snr
+            0,  // rssi
+            null // replyId
         );
         
         meshService.send(endPacket);
@@ -143,7 +147,11 @@ public class ChunkManager {
                 MessageStatus.UNKNOWN,
                 hopLimit,
                 channel,
-                MeshtasticReceiver.getWantsAck()
+                MeshtasticReceiver.getWantsAck(),
+                0,  // hopStart
+                0f, // snr
+                0,  // rssi
+                null // replyId
             );
             
             meshService.send(dp);

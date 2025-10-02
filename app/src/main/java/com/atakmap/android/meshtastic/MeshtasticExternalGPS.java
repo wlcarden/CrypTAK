@@ -2,7 +2,7 @@ package com.atakmap.android.meshtastic;
 
 import android.util.Log;
 
-import com.geeksville.mesh.Position;
+import org.meshtastic.core.model.Position;
 
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;

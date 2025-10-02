@@ -27,12 +27,12 @@ import com.atakmap.coremap.cot.event.CotEvent;
 import com.atakmap.coremap.filesystem.FileSystemUtils;
 import com.atakmap.coremap.log.Log;
 import com.geeksville.mesh.ATAKProtos;
-import com.geeksville.mesh.DataPacket;
-import com.geeksville.mesh.MessageStatus;
+import org.meshtastic.core.model.DataPacket;
+import org.meshtastic.core.model.MessageStatus;
 import com.geeksville.mesh.MeshProtos;
-import com.geeksville.mesh.MeshUser;
-import com.geeksville.mesh.MyNodeInfo;
-import com.geeksville.mesh.NodeInfo;
+import org.meshtastic.core.model.MeshUser;
+import org.meshtastic.core.model.MyNodeInfo;
+import org.meshtastic.core.model.NodeInfo;
 import com.geeksville.mesh.Portnums;
 import com.google.protobuf.ByteString;
 import com.siemens.ct.exi.core.EXIFactory;
@@ -289,7 +289,11 @@ public class MeshtasticMapComponent extends DropDownMapComponent
             MessageStatus.UNKNOWN,
             hopLimit,
             channel,
-            MeshtasticReceiver.getWantsAck()
+            MeshtasticReceiver.getWantsAck(),
+            0,  // hopStart
+            0f, // snr
+            0,  // rssi
+            null // replyId
         );
         
         meshServiceManager.sendToMesh(dp);
@@ -313,7 +317,11 @@ public class MeshtasticMapComponent extends DropDownMapComponent
             MessageStatus.UNKNOWN,
             hopLimit,
             channel,
-            MeshtasticReceiver.getWantsAck()
+            MeshtasticReceiver.getWantsAck(),
+            0,  // hopStart
+            0f, // snr
+            0,  // rssi
+            null // replyId
         );
         
         meshServiceManager.sendToMesh(dp);
@@ -343,7 +351,11 @@ public class MeshtasticMapComponent extends DropDownMapComponent
                 MessageStatus.UNKNOWN,
                 hopLimit,
                 channel,
-                MeshtasticReceiver.getWantsAck()
+                MeshtasticReceiver.getWantsAck(),
+                0,  // hopStart
+                0f, // snr
+                0,  // rssi
+                null // replyId
             );
         } else {
             // Regular ATAK device
@@ -362,7 +374,11 @@ public class MeshtasticMapComponent extends DropDownMapComponent
                 MessageStatus.UNKNOWN,
                 hopLimit,
                 channel,
-                MeshtasticReceiver.getWantsAck()
+                MeshtasticReceiver.getWantsAck(),
+                0,  // hopStart
+                0f, // snr
+                0,  // rssi
+                null // replyId
             );
         }
         
@@ -415,7 +431,11 @@ public class MeshtasticMapComponent extends DropDownMapComponent
                     MessageStatus.UNKNOWN,
                     hopLimit,
                     channel,
-                    MeshtasticReceiver.getWantsAck()
+                    MeshtasticReceiver.getWantsAck(),
+                    0,  // hopStart
+                    0f, // snr
+                    0,  // rssi
+                    null // replyId
                 );
                 meshServiceManager.sendToMesh(dp);
                 return;

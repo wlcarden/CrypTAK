@@ -10,11 +10,11 @@ import android.widget.Toast;
 
 import com.atakmap.android.meshtastic.util.Constants;
 import com.atakmap.coremap.log.Log;
-import com.geeksville.mesh.DataPacket;
-import com.geeksville.mesh.IMeshService;
-import com.geeksville.mesh.MeshUser;
-import com.geeksville.mesh.MyNodeInfo;
-import com.geeksville.mesh.NodeInfo;
+import org.meshtastic.core.model.DataPacket;
+import org.meshtastic.core.service.IMeshService;
+import org.meshtastic.core.model.MeshUser;
+import org.meshtastic.core.model.MyNodeInfo;
+import org.meshtastic.core.model.NodeInfo;
 
 import java.util.List;
 

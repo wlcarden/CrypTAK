@@ -33,11 +33,11 @@ import com.atakmap.coremap.log.Log;
 import com.geeksville.mesh.ATAKProtos;
 import com.geeksville.mesh.AppOnlyProtos;
 import com.geeksville.mesh.ConfigProtos;
-import com.geeksville.mesh.DataPacket;
+import org.meshtastic.core.model.DataPacket;
 import com.geeksville.mesh.LocalOnlyProtos;
 import com.geeksville.mesh.MeshProtos;
-import com.geeksville.mesh.MessageStatus;
-import com.geeksville.mesh.NodeInfo;
+import org.meshtastic.core.model.MessageStatus;
+import org.meshtastic.core.model.NodeInfo;
 import com.geeksville.mesh.Portnums;
 import com.google.protobuf.ByteString;
 import com.ustadmobile.codec2.Codec2;
@@ -169,7 +169,7 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
                                     codec2_chunks.clear();
 
                                     // 0xC2 is my codec2 header
-                                    DataPacket dp = new DataPacket(DataPacket.ID_BROADCAST, append(new byte[]{(byte) 0xC2}, audio), Portnums.PortNum.ATAK_FORWARDER_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, MeshtasticReceiver.getHopLimit(), MeshtasticReceiver.getChannelIndex(), MeshtasticReceiver.getWantsAck());
+                                    DataPacket dp = new DataPacket(DataPacket.ID_BROADCAST, append(new byte[]{(byte) 0xC2}, audio), Portnums.PortNum.ATAK_FORWARDER_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, MeshtasticReceiver.getHopLimit(), MeshtasticReceiver.getChannelIndex(), MeshtasticReceiver.getWantsAck(), 0, 0f, 0, null);
                                     MeshtasticMapComponent.sendToMesh(dp);
                                 } catch (InterruptedException e) {
                                     e.printStackTrace();
@@ -420,7 +420,11 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
                         MessageStatus.UNKNOWN,
                         0, // no hops for audio to reduce latency
                         MeshtasticReceiver.getChannelIndex(),
-                        MeshtasticReceiver.getWantsAck()
+                        MeshtasticReceiver.getWantsAck(),
+                        0,  // hopStart
+                        0f, // snr
+                        0,  // rssi
+                        null // replyId
                 );
                 
                 MeshtasticMapComponent.sendToMesh(dp);
@@ -728,7 +732,7 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
         hopLimit = MeshtasticReceiver.getHopLimit();
         channel = MeshtasticReceiver.getChannelIndex();
 
-        DataPacket dp = new DataPacket(DataPacket.ID_BROADCAST, MeshProtos.Data.newBuilder().setPayload(payload).build().toByteArray(),Portnums.PortNum.TEXT_MESSAGE_APP_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, MeshtasticReceiver.getWantsAck());
+        DataPacket dp = new DataPacket(DataPacket.ID_BROADCAST, MeshProtos.Data.newBuilder().setPayload(payload).build().toByteArray(),Portnums.PortNum.TEXT_MESSAGE_APP_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, MeshtasticReceiver.getWantsAck(), 0, 0f, 0, null);
         MeshtasticMapComponent.sendToMesh(dp);
     }
 
