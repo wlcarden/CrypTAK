@@ -215,7 +215,7 @@ data class DataPacket(
         replyId = parcel.readInt().let { if (it == 0) null else it }
     }
 
-    companion object CREATOR : Parcelable.Creator<DataPacket> {
+    companion object {
         // Special node IDs that can be used for sending messages
 
         /** the Node ID for broadcast destinations */
@@ -235,8 +235,11 @@ data class DataPacket(
         @Suppress("MagicNumber")
         fun idToDefaultNodeNum(id: String?): Int? = runCatching { id?.toLong(16)?.toInt() }.getOrNull()
 
-        override fun createFromParcel(parcel: Parcel): DataPacket = DataPacket(parcel)
+        @JvmField
+        val CREATOR = object : Parcelable.Creator<DataPacket> {
+            override fun createFromParcel(parcel: Parcel): DataPacket = DataPacket(parcel)
 
-        override fun newArray(size: Int): Array<DataPacket?> = arrayOfNulls(size)
+            override fun newArray(size: Int): Array<DataPacket?> = arrayOfNulls(size)
+        }
     }
 }
