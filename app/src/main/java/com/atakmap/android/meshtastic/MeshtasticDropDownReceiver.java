@@ -54,6 +54,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
@@ -603,6 +604,19 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
         }
     }
 
+    private static void copyFile(AssetManager assetManager, String fileName, File outPath) throws IOException {
+        InputStream in;
+        in = assetManager.open(fileName);
+        OutputStream out = new FileOutputStream(outPath + "/" + fileName);
+
+        byte[] buffer = new byte[4000];
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            out.write(buffer, 0, read);
+        }
+        in.close();
+        out.close();
+    }
 
     public void recognizeMicrophone() {
         Log.d(TAG, "recognizeMicrophone");
