@@ -157,7 +157,19 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
 
         // codec2 recorder/playback - hardcoded to 700C for compatibility
         // NOTE: All devices must use the same codec mode for audio to work properly
-        this.c2 = Codec2.create(Codec2.CODEC2_MODE_700C);
+        try {
+            String arch = System.getProperty("os.arch");
+            if (arch != null) {
+                String a = arch.toLowerCase();
+                if (a.contains("64") || a.contains("aarch64") || a.contains("arm64")) {
+                    // Codec2 Recorder/Playback - hardcoded to 700C for compatibility
+                    // NOTE: All devices must use the same codec mode for audio to work properly
+                    c2 = Codec2.create(Codec2.CODEC2_MODE_700C);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         if (c2 == 0) {
             Log.e(TAG, "Failed to create Codec2 with mode 700C");
         }
@@ -1597,7 +1609,19 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
         }
         
         // Create new codec - hardcoded to 700C for compatibility
-        this.c2 = Codec2.create(Codec2.CODEC2_MODE_700C);
+        try {
+            String arch = System.getProperty("os.arch");
+            if (arch != null) {
+                String a = arch.toLowerCase();
+                if (a.contains("64") || a.contains("aarch64") || a.contains("arm64")) {
+                    // Codec2 Recorder/Playback - hardcoded to 700C for compatibility
+                    // NOTE: All devices must use the same codec mode for audio to work properly
+                    c2 = Codec2.create(Codec2.CODEC2_MODE_700C);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         if (c2 == 0) {
             Log.e(TAG, "Failed to create Codec2 with mode 700C");
         }

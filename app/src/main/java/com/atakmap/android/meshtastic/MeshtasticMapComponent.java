@@ -96,7 +96,7 @@ public class MeshtasticMapComponent extends DropDownMapComponent
         cotEventProcessor = new CotEventProcessor();
         executorService = Executors.newCachedThreadPool();
     }
-    
+
     @Override
     public void onCotServiceConnected(Bundle bundle) {
         // Implementation if needed
@@ -249,14 +249,28 @@ public class MeshtasticMapComponent extends DropDownMapComponent
         
         // Parse the CoT event
         CotEventProcessor.ParsedCotData parsedData = cotEventProcessor.parseCotEvent(cotEvent);
-        
+
         // Handle different event types
         String uid = cotEvent.getUID();
         String type = cotEvent.getType();
         
         if (uid.equals(MapView.getMapView().getSelfMarker().getUID())) {
+            long currentTime = System.currentTimeMillis();
+
+            if (prefs.getBoolean(Constants.PREF_PLI_RATE_ENABLED, false)) {
+                long lastPLITime = cotEventProcessor.getLastPLITime();
+                int rateLimitMs = prefs.getInt(Constants.PREF_PLI_RATE_VALUE, 0) * 1000;
+                if (currentTime - lastPLITime < rateLimitMs) {
+                    Log.d(TAG, "PLI rate limit - skipping self PLI");
+                    return;
+                }
+            }
             // Self PLI report
             handleSelfPLI(parsedData, hopLimit, channel);
+
+            // Update last PLI time
+            cotEventProcessor.setLastPLITime(currentTime);
+
         } else if (type.equalsIgnoreCase("b-t-f") && uid.contains("All Chat Rooms")) {
             // All Chat Rooms message
             handleAllChatMessage(parsedData, hopLimit, channel);
@@ -386,7 +400,7 @@ public class MeshtasticMapComponent extends DropDownMapComponent
         
         meshServiceManager.sendToMesh(dp);
     }
-    
+
     private void handleGenericCotEvent(CotEvent cotEvent, int hopLimit, int channel) {
         if (prefs.getBoolean(Constants.PREF_PLUGIN_CHUNKING, false)) {
             Log.d(TAG, "Chunking already in progress");
@@ -405,10 +419,11 @@ public class MeshtasticMapComponent extends DropDownMapComponent
                 exiResult.setOutputStream(osEXI);
                 
                 SAXParserFactory saxParserFactory = SAXParserFactory.newInstance();
+                saxParserFactory.setNamespaceAware(true);
                 try {
                     saxParserFactory.setFeature("http://xml.org/sax/features/external-general-entities", false);
                     saxParserFactory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-                    saxParserFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+                    //saxParserFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true); // no android support
                     saxParserFactory.setFeature("http://xml.org/sax/features/validation", false);
                     saxParserFactory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
                 } catch (Exception e) {

@@ -2,6 +2,21 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
     <PreferenceCategory android:title="@string/preferences_title" />
     <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_pli_rate_limit"
+        android:title="Enable PLI reporting rate controls"
+        android:summary="If enabled, self PLI reporting rate will be limited over Meshtastic"
+        android:dialogTitle="Enable self reporting rate controls"
+        android:defaultValue="false"/>
+    <com.atakmap.android.gui.PanListPreference
+        android:key="plugin_meshtastic_pli_rate_limit_value"
+        android:title="Reporting rate"
+        android:summary="Select PLI reporting rate for Meshtastic"
+        android:dialogTitle="Reporting rate"
+        android:entries="@array/rates"
+        android:entryValues="@array/rate_values"
+        android:dependency="plugin_meshtastic_pli_rate_limit"
+        android:defaultValue="1"/>
+    <com.atakmap.android.gui.PanSwitchPreference
         android:key="plugin_meshtastic_server"
         android:title="Enable relay to server"
         android:summary="If enabled, messages from Meshtastic will relay to connected TAK servers"

@@ -54,6 +54,8 @@ public final class Constants {
     public static final double GPS_COORD_DIVISOR = 1e-7;
     
     // Preferences Keys
+    public static final String PREF_PLI_RATE_ENABLED = "plugin_meshtastic_pli_rate_limit";
+    public static final String PREF_PLI_RATE_VALUE = "plugin_meshtastic_pli_rate_limit_value";
     public static final String PREF_PLUGIN_RATE_VALUE = "plugin_meshtastic_rate_value";
     public static final String PREF_PLUGIN_EXTERNAL_GPS = "plugin_meshtastic_external_gps";
     public static final String PREF_PLUGIN_FILE_TRANSFER = "plugin_meshtastic_file_transfer";

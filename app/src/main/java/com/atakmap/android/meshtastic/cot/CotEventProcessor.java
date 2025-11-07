@@ -22,6 +22,8 @@ import java.util.UUID;
 
 public class CotEventProcessor {
     private static final String TAG = "CotEventProcessor";
+
+    private long lastPLITime = 0;
     
     public static class ParsedCotData {
         public String callsign;
@@ -37,7 +39,14 @@ public class CotEventProcessor {
         public double latitude;
         public double longitude;
     }
-    
+    public long getLastPLITime() {
+        return lastPLITime;
+    }
+
+    public void setLastPLITime(long time) {
+        this.lastPLITime = time;
+    }
+
     public ParsedCotData parseCotEvent(CotEvent cotEvent) {
         ParsedCotData data = new ParsedCotData();
         

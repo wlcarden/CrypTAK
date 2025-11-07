@@ -105,6 +105,10 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
     private int samplesBufSize = 0;
     private Activity activity;
 
+    private boolean isCodecInitialized() {
+        return c2 != 0;
+    }
+
 
     protected MeshtasticDropDownReceiver(final MapView mapView, final Context context) {
         super(mapView);
@@ -222,16 +226,29 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
         };
         mapView.addOnKeyListener(keyListener);
 
-        // Codec2 Recorder/Playback - hardcoded to 700C for compatibility
-        // NOTE: All devices must use the same codec mode for audio to work properly
-        c2 = Codec2.create(Codec2.CODEC2_MODE_700C);
+        try {
+            String arch = System.getProperty("os.arch");
+            if (arch != null) {
+                String a = arch.toLowerCase();
+                if (a.contains("64") || a.contains("aarch64") || a.contains("arm64")) {
+                    // Codec2 Recorder/Playback - hardcoded to 700C for compatibility
+                    // NOTE: All devices must use the same codec mode for audio to work properly
+                    c2 = Codec2.create(Codec2.CODEC2_MODE_700C);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         if (c2 == 0) {
             Log.e(TAG, "Failed to create Codec2 with mode 700C");
+        } else {
+            c2FrameSize = Codec2.getBitsSize(c2);
+            samplesBufSize = Codec2.getSamplesPerFrame(c2);
+            recorderBuf = new short[samplesBufSize];
+            Log.d(TAG, "Codec2 initialized with mode 700C, frame size: " + c2FrameSize + ", samples: " + samplesBufSize);
         }
-        c2FrameSize = Codec2.getBitsSize(c2);
-        samplesBufSize = Codec2.getSamplesPerFrame(c2);
-        recorderBuf = new short[samplesBufSize];
-        Log.d(TAG, "Codec2 initialized with mode 700C, frame size: " + c2FrameSize + ", samples: " + samplesBufSize);
+
     }
 
     private final Queue<byte[]> recordingQueue = new ConcurrentLinkedQueue<>();
@@ -325,7 +342,7 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
 
         while (isRecording.get()) {
             int readBytes = recorder.read(recorderBuf, 0, recorderBuf.length);
-            if (readBytes > 0) {
+            if (readBytes > 0 && isCodecInitialized()) {
                 Codec2.encode(c2, recorderBuf, encodedBuf);
                 frame = charArrayToByteArray(encodedBuf);
 
@@ -675,8 +692,19 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
         }
         
         // Create new codec - hardcoded to 700C for compatibility
-        c2 = Codec2.create(Codec2.CODEC2_MODE_700C);
-        if (c2 == 0) {
+        try {
+            String arch = System.getProperty("os.arch");
+            if (arch != null) {
+                String a = arch.toLowerCase();
+                if (a.contains("64") || a.contains("aarch64") || a.contains("arm64")) {
+                    // Codec2 Recorder/Playback - hardcoded to 700C for compatibility
+                    // NOTE: All devices must use the same codec mode for audio to work properly
+                    c2 = Codec2.create(Codec2.CODEC2_MODE_700C);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }        if (c2 == 0) {
             Log.e(TAG, "Failed to create Codec2 with mode 700C");
         }
         c2FrameSize = Codec2.getBitsSize(c2);
@@ -690,7 +718,7 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
         mapView.removeOnKeyListener(keyListener);
         
         // Clean up Codec2 resources
-        if (c2 != 0) {
+        if (isCodecInitialized()) {
             try {
                 Codec2.destroy(c2);
                 c2 = 0;

@@ -116,7 +116,7 @@ public class ChunkManager {
             MessageStatus.UNKNOWN,
             3,
             channel,
-            MeshtasticReceiver.getWantsAck(),
+            true, // wantAck must be true for chunks
             0,  // hopStart
             0f, // snr
             0,  // rssi
@@ -147,7 +147,7 @@ public class ChunkManager {
                 MessageStatus.UNKNOWN,
                 hopLimit,
                 channel,
-                MeshtasticReceiver.getWantsAck(),
+                true, // wantAck must be true for chunks
                 0,  // hopStart
                 0f, // snr
                 0,  // rssi

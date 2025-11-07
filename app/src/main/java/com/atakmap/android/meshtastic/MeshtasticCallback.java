@@ -80,7 +80,7 @@ public class MeshtasticCallback implements SaveAndSendCallback {
 
                 // if not already in short/fast mode, switch to it
                 if (oldModemPreset != ConfigProtos.Config.LoRaConfig.ModemPreset.SHORT_TURBO_VALUE) {
-                    Toast.makeText(MapView.getMapView().getContext(), "Rebooting to Short/Fast for file transfer", Toast.LENGTH_LONG).show();
+                    Toast.makeText(MapView.getMapView().getContext(), "Rebooting to Short/TURBO for file transfer", Toast.LENGTH_LONG).show();
                     needReboot = true;
                 } else {
                     needReboot = false;

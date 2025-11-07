@@ -3,6 +3,7 @@ package com.ustadmobile.codec2;
 public class Codec2 {
 
     private static boolean libraryLoaded = false;
+    private static final String TAG = "Codec2";
 
     static {
         try {
