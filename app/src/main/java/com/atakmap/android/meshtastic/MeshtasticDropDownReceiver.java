@@ -438,7 +438,7 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
                         MessageStatus.UNKNOWN,
                         0, // no hops for audio to reduce latency
                         MeshtasticReceiver.getChannelIndex(),
-                        MeshtasticReceiver.getWantsAck(),
+                        false,
                         0,  // hopStart
                         0f, // snr
                         0,  // rssi
