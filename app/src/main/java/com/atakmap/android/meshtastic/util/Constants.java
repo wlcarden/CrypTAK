@@ -79,7 +79,9 @@ public final class Constants {
     public static final String PREF_PLUGIN_HOP_LIMIT = "plugin_meshtastic_hop_limit";
     public static final String PREF_PLUGIN_CHANNEL = "plugin_meshtastic_channel";
     public static final String PREF_PLUGIN_FROM_SERVER = "plugin_meshtastic_from_server";
-    
+    public static final String PREF_PLUGIN_FILTER_BY_CHANNEL = "plugin_meshtastic_channel_filter";
+
+
     // ATAK Intent
     public static final String ATAK_PACKAGE = "com.atakmap.app.civ";
     public static final String ATAK_ACTIVITY = "com.atakmap.app.ATAKActivity";

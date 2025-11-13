@@ -416,6 +416,14 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     return;
                 }
 
+                if (prefs.getBoolean(Constants.PREF_PLUGIN_FILTER_BY_CHANNEL, false)) {
+                    int preferredChannel = prefs.getInt(Constants.PREF_PLUGIN_CHANNEL, 0);
+                    if (ni.getChannel() != preferredChannel) {
+                        Log.d(TAG, "Ignoring NodeInfo on channel " + ni.getChannel() + ", preferred: " + preferredChannel);
+                        return;
+                    }
+                }
+
                 if (prefs.getBoolean(Constants.PREF_PLUGIN_NOGPS, false)) {
                     if (ni.getPosition().getLatitude() == 0 && ni.getPosition().getLongitude() == 0) {
                         Log.d(TAG, "Ignoring NodeInfo with 0,0 GPS");

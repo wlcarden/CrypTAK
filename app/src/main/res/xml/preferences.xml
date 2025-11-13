@@ -94,6 +94,11 @@
         android:dialogTitle="Meshtastic Channel"
         android:inputType="number"
         android:defaultValue="0" />
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_channel_filter"
+        android:title="Filter by Meshtastic Channel Index"
+        android:summary="If enabled, only messages from the specified Meshtastic channel index will be processed"
+        android:defaultValue="false"/>
     <com.atakmap.android.gui.PanEditTextPreference
         android:key="plugin_meshtastic_hop_limit"
         android:title="Meshtastic Hop Limit"
