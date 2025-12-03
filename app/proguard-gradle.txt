@@ -2,6 +2,13 @@
 -dontshrink
 -dontoptimize
 
+
+# Our app is opensource no need to obsfucate
+-keepattributes SourceFile,LineNumberTable
+
+-dontobfuscate
+-optimizations !code/simplification/arithmetic,!field/*,!class/merging/*,!code/allocation/variable
+
 ############### ACRA specifics
 # we need line numbers in our stack traces otherwise they are pretty useless
 -renamesourcefileattribute SourceFile
@@ -48,14 +55,21 @@
 
 
 
--keep class * extends transapps.maps.plugin.tool.Tool {
-}
 -keep class * implements gov.tak.api.plugin.IPlugin {
 }
-
+-keep class * extends com.atak.plugins.impl.AbstractPluginTool {
+}
 
 # overcome an existing bug in the gradle subsystem (3.5.x)
 -keep class module-info
+
+-keep,allowobfuscation @interface gov.tak.api.annotation.DontObfuscate
+
+# Do not strip any method/class that is annotated with @DontObfuscate
+-keep @gov.tak.api.annotation.DontObfuscate class * {*;}
+-keepclassmembers class * {
+    @gov.tak.api.annotation.DontObfuscate *;
+}
 
 
 # These classes use Parcelable
@@ -74,9 +88,6 @@
 
 -keep class atakplugin.Meshtastic.** {*;}
 -keep class com.atakmap.android.meshtastic.** {*;}
-
-
-
 
 -keepclassmembers class com.atakmap.android.maps.** { *; }
 
@@ -153,3 +164,44 @@
 # Needed for kotlinx.serialization to work properly
 -keep class kotlinx.serialization.** { *; }
 -dontwarn kotlinx.serialization.**
+
+# Meshtastic DataPacket Parcelable Creator
+-keepclassmembers class org.meshtastic.core.model.DataPacket {
+    public static final android.os.Parcelable$Creator CREATOR;
+}
+
+# OrmLite classes (transitive from osmdroid-geopackage)
+-dontwarn com.j256.ormlite.android.AndroidConnectionSource
+-dontwarn com.j256.ormlite.dao.BaseDaoImpl
+-dontwarn com.j256.ormlite.dao.CloseableIterator
+-dontwarn com.j256.ormlite.dao.Dao$CreateOrUpdateStatus
+-dontwarn com.j256.ormlite.dao.Dao
+-dontwarn com.j256.ormlite.dao.DaoManager
+-dontwarn com.j256.ormlite.dao.ForeignCollection
+-dontwarn com.j256.ormlite.field.DatabaseField
+-dontwarn com.j256.ormlite.field.FieldType
+-dontwarn com.j256.ormlite.field.ForeignCollectionField
+-dontwarn com.j256.ormlite.field.SqlType
+-dontwarn com.j256.ormlite.field.types.StringType
+-dontwarn com.j256.ormlite.misc.IOUtils
+-dontwarn com.j256.ormlite.misc.TransactionManager
+-dontwarn com.j256.ormlite.stmt.DeleteBuilder
+-dontwarn com.j256.ormlite.stmt.PreparedDelete
+-dontwarn com.j256.ormlite.stmt.PreparedQuery
+-dontwarn com.j256.ormlite.stmt.PreparedUpdate
+-dontwarn com.j256.ormlite.stmt.QueryBuilder
+-dontwarn com.j256.ormlite.stmt.UpdateBuilder
+-dontwarn com.j256.ormlite.stmt.Where
+-dontwarn com.j256.ormlite.support.ConnectionSource
+-dontwarn com.j256.ormlite.table.DatabaseTable
+-dontwarn com.j256.ormlite.table.TableUtils
+
+# Java beans
+-dontwarn java.beans.Beans
+
+# Apache XML resolver
+-dontwarn org.apache.xml.resolver.Catalog
+-dontwarn org.apache.xml.resolver.CatalogManager
+-dontwarn org.apache.xml.resolver.readers.CatalogReader
+-dontwarn org.apache.xml.resolver.readers.SAXCatalogReader
+

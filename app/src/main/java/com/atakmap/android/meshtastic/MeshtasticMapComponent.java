@@ -310,7 +310,9 @@ public class MeshtasticMapComponent extends DropDownMapComponent
             0f, // snr
             0,  // rssi
             null, // replyId,
-            null // relayNode
+            null, // relayNode
+            0,    // relays
+            false // viaMqtt
         );
         
         meshServiceManager.sendToMesh(dp);
@@ -339,7 +341,9 @@ public class MeshtasticMapComponent extends DropDownMapComponent
             0f, // snr
             0,  // rssi
             null, // replyId,
-            null // relayNode
+            null, // relayNode
+            0,    // relays
+            false // viaMqtt
         );
         
         meshServiceManager.sendToMesh(dp);
@@ -374,7 +378,9 @@ public class MeshtasticMapComponent extends DropDownMapComponent
                 0f, // snr
                 0,  // rssi
                 null, // replyId,
-                null // relayNode
+                null, // relayNode
+                0,    // relays
+                false // viaMqtt
             );
         } else {
             // Regular ATAK device
@@ -398,7 +404,9 @@ public class MeshtasticMapComponent extends DropDownMapComponent
                 0f, // snr
                 0,  // rssi
                 null, // replyId,
-                null // relayNode
+                null, // relayNode
+                0,    // relays
+                false // viaMqtt
             );
         }
         
@@ -466,7 +474,9 @@ public class MeshtasticMapComponent extends DropDownMapComponent
                     0f, // snr
                     0,  // rssi
                     null, // replyId,
-                    null // relayNode
+                    null, // relayNode
+                    0,    // relays
+                    false // viaMqtt
                 );
                 meshServiceManager.sendToMesh(dp);
                 return;

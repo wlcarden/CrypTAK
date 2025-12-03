@@ -62,6 +62,8 @@ data class DataPacket(
     var rssi: Int = 0,
     var replyId: Int? = null, // If this is a reply to a previous message, this is the ID of that message
     var relayNode: Int? = null,
+    var relays: Int = 0,
+    var viaMqtt: Boolean = false, // True if this packet passed via MQTT somewhere along its path
 ) : Parcelable {
 
     /** If there was an error with this message, this string describes what was wrong. */
@@ -221,7 +223,7 @@ data class DataPacket(
         relayNode = parcel.readInt().let { if (it == -1) null else it }
     }
 
-    companion object {
+    companion object CREATOR : Parcelable.Creator<DataPacket> {
         // Special node IDs that can be used for sending messages
 
         /** the Node ID for broadcast destinations */
@@ -241,11 +243,8 @@ data class DataPacket(
         @Suppress("MagicNumber")
         fun idToDefaultNodeNum(id: String?): Int? = runCatching { id?.toLong(16)?.toInt() }.getOrNull()
 
-        @JvmField
-        val CREATOR = object : Parcelable.Creator<DataPacket> {
-            override fun createFromParcel(parcel: Parcel): DataPacket = DataPacket(parcel)
+        override fun createFromParcel(parcel: Parcel): DataPacket = DataPacket(parcel)
 
-            override fun newArray(size: Int): Array<DataPacket?> = arrayOfNulls(size)
-        }
+        override fun newArray(size: Int): Array<DataPacket?> = arrayOfNulls(size)
     }
 }

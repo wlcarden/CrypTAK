@@ -4,20 +4,15 @@
  ~  * Last modified 11/20/24, 12:19 PM
  ~  */
 
-apply plugin: 'com.android.library'
+plugins {
+    id 'com.android.library'
+}
 
 version = "1.0.0"
 
-buildscript {
-    repositories {
-        jcenter()
-    }
-
-    dependencies {
-    }
-}
-
 android {
+    namespace 'com.ustadmobile.codec2'
+    compileSdk 36
     ndkVersion "25.1.8937393"
 
     compileOptions {
@@ -26,11 +21,8 @@ android {
     }
 
     defaultConfig {
-        namespace 'com.ustadmobile.codec2'
-
-        compileSdkVersion 33
         minSdkVersion 28
-        targetSdkVersion 33
+        targetSdkVersion 34
         versionCode 1
         versionName "1.0"
         externalNativeBuild {
@@ -94,5 +86,5 @@ task compileCodec2 {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
-    implementation 'com.android.support:support-annotations:28.0.0'
+    implementation 'androidx.annotation:annotation:1.7.0'
 }

@@ -121,7 +121,9 @@ public class ChunkManager {
             0f, // snr
             0,  // rssi
             null, // replyId,
-            null // relayNode
+            null, // relayNode
+            0,    // relays
+            false // viaMqtt
         );
         
         meshService.send(endPacket);
@@ -153,7 +155,9 @@ public class ChunkManager {
                 0f, // snr
                 0,  // rssi
                 null, // replyId,
-                null // relayNode
+                null, // relayNode
+                0,    // relays
+                false // viaMqtt
             );
             
             meshService.send(dp);

@@ -1,11 +1,13 @@
-apply plugin: 'com.android.library'
+plugins {
+    id 'com.android.library'
+}
 
 android {
     namespace "org.vosk.models"
-    compileSdkVersion 33
+    compileSdk 36
     defaultConfig {
-        minSdkVersion 26
-        targetSdkVersion 33
+        minSdkVersion 28
+        targetSdkVersion 34
     }
     buildFeatures {
         buildConfig = true

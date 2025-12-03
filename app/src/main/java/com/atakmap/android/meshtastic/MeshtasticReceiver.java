@@ -947,7 +947,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     }
 
                     // inform sender we're done recv
-                    DataPacket dp = new DataPacket(sender, new byte[]{'M', 'F', 'T'}, Portnums.PortNum.ATAK_FORWARDER_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, getHopLimit(), getChannelIndex(), getWantsAck(), 0, 0f, 0, null, null);
+                    DataPacket dp = new DataPacket(sender, new byte[]{'M', 'F', 'T'}, Portnums.PortNum.ATAK_FORWARDER_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, getHopLimit(), getChannelIndex(), getWantsAck(), 0, 0f, 0, null, null, 0, false);
                     MeshtasticMapComponent.sendToMesh(dp);
                     try {
                         Thread.sleep(3000);
@@ -1070,7 +1070,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                         team = "Dark Green";
                     groupDetail.setAttribute("name", team);
 
-/*
+
             try {
                     NodeInfo ni = intent.getParcelableExtra("com.geeksville.mesh.NodeInfo");
                     Log.d(TAG, "NodeInfo: " + ni);
@@ -1143,7 +1143,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                         e.printStackTrace();
                         return;
                     }
-*/
+
                     cotDetail.addChild(groupDetail);
 
                     CotDetail statusDetail = new CotDetail("status");
@@ -1507,7 +1507,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     Log.d(TAG, "Total wire size for TAKPacket: " + tak_packet.build().toByteArray().length);
                     //Log.d(TAG, "Sending: " + tak_packet.build().toString());
 
-                    dp = new DataPacket(DataPacket.ID_BROADCAST, tak_packet.build().toByteArray(), Portnums.PortNum.ATAK_PLUGIN_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null, null);
+                    dp = new DataPacket(DataPacket.ID_BROADCAST, tak_packet.build().toByteArray(), Portnums.PortNum.ATAK_PLUGIN_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null, null, 0, false);
                     if (MeshtasticMapComponent.getMeshService() != null)
                         MeshtasticMapComponent.getMeshService().sendToMesh(dp);
                 } else if (cotDetail.getAttribute("contact") != null) {
@@ -1593,7 +1593,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                             Log.d(TAG, "Total wire size for TAKPacket: " + tak_packet.build().toByteArray().length);
                             //Log.d(TAG, "Sending: " + tak_packet.build().toString());
 
-                            dp = new DataPacket(DataPacket.ID_BROADCAST, tak_packet.build().toByteArray(), Portnums.PortNum.ATAK_PLUGIN_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null, null);
+                            dp = new DataPacket(DataPacket.ID_BROADCAST, tak_packet.build().toByteArray(), Portnums.PortNum.ATAK_PLUGIN_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null, null, 0, false);
                             if (MeshtasticMapComponent.getMeshService() != null)
                                 MeshtasticMapComponent.getMeshService().sendToMesh(dp);
                         }
