@@ -22,11 +22,13 @@
             android:layout_marginBottom="16dp">
 
             <ImageView
+                android:id="@+id/meshtasticLogo"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:src="@drawable/meshtastic_logo"
                 android:scaleType="fitCenter"
-                android:contentDescription="Meshtastic Logo" />
+                android:background="?android:attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Meshtastic Logo - Tap to visit website" />
 
             <LinearLayout
                 android:layout_width="0dp"

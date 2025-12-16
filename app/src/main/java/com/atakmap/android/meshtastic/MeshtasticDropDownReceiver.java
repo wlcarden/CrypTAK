@@ -17,8 +17,10 @@ import android.speech.tts.TextToSpeech;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.net.Uri;
 import android.widget.Button;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -86,6 +88,7 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
     private final View mainView;
     private Button voiceMemoBtn, talk, refreshMetricsBtn;
     private ImageButton settingsBtn;
+    private ImageView meshtasticLogo;
     private Model model;
     public SpeechService speechService;
     private TextView tv;
@@ -147,6 +150,10 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
         // Setup settings button
         settingsBtn = mainView.findViewById(R.id.settingsBtn);
         settingsBtn.setOnClickListener(v -> openPluginPreferences());
+
+        // Setup logo click to open Meshtastic website
+        meshtasticLogo = mainView.findViewById(R.id.meshtasticLogo);
+        meshtasticLogo.setOnClickListener(v -> openMeshtasticWebsite());
 
         voiceMemoBtn = mainView.findViewById(R.id.voiceMemoBtn);
         voiceMemoBtn.setOnClickListener(v -> {
@@ -839,6 +846,21 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
             int days = seconds / 86400;
             int hours = (seconds % 86400) / 3600;
             return days + "d " + hours + "h";
+        }
+    }
+
+    /**
+     * Open the Meshtastic website in a browser
+     */
+    private void openMeshtasticWebsite() {
+        try {
+            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://meshtastic.org"));
+            browserIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            appContext.startActivity(browserIntent);
+            Log.d(TAG, "Opening Meshtastic website");
+        } catch (Exception e) {
+            Log.e(TAG, "Error opening website", e);
+            Toast.makeText(appContext, "Unable to open browser", Toast.LENGTH_SHORT).show();
         }
     }
 
