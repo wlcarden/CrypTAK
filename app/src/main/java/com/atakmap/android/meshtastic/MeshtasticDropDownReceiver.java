@@ -1047,7 +1047,7 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
                 return;
             }
 
-            // Parse the current config
+            // Parse the current LocalConfig to get existing DeviceConfig settings
             LocalOnlyProtos.LocalConfig currentConfig = LocalOnlyProtos.LocalConfig.parseFrom(configBytes);
             ConfigProtos.Config.DeviceConfig currentDeviceConfig = currentConfig.getDevice();
 
@@ -1056,13 +1056,14 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
             newDeviceConfigBuilder.setRole(ConfigProtos.Config.DeviceConfig.Role.TAK);
             ConfigProtos.Config.DeviceConfig newDeviceConfig = newDeviceConfigBuilder.build();
 
-            // Build new LocalConfig with the updated DeviceConfig
-            LocalOnlyProtos.LocalConfig.Builder newConfigBuilder = currentConfig.toBuilder();
-            newConfigBuilder.setDevice(newDeviceConfig);
-            LocalOnlyProtos.LocalConfig newConfig = newConfigBuilder.build();
+            // Build a Config message wrapping the DeviceConfig (not LocalConfig)
+            // The setConfig API expects a Config protobuf, not LocalConfig
+            ConfigProtos.Config.Builder configBuilder = ConfigProtos.Config.newBuilder();
+            configBuilder.setDevice(newDeviceConfig);
+            ConfigProtos.Config config = configBuilder.build();
 
-            // Send the updated config
-            byte[] newConfigBytes = newConfig.toByteArray();
+            // Send the Config protobuf
+            byte[] newConfigBytes = config.toByteArray();
             MeshtasticMapComponent.setConfig(newConfigBytes);
 
             Log.d(TAG, "Device Role set to TAK");
