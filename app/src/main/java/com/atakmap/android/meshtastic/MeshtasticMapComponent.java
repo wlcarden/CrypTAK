@@ -401,13 +401,13 @@ public class MeshtasticMapComponent extends DropDownMapComponent
         if (uid.equals(MapView.getMapView().getSelfMarker().getUID())) {
             long currentTime = System.currentTimeMillis();
 
-            if (prefs.getBoolean(Constants.PREF_PLI_RATE_ENABLED, false)) {
+            if (prefs.getBoolean(Constants.PREF_PLI_RATE_ENABLED, true)) {
                 long lastPLITime = cotEventProcessor.getLastPLITime();
                 int rateLimitSeconds;
                 try {
-                    rateLimitSeconds = Integer.parseInt(prefs.getString(Constants.PREF_PLI_RATE_VALUE, "60"));
+                    rateLimitSeconds = Integer.parseInt(prefs.getString(Constants.PREF_PLI_RATE_VALUE, "300"));
                 } catch (NumberFormatException e) {
-                    rateLimitSeconds = 60; // Default to 1 minute
+                    rateLimitSeconds = 300; // Default to 5 minutes
                 }
                 long rateLimitMs = rateLimitSeconds * 1000L;
                 if (currentTime - lastPLITime < rateLimitMs) {

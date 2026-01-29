@@ -223,12 +223,11 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
         AtomicBoolean recording = new AtomicBoolean(false);
         keyListener = (v, keyCode, event) -> {
             Log.d(TAG, "keyCode: " + keyCode + " onKeyEvent: " + event.toString());
-            int pttKey = 0;
+            int pttKey = 79;
             try {
-                pttKey = Integer.valueOf(prefs.getString(Constants.PREF_PLUGIN_PTT, "0"));
+                pttKey = Integer.valueOf(prefs.getString(Constants.PREF_PLUGIN_PTT, "79"));
             } catch (NumberFormatException e) {
-                Log.d(TAG, "PTT key not set");
-                return false;
+                Log.d(TAG, "PTT key parse error, using default");
             }
             if (keyCode == pttKey && event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() > 0 && !recording.get()) {
                 // start recording

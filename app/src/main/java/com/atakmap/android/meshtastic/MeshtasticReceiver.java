@@ -255,9 +255,20 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     // Radio connected - update state and reconnect IPC service
                     MeshtasticMapComponent.setRadioConnected(true);
                     MeshtasticMapComponent.reconnect();
+                    // Option A: Fetch MyNodeInfo now that mesh is fully connected and DB is populated
+                    try {
+                        MeshtasticMapComponent.getMeshService().onMeshConnected();
+                    } catch (Exception e) {
+                        Log.w(TAG, "Failed to notify mesh service of connection", e);
+                    }
                 } else if (extraConnected.equalsIgnoreCase(Constants.STATE_DISCONNECTED)) {
-                    // Radio disconnected
+                    // Radio disconnected - clear cached data
                     MeshtasticMapComponent.setRadioConnected(false);
+                    try {
+                        MeshtasticMapComponent.getMeshService().onMeshDisconnected();
+                    } catch (Exception e) {
+                        Log.w(TAG, "Failed to notify mesh service of disconnection", e);
+                    }
                 }
                 // Ignore other intermediate states
                 break;
@@ -270,8 +281,13 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                 }
                 // Use case-insensitive comparison
                 if (extraConnected.equalsIgnoreCase(Constants.STATE_DISCONNECTED)) {
-                    // Radio disconnected
+                    // Radio disconnected - clear cached data
                     MeshtasticMapComponent.setRadioConnected(false);
+                    try {
+                        MeshtasticMapComponent.getMeshService().onMeshDisconnected();
+                    } catch (Exception e) {
+                        Log.w(TAG, "Failed to notify mesh service of disconnection", e);
+                    }
                 }
                 break;
             }
@@ -523,7 +539,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     return;
                 }
 
-                if (prefs.getBoolean(Constants.PREF_PLUGIN_TRACKER, false)) {
+                if (prefs.getBoolean(Constants.PREF_PLUGIN_TRACKER, true)) {
                     String nodeName = ni.getUser().getLongName();
                     Log.i(TAG, "Node name: " + nodeName);
                     CotDetail groupDetail = new CotDetail("__group");
@@ -1251,10 +1267,10 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
 
     public static boolean getWantsAck() {
         try {
-            return prefs.getBoolean(Constants.PREF_PLUGIN_WANT_ACK, true);
+            return prefs.getBoolean(Constants.PREF_PLUGIN_WANT_ACK, false);
         } catch (Exception e) {
             e.printStackTrace();
-            return true;
+            return false;
         }
     }
 

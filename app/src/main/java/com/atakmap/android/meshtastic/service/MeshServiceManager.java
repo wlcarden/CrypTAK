@@ -22,13 +22,16 @@ public class MeshServiceManager {
     private static final String TAG = "MeshServiceManager";
     private static volatile MeshServiceManager instance;
     private static final Object INSTANCE_LOCK = new Object();
-    
+
     private final Context context;
     private volatile IMeshService meshService;
     private ServiceConnection serviceConnection;
     private Intent serviceIntent;
     private volatile ServiceConnectionState connectionState;
     private ConnectionListener connectionListener;
+
+    // Cached MyNodeInfo - populated when mesh is fully connected
+    private volatile MyNodeInfo cachedMyNodeInfo = null;
     
     public enum ServiceConnectionState {
         DISCONNECTED,
@@ -242,18 +245,62 @@ public class MeshServiceManager {
         }
     }
     
+    /**
+     * Get MyNodeInfo, using cache if available.
+     * Returns null if the mesh service is not fully connected (DB not ready).
+     */
     public MyNodeInfo getMyNodeInfo() {
         if (!isConnected()) {
-            Log.w(TAG, "Cannot get my node info - service not connected");
-            return null;
+            Log.w(TAG, "Cannot get my node info - IPC service not connected");
+            return cachedMyNodeInfo; // Return cache if available
+        }
+
+        // Return cached value if we have it
+        if (cachedMyNodeInfo != null) {
+            return cachedMyNodeInfo;
         }
 
         try {
-            return meshService.getMyNodeInfo();
+            MyNodeInfo info = meshService.getMyNodeInfo();
+            if (info == null) {
+                Log.d(TAG, "getMyNodeInfo() returned null - Meshtastic DB not ready yet");
+            } else {
+                // Cache the successful result
+                cachedMyNodeInfo = info;
+                Log.d(TAG, "MyNodeInfo cached: nodeNum=" + info.getMyNodeNum() + ", firmware=" + info.getFirmwareVersion());
+            }
+            return info;
         } catch (Exception e) {
             Log.e(TAG, "Failed to get my node info", e);
             return null;
         }
+    }
+
+    /**
+     * Called when ACTION_MESH_CONNECTED broadcast is received with "Connected" state.
+     * Sets a flag to indicate we should try to fetch MyNodeInfo on next access.
+     */
+    public void onMeshConnected() {
+        Log.d(TAG, "Mesh connected - will fetch MyNodeInfo on next access");
+        // Clear cache so next getMyNodeInfo() call will fetch fresh data
+        cachedMyNodeInfo = null;
+        // Don't make AIDL calls here - let the normal access pattern handle it
+    }
+
+    /**
+     * Called when mesh disconnects - clear cached data
+     */
+    public void onMeshDisconnected() {
+        Log.d(TAG, "Mesh disconnected - clearing cached MyNodeInfo");
+        cachedMyNodeInfo = null;
+    }
+
+    /**
+     * Get cached MyNodeInfo without making an AIDL call.
+     * Returns null if not yet cached.
+     */
+    public MyNodeInfo getCachedMyNodeInfo() {
+        return cachedMyNodeInfo;
     }
     
     public String getMyNodeID() {
