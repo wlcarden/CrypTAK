@@ -105,7 +105,7 @@ android {
 
     buildFeatures {
         buildConfig = true
-        aidl = true
+        //aidl = true
     }
 
     bundle {
@@ -218,7 +218,7 @@ android {
         main {
 
 	    // aidl is not being compiled when upgrading AGP 8+
-            aidl.srcDirs = ['src/main/aidl']
+            //aidl.srcDirs = ['src/main/aidl']
 
             // Configure proto source directory
             proto {
