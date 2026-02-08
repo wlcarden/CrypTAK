@@ -49,18 +49,25 @@ import com.atakmap.coremap.cot.event.CotDetail;
 import com.atakmap.coremap.cot.event.CotEvent;
 import com.atakmap.coremap.filesystem.FileSystemUtils;
 import com.atakmap.coremap.log.Log;
-import org.meshtastic.proto.ATAKProtos;
+import org.meshtastic.proto.Contact;
+import org.meshtastic.proto.GeoChat;
+import org.meshtastic.proto.Group;
+import org.meshtastic.proto.MemberRole;
+import org.meshtastic.proto.PLI;
+import org.meshtastic.proto.Status;
+import org.meshtastic.proto.TAKPacket;
+import org.meshtastic.proto.Team;
 import org.meshtastic.core.model.DataPacket;
 import org.meshtastic.core.model.MessageStatus;
-import org.meshtastic.proto.MeshProtos;
+import org.meshtastic.proto.Data;
 import org.meshtastic.core.model.MeshUser;
 import org.meshtastic.core.model.MyNodeInfo;
 import org.meshtastic.core.model.NodeInfo;
-import org.meshtastic.proto.Portnums;
+import org.meshtastic.proto.PortNum;
 
 import com.atakmap.map.AtakMapView;
 import com.atakmap.map.DefaultMapTouchHandler;
-import com.google.protobuf.ByteString;
+import okio.ByteString;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -443,15 +450,16 @@ public class MeshtasticMapComponent extends DropDownMapComponent
     private void handleSelfPLI(CotEventProcessor.ParsedCotData data, int hopLimit, int channel) {
         Log.d(TAG, "Sending self marker PLI to Meshtastic");
 
-        ATAKProtos.TAKPacket takPacket = cotEventProcessor.buildPLIPacket(data);
+        TAKPacket takPacket = cotEventProcessor.buildPLIPacket(data);
 
-        Log.d(TAG, "Total wire size for TAKPacket: " + takPacket.toByteArray().length);
+        byte[] takPacketBytes = TAKPacket.ADAPTER.encode(takPacket);
+        Log.d(TAG, "Total wire size for TAKPacket: " + takPacketBytes.length);
         //Log.d(TAG, "Sending: " + takPacket.toString());
 
         DataPacket dp = new DataPacket(
                 DataPacket.ID_BROADCAST,
-                takPacket.toByteArray(),
-                Portnums.PortNum.ATAK_PLUGIN_VALUE,
+                ByteString.of(takPacketBytes, 0, takPacketBytes.length),
+                PortNum.ATAK_PLUGIN.getValue(),
                 DataPacket.ID_LOCAL,
                 System.currentTimeMillis(),
                 0,
@@ -477,15 +485,16 @@ public class MeshtasticMapComponent extends DropDownMapComponent
     private void handleAllChatMessage(CotEventProcessor.ParsedCotData data, int hopLimit, int channel) {
         Log.d(TAG, "Sending All Chat Rooms to Meshtastic");
 
-        ATAKProtos.TAKPacket takPacket = cotEventProcessor.buildChatPacket(data);
+        TAKPacket takPacket = cotEventProcessor.buildChatPacket(data);
 
-        Log.d(TAG, "Total wire size for TAKPacket: " + takPacket.toByteArray().length);
+        byte[] takPacketBytes = TAKPacket.ADAPTER.encode(takPacket);
+        Log.d(TAG, "Total wire size for TAKPacket: " + takPacketBytes.length);
         //Log.d(TAG, "Sending: " + takPacket.toString());
 
         DataPacket dp = new DataPacket(
                 DataPacket.ID_BROADCAST,
-                takPacket.toByteArray(),
-                Portnums.PortNum.ATAK_PLUGIN_VALUE,
+                ByteString.of(takPacketBytes, 0, takPacketBytes.length),
+                PortNum.ATAK_PLUGIN.getValue(),
                 DataPacket.ID_LOCAL,
                 System.currentTimeMillis(),
                 0,
@@ -519,13 +528,23 @@ public class MeshtasticMapComponent extends DropDownMapComponent
         if (data.to.startsWith("!")) {
             // Meshtastic ID - send as text message
             Log.d(TAG, "Sending to Meshtastic ID: " + data.to);
+            Data dataProto = new Data(
+                    PortNum.TEXT_MESSAGE_APP,
+                    ByteString.of(data.message.getBytes(StandardCharsets.UTF_8), 0, data.message.getBytes(StandardCharsets.UTF_8).length),
+                    false,  // want_response
+                    0,  // dest
+                    0,  // source
+                    0,  // request_id
+                    0,  // reply_id
+                    0,  // emoji
+                    null,  // bitfield
+                    ByteString.EMPTY
+            );
+            byte[] dataBytes = Data.ADAPTER.encode(dataProto);
             dp = new DataPacket(
                     data.to,
-                    MeshProtos.Data.newBuilder()
-                            .setPayload(ByteString.copyFrom(data.message.getBytes(StandardCharsets.UTF_8)))
-                            .build()
-                            .toByteArray(),
-                    Portnums.PortNum.TEXT_MESSAGE_APP_VALUE,
+                    ByteString.of(dataBytes, 0, dataBytes.length),
+                    PortNum.TEXT_MESSAGE_APP.getValue(),
                     DataPacket.ID_LOCAL,
                     System.currentTimeMillis(),
                     0,
@@ -546,15 +565,16 @@ public class MeshtasticMapComponent extends DropDownMapComponent
             );
         } else {
             // Regular ATAK device
-            ATAKProtos.TAKPacket takPacket = cotEventProcessor.buildChatPacket(data);
+            TAKPacket takPacket = cotEventProcessor.buildChatPacket(data);
 
-            Log.d(TAG, "Total wire size for TAKPacket: " + takPacket.toByteArray().length);
+            byte[] takPacketBytes = TAKPacket.ADAPTER.encode(takPacket);
+            Log.d(TAG, "Total wire size for TAKPacket: " + takPacketBytes.length);
             //Log.d(TAG, "Sending: " + takPacket.toString());
 
             dp = new DataPacket(
                     DataPacket.ID_BROADCAST,
-                    takPacket.toByteArray(),
-                    Portnums.PortNum.ATAK_PLUGIN_VALUE,
+                    ByteString.of(takPacketBytes, 0, takPacketBytes.length),
+                    PortNum.ATAK_PLUGIN.getValue(),
                     DataPacket.ID_LOCAL,
                     System.currentTimeMillis(),
                     0,
@@ -642,30 +662,42 @@ public class MeshtasticMapComponent extends DropDownMapComponent
         String receiptMessage = "ACK:" + receiptType + ":" + messageId;
 
         // Build TAKPacket with the receipt message
-        ATAKProtos.GeoChat.Builder geoChatBuilder = ATAKProtos.GeoChat.newBuilder()
-                .setMessage(receiptMessage)
-                .setTo(to);
-
         // Get sender info
         String selfCallsign = MapView.getMapView().getDeviceCallsign();
         String selfUid = MapView.getMapView().getSelfMarker().getUID();
 
-        ATAKProtos.Contact.Builder contactBuilder = ATAKProtos.Contact.newBuilder()
-                .setCallsign(selfCallsign)
-                .setDeviceCallsign(selfUid);
+        GeoChat geoChat = new GeoChat(
+                receiptMessage,
+                to,
+                null,  // from
+                ByteString.EMPTY
+        );
 
-        ATAKProtos.TAKPacket takPacket = ATAKProtos.TAKPacket.newBuilder()
-                .setContact(contactBuilder.build())
-                .setChat(geoChatBuilder.build())
-                .build();
+        org.meshtastic.proto.Contact contact = new org.meshtastic.proto.Contact(
+                selfCallsign,
+                selfUid,
+                ByteString.EMPTY
+        );
 
-        Log.d(TAG, "Chat receipt TAKPacket size: " + takPacket.toByteArray().length + " bytes");
+        TAKPacket takPacket = new TAKPacket(
+                false,  // is_compressed
+                contact,
+                null,  // group
+                null,  // status
+                null,  // pli
+                geoChat,
+                null,  // detail (oneof - must be null when chat is set)
+                ByteString.EMPTY   // unknownFields
+        );
+
+        byte[] takPacketBytes = TAKPacket.ADAPTER.encode(takPacket);
+        Log.d(TAG, "Chat receipt TAKPacket size: " + takPacketBytes.length + " bytes");
 
         DataPacket dp = new DataPacket(
                 DataPacket.ID_BROADCAST,    // Send to specific node if known, otherwise broadcast
                                             // TODO: This should be targetNodeId, but it doesn't work
-                takPacket.toByteArray(),
-                Portnums.PortNum.ATAK_PLUGIN_VALUE,
+                ByteString.of(takPacketBytes, 0, takPacketBytes.length),
+                PortNum.ATAK_PLUGIN.getValue(),
                 DataPacket.ID_LOCAL,
                 System.currentTimeMillis(),
                 0,
@@ -717,8 +749,8 @@ public class MeshtasticMapComponent extends DropDownMapComponent
                 Log.d(TAG, "Small send");
                 DataPacket dp = new DataPacket(
                         DataPacket.ID_BROADCAST,
-                        cotAsBytes,
-                        Portnums.PortNum.ATAK_FORWARDER_VALUE,
+                        ByteString.of(cotAsBytes, 0, cotAsBytes.length),
+                        PortNum.ATAK_FORWARDER.getValue(),
                         DataPacket.ID_LOCAL,
                         System.currentTimeMillis(),
                         0,
@@ -833,8 +865,8 @@ public class MeshtasticMapComponent extends DropDownMapComponent
                 Log.d(TAG, "Sending small encrypted message directly");
                 DataPacket dp = new DataPacket(
                         DataPacket.ID_BROADCAST,
-                        encryptedBytes,
-                        Portnums.PortNum.ATAK_FORWARDER_VALUE,
+                        ByteString.of(encryptedBytes, 0, encryptedBytes.length),
+                        PortNum.ATAK_FORWARDER.getValue(),
                         DataPacket.ID_LOCAL,
                         System.currentTimeMillis(),
                         0,

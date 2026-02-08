@@ -55,14 +55,20 @@ import com.atakmap.coremap.maps.time.CoordinatedTime;
 
 import com.atakmap.map.projection.EquirectangularMapProjection;
 
+import okio.ByteString;
 import org.meshtastic.core.model.Position;
-import org.meshtastic.proto.ATAKProtos;
+import org.meshtastic.proto.GeoChat;
+import org.meshtastic.proto.Group;
+import org.meshtastic.proto.MemberRole;
+import org.meshtastic.proto.PLI;
+import org.meshtastic.proto.Status;
+import org.meshtastic.proto.TAKPacket;
+import org.meshtastic.proto.Team;
 import org.meshtastic.core.model.DataPacket;
 
 import org.meshtastic.core.model.MessageStatus;
 import org.meshtastic.core.model.NodeInfo;
-import org.meshtastic.proto.Portnums;
-import com.google.protobuf.InvalidProtocolBufferException;
+import org.meshtastic.proto.PortNum;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -330,9 +336,9 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                         return;
                     }
                 }
-                String message = new String(payload.getBytes());
+                String message = payload.getBytes().utf8();
                 Log.d(TAG, "Message: " + message);
-                Log.d(TAG, payload.toString());
+                Log.d(TAG, payload.getTo());
 
                 if (prefs.getBoolean(Constants.PREF_PLUGIN_VOICE, false)) {
                     MeshtasticDropDownReceiver.t1.speak(message, TextToSpeech.QUEUE_FLUSH, null);
@@ -399,7 +405,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     remarksDetail.setAttribute("source", "BAO.F.ATAK." + senderUid);
                     remarksDetail.setAttribute("to", "All Chat Rooms");
                     remarksDetail.setAttribute("time", time.toString());
-                    remarksDetail.setInnerText(new String(payload.getBytes()));
+                    remarksDetail.setInnerText(payload.getBytes().utf8());
                     cotDetail.addChild(remarksDetail);
 
                     CotDetail meshDetail = new CotDetail("__meshtastic");
@@ -466,7 +472,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     remarksDetail.setAttribute("source", "BAO.F.ATAK." + senderUid);
                     remarksDetail.setAttribute("to", myNodeID);
                     remarksDetail.setAttribute("time", time.toString());
-                    remarksDetail.setInnerText(new String(payload.getBytes()));
+                    remarksDetail.setInnerText(payload.getBytes().utf8());
                     cotDetail.addChild(remarksDetail);
 
                     CotDetail meshDetail = new CotDetail("__meshtastic");
@@ -789,7 +795,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
         DataPacket payload = intent.getParcelableExtra(Constants.EXTRA_PAYLOAD);
         if (payload == null) return;
         int dataType = payload.getDataType();
-        Log.v(TAG, "handleReceive(), dataType: " + dataType + " size: " + payload.getBytes().length);
+        Log.v(TAG, "handleReceive(), dataType: " + dataType + " size: " + payload.getBytes().size());
 
         // Apply channel filter if enabled
         if (prefs.getBoolean(Constants.PREF_PLUGIN_FILTER_BY_CHANNEL, false)) {
@@ -808,8 +814,8 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
 
         SharedPreferences.Editor editor = prefs.edit();
 
-        if (dataType == Portnums.PortNum.ATAK_FORWARDER_VALUE) {
-            byte[] raw = payload.getBytes();
+        if (dataType == PortNum.ATAK_FORWARDER.getValue()) {
+            byte[] raw = payload.getBytes().toByteArray();
 
             // codec2 frame, short-circuit the rest of the data processing
             if (audioPermissionGranted  && (raw[0] & 0xFF) == 0xC2) {
@@ -845,7 +851,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                 return;
             }
 
-            String message = new String(payload.getBytes());
+            String message = payload.getBytes().utf8();
             if (message.startsWith("MFT")) {
                 // Sender side - received file transfer acknowledgment
                 Log.d(TAG, "Received MFT - file transfer complete");
@@ -894,7 +900,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                 }
             } else {
                 // Try to decode as zlib or raw XML (unencrypted)
-                byte[] rawData = payload.getBytes();
+                byte[] rawData = payload.getBytes().toByteArray();
                 String xmlStr = decompressToXml(rawData);
 
                 // Parse and dispatch the CoT event
@@ -927,21 +933,21 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
             Log.d(TAG, "Payload: " + payload);
 
             try {
-                ATAKProtos.TAKPacket tp = ATAKProtos.TAKPacket.parseFrom(payload.getBytes());
-                if (tp.getIsCompressed()) {
+                TAKPacket tp = TAKPacket.ADAPTER.decode(payload.getBytes().toByteArray());
+                if (tp.is_compressed()) {
                     Log.d(TAG, "TAK_PACKET is compressed");
                     return;
                 }
                 Log.d(TAG, "TAK_PACKET: " + tp.toString());
-                if (tp.hasPli()) {
+                if (tp.getPli() != null) {
                     Log.d(TAG, "TAK_PACKET PLI");
-                    ATAKProtos.Contact contact = tp.getContact();
-                    ATAKProtos.Group group = tp.getGroup();
-                    ATAKProtos.Status status = tp.getStatus();
-                    ATAKProtos.PLI pli = tp.getPli();
+                    org.meshtastic.proto.Contact contact = tp.getContact();
+                    Group group = tp.getGroup();
+                    Status status = tp.getStatus();
+                    PLI pli = tp.getPli();
 
-                    double lat = pli.getLatitudeI() * 1e-7;
-                    double lng = pli.getLongitudeI() * 1e-7;
+                    double lat = pli.getLatitude_i() * 1e-7;
+                    double lng = pli.getLongitude_i() * 1e-7;
                     double alt = pli.getAltitude();
                     int course = pli.getCourse();
                     int speed = pli.getSpeed();
@@ -949,7 +955,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     Log.d(TAG, String.format("GPS: %f %f %f", alt, lat, lng));
 
                     String callsign = contact.getCallsign();
-                    String deviceCallsign = contact.getDeviceCallsign();
+                    String deviceCallsign = contact.getDevice_callsign();
 
                     // Store nodeId -> ATAK info mapping for TEXT_MESSAGE_APP sender lookup
                     String senderNodeId = payload.getFrom();
@@ -975,7 +981,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
 
                     CotDetail groupDetail = new CotDetail("__group");
 
-                    String role = ATAKProtos.MemberRole.forNumber(group.getRoleValue()).name();
+                    String role = MemberRole.fromValue(group.getRole().getValue()).name();
                     switch (role) {
                         case "TeamMember":
                             role = "Team Member";
@@ -989,7 +995,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     }
                     groupDetail.setAttribute("role", role);
 
-                    String team = ATAKProtos.Team.forNumber(group.getTeamValue()).name();
+                    String team = Team.fromValue(group.getTeam().getValue()).name();
                     if (team.equals("DarkBlue"))
                         team = "Dark Blue";
                     else if (team.equals("DarkGreen"))
@@ -1036,15 +1042,15 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     } else
                         Log.e(TAG, "cotEvent was not valid");
 
-                } else if (tp.hasChat() && tp.getChat().getTo().equals("All Chat Rooms")) {
+                } else if (tp.getChat() != null && tp.getChat().getTo().equals("All Chat Rooms")) {
                     Log.d(TAG, "TAK_PACKET GEOCHAT - All Chat Rooms");
 
-                    ATAKProtos.Contact contact = tp.getContact();
-                    ATAKProtos.GeoChat geoChat = tp.getChat();
+                    org.meshtastic.proto.Contact contact = tp.getContact();
+                    GeoChat geoChat = tp.getChat();
 
                     String callsign = contact.getCallsign();
                     // Parse deviceCallsign which may contain smuggled messageId: "deviceCallsign|messageId"
-                    String[] parsed = CotEventProcessor.parseDeviceCallsignAndMessageId(contact.getDeviceCallsign());
+                    String[] parsed = CotEventProcessor.parseDeviceCallsignAndMessageId(contact.getDevice_callsign());
                     String deviceCallsign = parsed[0];
                     String originalMsgId = parsed[1];
 
@@ -1143,9 +1149,9 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     } else
                         Log.e(TAG, "cotEvent was not valid");
 
-                } else if (tp.hasChat() && tp.getChat().getTo().equals(getMapView().getSelfMarker().getUID())) {
-                    ATAKProtos.Contact contact = tp.getContact();
-                    ATAKProtos.GeoChat geoChat = tp.getChat();
+                } else if (tp.getChat() != null && tp.getChat().getTo().equals(getMapView().getSelfMarker().getUID())) {
+                    org.meshtastic.proto.Contact contact = tp.getContact();
+                    GeoChat geoChat = tp.getChat();
                     String message = geoChat.getMessage();
 
                     // Check if this is a chat receipt (ACK:D:<messageId> or ACK:R:<messageId>)
@@ -1160,7 +1166,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     String to = geoChat.getTo();
                     String callsign = contact.getCallsign();
                     // Parse deviceCallsign which may contain smuggled messageId: "deviceCallsign|messageId"
-                    String[] parsed = CotEventProcessor.parseDeviceCallsignAndMessageId(contact.getDeviceCallsign());
+                    String[] parsed = CotEventProcessor.parseDeviceCallsignAndMessageId(contact.getDevice_callsign());
                     String deviceCallsign = parsed[0];
                     String originalMsgId = parsed[1];
 
@@ -1259,7 +1265,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     Log.d(TAG, String.valueOf(tp));
                 }
 
-            } catch (InvalidProtocolBufferException e) {
+            } catch (Exception e) {
                 Log.e(TAG, "Could not parse TAK packet", e);
             }
         }
@@ -1400,22 +1406,35 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                         e.printStackTrace();
                     }
 
-                    ATAKProtos.Contact.Builder contact = ATAKProtos.Contact.newBuilder();
-                    contact.setCallsign(callsign);
-                    contact.setDeviceCallsign(deviceCallsign);
+                    org.meshtastic.proto.Contact contact = new org.meshtastic.proto.Contact(
+                        callsign,
+                        deviceCallsign,
+                        ByteString.EMPTY
+                    );
 
-                    ATAKProtos.GeoChat.Builder geochat = ATAKProtos.GeoChat.newBuilder();
-                    geochat.setMessage(message);
-                    geochat.setTo("All Chat Rooms");
+                    GeoChat geochat = new GeoChat(
+                        message,
+                        "All Chat Rooms",
+                        null,  // from
+                        ByteString.EMPTY
+                    );
 
-                    ATAKProtos.TAKPacket.Builder tak_packet = ATAKProtos.TAKPacket.newBuilder();
-                    tak_packet.setContact(contact);
-                    tak_packet.setChat(geochat);
+                    TAKPacket tak_packet = new TAKPacket(
+                        false,  // is_compressed
+                        contact,
+                        null,  // group
+                        null,  // status
+                        null,  // pli
+                        geochat,
+                        null,  // detail (oneof - must be null when chat is set)
+                        ByteString.EMPTY   // unknownFields
+                    );
 
-                    Log.d(TAG, "Total wire size for TAKPacket: " + tak_packet.build().toByteArray().length);
-                    //Log.d(TAG, "Sending: " + tak_packet.build().toString());
+                    byte[] takPacketBytes = TAKPacket.ADAPTER.encode(tak_packet);
+                    Log.d(TAG, "Total wire size for TAKPacket: " + takPacketBytes.length);
+                    //Log.d(TAG, "Sending: " + tak_packet.toString());
 
-                    dp = new DataPacket(DataPacket.ID_BROADCAST, tak_packet.build().toByteArray(), Portnums.PortNum.ATAK_PLUGIN_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null, null, 0, false, 0, 0, null);
+                    dp = new DataPacket(DataPacket.ID_BROADCAST, ByteString.of(takPacketBytes, 0, takPacketBytes.length), PortNum.ATAK_PLUGIN.getValue(), DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null, null, 0, false, 0, 0, null);
                     if (MeshtasticMapComponent.getMeshService() != null)
                         MeshtasticMapComponent.getMeshService().sendToMesh(dp);
                 } else if (cotDetail.getAttribute("contact") != null) {
@@ -1474,34 +1493,48 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                                 return;
                             }
 
-                            ATAKProtos.Contact.Builder contact = ATAKProtos.Contact.newBuilder();
-                            contact.setCallsign(callsign);
-                            contact.setDeviceCallsign(cotEvent.getUID());
+                            org.meshtastic.proto.Contact contact = new org.meshtastic.proto.Contact(
+                                callsign,
+                                cotEvent.getUID(),
+                                ByteString.EMPTY
+                            );
 
-                            ATAKProtos.Group.Builder group = ATAKProtos.Group.newBuilder();
-                            group.setRole(ATAKProtos.MemberRole.valueOf(role.replace(" ", "")));
-                            group.setTeam(ATAKProtos.Team.valueOf(name.replace(" ", "")));
+                            Group group = new Group(
+                                MemberRole.valueOf(role.replace(" ", "")),
+                                Team.valueOf(name.replace(" ", "")),
+                                ByteString.EMPTY
+                            );
 
-                            ATAKProtos.Status.Builder status = ATAKProtos.Status.newBuilder();
-                            status.setBattery(battery);
+                            Status status = new Status(
+                                battery,
+                                ByteString.EMPTY
+                            );
 
-                            ATAKProtos.PLI.Builder pli = ATAKProtos.PLI.newBuilder();
-                            pli.setAltitude(Double.valueOf(alt).intValue());
-                            pli.setLatitudeI((int) (lat / divisor));
-                            pli.setLongitudeI((int) (lng / divisor));
-                            pli.setCourse(course);
-                            pli.setSpeed(speed);
+                            PLI pli = new PLI(
+                                (int) (lat / divisor),
+                                (int) (lng / divisor),
+                                Double.valueOf(alt).intValue(),
+                                course,
+                                speed,
+                                ByteString.EMPTY
+                            );
 
-                            ATAKProtos.TAKPacket.Builder tak_packet = ATAKProtos.TAKPacket.newBuilder();
-                            tak_packet.setContact(contact);
-                            tak_packet.setStatus(status);
-                            tak_packet.setGroup(group);
-                            tak_packet.setPli(pli);
+                            TAKPacket tak_packet = new TAKPacket(
+                                false,  // is_compressed
+                                contact,
+                                group,
+                                status,
+                                pli,
+                                null,  // chat
+                                null,  // detail (oneof - must be null when pli is set)
+                                ByteString.EMPTY   // unknownFields
+                            );
 
-                            Log.d(TAG, "Total wire size for TAKPacket: " + tak_packet.build().toByteArray().length);
-                            //Log.d(TAG, "Sending: " + tak_packet.build().toString());
+                            byte[] takPacketBytes = TAKPacket.ADAPTER.encode(tak_packet);
+                            Log.d(TAG, "Total wire size for TAKPacket: " + takPacketBytes.length);
+                            //Log.d(TAG, "Sending: " + tak_packet.toString());
 
-                            dp = new DataPacket(DataPacket.ID_BROADCAST, tak_packet.build().toByteArray(), Portnums.PortNum.ATAK_PLUGIN_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null, null, 0, false, 0, 0, null);
+                            dp = new DataPacket(DataPacket.ID_BROADCAST, ByteString.of(takPacketBytes, 0, takPacketBytes.length), PortNum.ATAK_PLUGIN.getValue(), DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null, null, 0, false, 0, 0, null);
                             if (MeshtasticMapComponent.getMeshService() != null)
                                 MeshtasticMapComponent.getMeshService().sendToMesh(dp);
                         }
@@ -1584,8 +1617,8 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                 Log.d(TAG, "Sending MFT to " + senderNodeId);
                 DataPacket dp = new DataPacket(
                         senderNodeId,
-                        new byte[]{'M', 'F', 'T'},
-                        Portnums.PortNum.ATAK_FORWARDER_VALUE,
+                        ByteString.of(new byte[]{'M', 'F', 'T'}, 0, 3),
+                        PortNum.ATAK_FORWARDER.getValue(),
                         DataPacket.ID_LOCAL,
                         System.currentTimeMillis(),
                         0,
@@ -1815,7 +1848,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
      * @param contact The sender contact info
      * @param receiptMessage The receipt message in format "ACK:D:<messageId>" or "ACK:R:<messageId>"
      */
-    private void handleChatReceiptPacket(ATAKProtos.Contact contact, String receiptMessage) {
+    private void handleChatReceiptPacket(org.meshtastic.proto.Contact contact, String receiptMessage) {
         // Parse receipt: "ACK:D:<messageId>" or "ACK:R:<messageId>"
         String[] parts = receiptMessage.split(":", 3);
         if (parts.length != 3) {
@@ -1837,7 +1870,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
         }
 
         String senderCallsign = contact.getCallsign();
-        String senderUid = contact.getDeviceCallsign();
+        String senderUid = contact.getDevice_callsign();
 
         Log.d(TAG, "Processing chat receipt: type=" + cotType + ", messageId=" + messageId +
                   ", from=" + senderCallsign + " (" + senderUid + ")");

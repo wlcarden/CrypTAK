@@ -73,7 +73,17 @@ public class MeshServiceManager {
                 Log.v(TAG, "Service connected");
                 meshService = IMeshService.Stub.asInterface(service);
                 connectionState = ServiceConnectionState.CONNECTED;
-                
+
+                // Register for explicit broadcasts to bypass Android implicit broadcast restrictions
+                try {
+                    String packageName = context.getPackageName();
+                    String receiverName = "com.atakmap.android.meshtastic.MeshtasticReceiver";
+                    meshService.subscribeReceiver(packageName, receiverName);
+                    Log.i(TAG, "Registered receiver for explicit broadcasts: " + packageName + "/" + receiverName);
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Failed to register receiver for explicit broadcasts", e);
+                }
+
                 if (connectionListener != null) {
                     connectionListener.onServiceConnected();
                 }
@@ -135,7 +145,7 @@ public class MeshServiceManager {
 
         // Client-side validation to prevent service exceptions that cause
         // deserialization failures on some Android versions
-        byte[] bytes = dataPacket.getBytes();
+        byte[] bytes = dataPacket.getBytes().toByteArray();
         if (bytes == null) {
             Log.w(TAG, "Cannot send packet with null bytes to mesh");
             return;

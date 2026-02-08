@@ -3,12 +3,12 @@ package com.atakmap.android.meshtastic.util.fountain;
 import com.atakmap.android.meshtastic.MeshtasticMapComponent;
 import com.atakmap.android.meshtastic.service.MeshServiceManager;
 import com.atakmap.coremap.log.Log;
-import com.google.protobuf.InvalidProtocolBufferException;
+import okio.ByteString;
 import org.meshtastic.core.model.DataPacket;
 import org.meshtastic.core.model.MessageStatus;
-import org.meshtastic.proto.ConfigProtos;
-import org.meshtastic.proto.LocalOnlyProtos;
-import org.meshtastic.proto.Portnums;
+import org.meshtastic.proto.Config;
+import org.meshtastic.proto.LocalConfig;
+import org.meshtastic.proto.PortNum;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -81,17 +81,17 @@ public class FountainChunkManager {
             byte[] config = MeshtasticMapComponent.getConfig();
             if (config == null || config.length == 0) {
                 Log.w(TAG, "Cannot get radio config, using default timing");
-                return ConfigProtos.Config.LoRaConfig.ModemPreset.LONG_FAST_VALUE;
+                return Config.LoRaConfig.ModemPreset.LONG_FAST.getValue();
             }
 
-            LocalOnlyProtos.LocalConfig c = LocalOnlyProtos.LocalConfig.parseFrom(config);
-            ConfigProtos.Config.LoRaConfig lc = c.getLora();
-            int preset = lc.getModemPreset().getNumber();
-            Log.d(TAG, "Current modem preset: " + lc.getModemPreset().name() + " (" + preset + ")");
+            LocalConfig c = LocalConfig.ADAPTER.decode(config);
+            Config.LoRaConfig lc = c.getLora();
+            int preset = lc.getModem_preset().getValue();
+            Log.d(TAG, "Current modem preset: " + lc.getModem_preset().name() + " (" + preset + ")");
             return preset;
-        } catch (InvalidProtocolBufferException e) {
+        } catch (Exception e) {
             Log.e(TAG, "Failed to parse config for modem preset", e);
-            return ConfigProtos.Config.LoRaConfig.ModemPreset.LONG_FAST_VALUE;
+            return Config.LoRaConfig.ModemPreset.LONG_FAST.getValue();
         }
     }
 
@@ -101,21 +101,21 @@ public class FountainChunkManager {
      */
     private static long getPerPacketTxTime(int modemPreset) {
         switch (modemPreset) {
-            case ConfigProtos.Config.LoRaConfig.ModemPreset.SHORT_TURBO_VALUE:
+            case 0: // SHORT_TURBO
                 return TX_TIME_SHORT_TURBO;
-            case ConfigProtos.Config.LoRaConfig.ModemPreset.SHORT_FAST_VALUE:
+            case 1: // SHORT_FAST
                 return TX_TIME_SHORT_FAST;
-            case ConfigProtos.Config.LoRaConfig.ModemPreset.SHORT_SLOW_VALUE:
+            case 2: // SHORT_SLOW
                 return TX_TIME_SHORT_SLOW;
-            case ConfigProtos.Config.LoRaConfig.ModemPreset.MEDIUM_FAST_VALUE:
+            case 3: // MEDIUM_FAST
                 return TX_TIME_MEDIUM_FAST;
-            case ConfigProtos.Config.LoRaConfig.ModemPreset.MEDIUM_SLOW_VALUE:
+            case 4: // MEDIUM_SLOW
                 return TX_TIME_MEDIUM_SLOW;
-            case ConfigProtos.Config.LoRaConfig.ModemPreset.LONG_MODERATE_VALUE:
+            case 5: // LONG_MODERATE
                 return TX_TIME_LONG_MODERATE;
-            case ConfigProtos.Config.LoRaConfig.ModemPreset.LONG_FAST_VALUE:
+            case 6: // LONG_FAST
                 return TX_TIME_LONG_FAST;
-            case ConfigProtos.Config.LoRaConfig.ModemPreset.LONG_SLOW_VALUE:
+            case 7: // LONG_SLOW
                 return TX_TIME_LONG_SLOW;
             default:
                 Log.w(TAG, "Unknown modem preset " + modemPreset + ", using default timing");
@@ -576,8 +576,8 @@ public class FountainChunkManager {
     private void sendPacket(byte[] data, int channel, int hopLimit) {
         DataPacket dp = new DataPacket(
             DataPacket.ID_BROADCAST,
-            data,
-            Portnums.PortNum.ATAK_FORWARDER_VALUE,
+            ByteString.of(data, 0, data.length),
+            PortNum.ATAK_FORWARDER.getValue(),
             DataPacket.ID_LOCAL,
             System.currentTimeMillis(),
             0,

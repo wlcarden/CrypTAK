@@ -14,9 +14,8 @@ import com.atakmap.android.missionpackage.file.MissionPackageManifest;
 import com.atakmap.android.missionpackage.file.task.MissionPackageBaseTask;
 import com.atakmap.coremap.filesystem.FileSystemUtils;
 import com.atakmap.coremap.log.Log;
-import org.meshtastic.proto.ConfigProtos;
-import org.meshtastic.proto.LocalOnlyProtos;
-import com.google.protobuf.InvalidProtocolBufferException;
+import org.meshtastic.proto.Config;
+import org.meshtastic.proto.LocalConfig;
 
 import java.io.File;
 
@@ -59,21 +58,21 @@ public class MeshtasticCallback implements SaveAndSendCallback {
                 return;
             }
 
-            LocalOnlyProtos.LocalConfig c;
+            LocalConfig c;
             try {
-                c = LocalOnlyProtos.LocalConfig.parseFrom(config);
-            } catch (InvalidProtocolBufferException e) {
+                c = LocalConfig.ADAPTER.decode(config);
+            } catch (Exception e) {
                 Log.e(TAG, "Failed to parse config", e);
                 showToast("Failed to read radio config");
                 return;
             }
 
-            ConfigProtos.Config.LoRaConfig lc = c.getLora();
-            int currentModemPreset = lc.getModemPreset().getNumber();
+            Config.LoRaConfig lc = c.getLora();
+            int currentModemPreset = lc.getModem_preset().getValue();
 
-            // Check if on Short_Turbo
-            if (currentModemPreset != ConfigProtos.Config.LoRaConfig.ModemPreset.SHORT_TURBO_VALUE) {
-                String presetName = lc.getModemPreset().name();
+            // Check if on Short_Turbo (value 0)
+            if (currentModemPreset != 0) {
+                String presetName = lc.getModem_preset().name();
                 showToast("File transfer requires Short_Turbo preset.\nCurrently on: " + presetName);
                 Log.w(TAG, "File transfer blocked - not on Short_Turbo. Current preset: " + presetName);
                 return;

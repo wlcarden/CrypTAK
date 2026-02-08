@@ -36,15 +36,15 @@ import com.atakmap.android.meshtastic.plugin.R;
 import com.atakmap.android.meshtastic.util.Constants;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.coremap.filesystem.FileSystemUtils;
-import org.meshtastic.proto.AppOnlyProtos;
-import org.meshtastic.proto.ConfigProtos;
+import okio.ByteString;
+import org.meshtastic.proto.Config;
 import org.meshtastic.core.model.DataPacket;
-import org.meshtastic.proto.LocalOnlyProtos;
+import org.meshtastic.proto.LocalConfig;
 import org.meshtastic.core.model.MessageStatus;
 import org.meshtastic.core.model.DeviceMetrics;
 import org.meshtastic.core.model.MyNodeInfo;
 import org.meshtastic.core.model.NodeInfo;
-import org.meshtastic.proto.Portnums;
+import org.meshtastic.proto.PortNum;
 import com.ustadmobile.codec2.Codec2;
 
 import org.vosk.Model;
@@ -454,8 +454,8 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
                 
                 DataPacket dp = new DataPacket(
                         DataPacket.ID_BROADCAST,
-                        packetData,
-                        Portnums.PortNum.ATAK_FORWARDER_VALUE,
+                        ByteString.of(packetData, 0, packetData.length),
+                        PortNum.ATAK_FORWARDER.getValue(),
                         DataPacket.ID_LOCAL,
                         System.currentTimeMillis(),
                         0,
@@ -851,17 +851,17 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
             try {
                 byte[] config = MeshtasticMapComponent.getConfig();
                 if (config != null && config.length > 0) {
-                    LocalOnlyProtos.LocalConfig localConfig = LocalOnlyProtos.LocalConfig.parseFrom(config);
+                    LocalConfig localConfig = LocalConfig.ADAPTER.decode(config);
 
                     // LoRa Config - Region and Modem Preset
-                    ConfigProtos.Config.LoRaConfig loraConfig = localConfig.getLora();
+                    Config.LoRaConfig loraConfig = localConfig.getLora();
                     if (loraConfig != null) {
                         // Region
                         String regionName = loraConfig.getRegion().name();
                         metricsRegion.setText(formatRegionName(regionName));
 
                         // LoRa Preset
-                        String presetName = loraConfig.getModemPreset().name();
+                        String presetName = loraConfig.getModem_preset().name();
                         metricsLoraPreset.setText(formatPresetName(presetName));
                     } else {
                         metricsRegion.setText("--");
@@ -869,15 +869,15 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
                     }
 
                     // Device Config - Role
-                    ConfigProtos.Config.DeviceConfig deviceConfig = localConfig.getDevice();
+                    Config.DeviceConfig deviceConfig = localConfig.getDevice();
                     if (deviceConfig != null) {
-                        ConfigProtos.Config.DeviceConfig.Role role = deviceConfig.getRole();
+                        Config.DeviceConfig.Role role = deviceConfig.getRole();
                         String roleName = role.name();
                         metricsRole.setText(formatRoleName(roleName));
 
                         // Show warning banner if Role is not TAK or TAK_TRACKER
-                        if (role != ConfigProtos.Config.DeviceConfig.Role.TAK &&
-                            role != ConfigProtos.Config.DeviceConfig.Role.TAK_TRACKER) {
+                        if (role != Config.DeviceConfig.Role.TAK &&
+                            role != Config.DeviceConfig.Role.TAK_TRACKER) {
                             roleWarningBanner.setVisibility(View.VISIBLE);
                         } else {
                             roleWarningBanner.setVisibility(View.GONE);
@@ -1047,22 +1047,44 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
             }
 
             // Parse the current LocalConfig to get existing DeviceConfig settings
-            LocalOnlyProtos.LocalConfig currentConfig = LocalOnlyProtos.LocalConfig.parseFrom(configBytes);
-            ConfigProtos.Config.DeviceConfig currentDeviceConfig = currentConfig.getDevice();
+            LocalConfig currentConfig = LocalConfig.ADAPTER.decode(configBytes);
+            Config.DeviceConfig currentDeviceConfig = currentConfig.getDevice();
 
             // Build new DeviceConfig with Role set to TAK, preserving other settings
-            ConfigProtos.Config.DeviceConfig.Builder newDeviceConfigBuilder = currentDeviceConfig.toBuilder();
-            newDeviceConfigBuilder.setRole(ConfigProtos.Config.DeviceConfig.Role.TAK);
-            ConfigProtos.Config.DeviceConfig newDeviceConfig = newDeviceConfigBuilder.build();
+            Config.DeviceConfig newDeviceConfig = new Config.DeviceConfig(
+                Config.DeviceConfig.Role.TAK,  // role - changed to TAK
+                currentDeviceConfig.getSerial_enabled(),
+                currentDeviceConfig.getButton_gpio(),
+                currentDeviceConfig.getBuzzer_gpio(),
+                currentDeviceConfig.getRebroadcast_mode(),
+                currentDeviceConfig.getNode_info_broadcast_secs(),
+                currentDeviceConfig.getDouble_tap_as_button_press(),
+                currentDeviceConfig.getDisable_triple_click(),
+                false,  // is_managed
+                currentDeviceConfig.getTzdef(),
+                currentDeviceConfig.getLed_heartbeat_disabled(),
+                currentDeviceConfig.getBuzzer_mode(),
+                ByteString.EMPTY
+            );
 
             // Build a Config message wrapping the DeviceConfig (not LocalConfig)
             // The setConfig API expects a Config protobuf, not LocalConfig
-            ConfigProtos.Config.Builder configBuilder = ConfigProtos.Config.newBuilder();
-            configBuilder.setDevice(newDeviceConfig);
-            ConfigProtos.Config config = configBuilder.build();
+            Config config = new Config(
+                newDeviceConfig,  // device
+                null,  // position
+                null,  // power
+                null,  // network
+                null,  // display
+                null,  // lora
+                null,  // bluetooth
+                null,  // security
+                null,  // sessionkey
+                null,  // device_ui
+                ByteString.EMPTY
+            );
 
             // Send the Config protobuf
-            byte[] newConfigBytes = config.toByteArray();
+            byte[] newConfigBytes = Config.ADAPTER.encode(config);
             MeshtasticMapComponent.setConfig(newConfigBytes);
 
             Log.d(TAG, "Device Role set to TAK");
@@ -1154,7 +1176,8 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
         channel = MeshtasticReceiver.getChannelIndex();
 
         // Send as TEXT_MESSAGE_APP for interoperability with Meshtastic Android app chat
-        DataPacket dp = new DataPacket(DataPacket.ID_BROADCAST, converted.getBytes(), Portnums.PortNum.TEXT_MESSAGE_APP_VALUE, DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, MeshtasticReceiver.getWantsAck(), 0, 0f, 0, null, null, 0, false, 0, 0, null);
+        byte[] convertedBytes = converted.getBytes();
+        DataPacket dp = new DataPacket(DataPacket.ID_BROADCAST, ByteString.of(convertedBytes, 0, convertedBytes.length), PortNum.TEXT_MESSAGE_APP.getValue(), DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, MeshtasticReceiver.getWantsAck(), 0, 0f, 0, null, null, 0, false, 0, 0, null);
         MeshtasticMapComponent.sendToMesh(dp);
         Log.d(TAG, "Voice Memo sent as TEXT_MESSAGE_APP: " + converted);
     }

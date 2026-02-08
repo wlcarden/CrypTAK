@@ -9,7 +9,7 @@
 buildscript {
 
 
-    ext.PLUGIN_VERSION = "1.1.39"
+    ext.PLUGIN_VERSION = "1.1.40"
     ext.ATAK_VERSION = "5.6.0"
 
     def takdevVersion = '3.+'
@@ -72,7 +72,6 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.parcelize")
-    id("com.google.protobuf")
 }
 apply {
     plugin("atak-takdev-plugin")
@@ -220,11 +219,6 @@ android {
 	    // aidl is not being compiled when upgrading AGP 8+
             //aidl.srcDirs = ['src/main/aidl']
 
-            // Configure proto source directory
-            proto {
-                srcDir 'src/main/protobufs'
-            }
-
             // It is strongly encouraged that plugin developers do not modify the archivesBaseName, version code logic and version
             // name logic to provide for consistency within the community.
             setProperty("archivesBaseName", "ATAK-Plugin-" + rootProject.name + "-" + PLUGIN_VERSION + "-" + getVersionName() + "-" + ATAK_VERSION)
@@ -309,23 +303,20 @@ dependencies {
 	implementation "org.jetbrains.kotlinx:kotlinx-serialization-core:1.9.0"
 	implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0"
 
-    implementation 'com.google.protobuf:protobuf-kotlin:3.21.12'
     implementation 'com.google.ar:core:1.43.0'
 
     implementation 'net.java.dev.jna:jna:5.13.0@aar'
     implementation 'com.alphacephei:vosk-android:0.3.47@aar'
     implementation project(':models')
 
-    def meshtasticVersion = "9dbc8b7fbf"
-
-    // The core AIDL interface (IMeshService)
-    implementation "com.github.meshtastic.Meshtastic-Android:core-api:$meshtasticVersion"
-
-    // The Parcelable data models (DataPacket, MeshUser, NodeInfo, etc.)
-    implementation "com.github.meshtastic.Meshtastic-Android:core-model:$meshtasticVersion"
+    def meshtasticVersion = "v2.7.13-internal.6"
 
     // The underlying Protobuf definitions
-    implementation "com.github.meshtastic.Meshtastic-Android:core-proto:$meshtasticVersion"
+    implementation 'com.github.meshtastic.Meshtastic-Android:meshtastic-android-proto:v2.7.13-internal.6'
+    // The Parcelable data models (DataPacket, MeshUser, NodeInfo, etc.)
+    implementation 'com.github.meshtastic.Meshtastic-Android:meshtastic-android-model:v2.7.13-internal.6'
+    // The core AIDL interface (IMeshService)
+    implementation 'com.github.meshtastic.Meshtastic-Android:meshtastic-android-api:v2.7.13-internal.6'
 
 
     // Osmdroid & Maps
@@ -372,28 +363,4 @@ configurations.implementation {
     exclude group: 'androidx.lifecycle', module: 'lifecycle-process'
     exclude group: 'com.squareup.okhttp3', module: 'okhttp'
     exclude group: 'com.squareup.okio', module: 'okio'
-}
-
-protobuf {
-    protoc {
-        artifact = 'com.google.protobuf:protoc:3.21.12'
-    }
-    /*
-    plugins {
-        javalite {
-            // The codegen for lite comes as a separate artifact
-            artifact = 'com.google.protobuf:protoc-gen-javalite:3.0.0'
-        }
-    }
-    */
-    generateProtoTasks {
-        all().each { task ->
-            task.builtins {
-                java {
-                }
-                kotlin {
-                }
-            }
-        }
-    }
 }

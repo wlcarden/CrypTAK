@@ -12,8 +12,15 @@ import com.atakmap.coremap.cot.event.CotEvent;
 import com.atakmap.coremap.cot.event.CotPoint;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.coremap.maps.time.CoordinatedTime;
-import org.meshtastic.proto.ATAKProtos;
-import com.google.protobuf.ByteString;
+import org.meshtastic.proto.Contact;
+import org.meshtastic.proto.GeoChat;
+import org.meshtastic.proto.Group;
+import org.meshtastic.proto.MemberRole;
+import org.meshtastic.proto.PLI;
+import org.meshtastic.proto.Status;
+import org.meshtastic.proto.TAKPacket;
+import org.meshtastic.proto.Team;
+import okio.ByteString;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -211,51 +218,58 @@ public class CotEventProcessor {
         }
     }
     
-    public ATAKProtos.TAKPacket buildPLIPacket(ParsedCotData data) {
-        ATAKProtos.Contact.Builder contact = ATAKProtos.Contact.newBuilder()
-            .setCallsign(data.callsign != null ? data.callsign : "")
-            .setDeviceCallsign(data.deviceCallsign != null ? data.deviceCallsign : "");
-        
-        ATAKProtos.Group.Builder group = ATAKProtos.Group.newBuilder();
+    public TAKPacket buildPLIPacket(ParsedCotData data) {
+        Contact contact = new Contact(
+            data.callsign != null ? data.callsign : "",
+            data.deviceCallsign != null ? data.deviceCallsign : "",
+            ByteString.EMPTY
+        );
+
+        MemberRole role = MemberRole.TeamMember;
         if (data.role != null) {
             try {
-                group.setRole(ATAKProtos.MemberRole.valueOf(data.role.replace(" ", "")));
+                role = MemberRole.valueOf(data.role.replace(" ", ""));
             } catch (IllegalArgumentException e) {
                 Log.w(TAG, "Unknown role: " + data.role);
-                group.setRole(ATAKProtos.MemberRole.TeamMember);
             }
         }
+
+        Team team = Team.White;
         if (data.teamName != null) {
             try {
-                group.setTeam(ATAKProtos.Team.valueOf(data.teamName.replace(" ", "")));
+                team = Team.valueOf(data.teamName.replace(" ", ""));
             } catch (IllegalArgumentException e) {
                 Log.w(TAG, "Unknown team: " + data.teamName);
-                group.setTeam(ATAKProtos.Team.White);
             }
         }
-        
-        ATAKProtos.Status.Builder status = ATAKProtos.Status.newBuilder()
-            .setBattery(data.battery);
-        
-        ATAKProtos.PLI.Builder pli = ATAKProtos.PLI.newBuilder()
-            .setAltitude(Double.valueOf(data.altitude).intValue())
-            .setLatitudeI((int) (data.latitude / Constants.GPS_COORD_DIVISOR))
-            .setLongitudeI((int) (data.longitude / Constants.GPS_COORD_DIVISOR))
-            .setCourse(data.course)
-            .setSpeed(data.speed);
-        
-        return ATAKProtos.TAKPacket.newBuilder()
-            .setContact(contact)
-            .setStatus(status)
-            .setGroup(group)
-            .setPli(pli)
-            .build();
+
+        Group group = new Group(role, team, ByteString.EMPTY);
+        Status status = new Status(data.battery, ByteString.EMPTY);
+        PLI pli = new PLI(
+            (int) (data.latitude / Constants.GPS_COORD_DIVISOR),
+            (int) (data.longitude / Constants.GPS_COORD_DIVISOR),
+            Double.valueOf(data.altitude).intValue(),
+            data.course,
+            data.speed,
+            ByteString.EMPTY
+        );
+
+        return new TAKPacket(
+            false,  // is_compressed
+            contact,
+            group,
+            status,
+            pli,
+            null,  // chat
+            null,  // detail (oneof - must be null when pli is set)
+            ByteString.EMPTY   // unknownFields
+        );
     }
     
     // Separator used to smuggle messageId in deviceCallsign field
     public static final String MSG_ID_SEPARATOR = "|";
 
-    public ATAKProtos.TAKPacket buildChatPacket(ParsedCotData data) {
+    public TAKPacket buildChatPacket(ParsedCotData data) {
         // Smuggle the messageId in the deviceCallsign field for read receipt support
         // Format: "deviceCallsign|messageId"
         String deviceCallsignWithMsgId = data.deviceCallsign != null ? data.deviceCallsign : "";
@@ -263,18 +277,29 @@ public class CotEventProcessor {
             deviceCallsignWithMsgId = deviceCallsignWithMsgId + MSG_ID_SEPARATOR + data.messageId;
         }
 
-        ATAKProtos.Contact.Builder contact = ATAKProtos.Contact.newBuilder()
-            .setCallsign(data.callsign != null ? data.callsign : "")
-            .setDeviceCallsign(deviceCallsignWithMsgId);
+        Contact contact = new Contact(
+            data.callsign != null ? data.callsign : "",
+            deviceCallsignWithMsgId,
+            ByteString.EMPTY
+        );
 
-        ATAKProtos.GeoChat.Builder geochat = ATAKProtos.GeoChat.newBuilder()
-            .setMessage(data.message != null ? data.message : "")
-            .setTo(data.to != null ? data.to : "All Chat Rooms");
+        GeoChat geochat = new GeoChat(
+            data.message != null ? data.message : "",
+            data.to != null ? data.to : "All Chat Rooms",
+            null,  // from
+            ByteString.EMPTY
+        );
 
-        return ATAKProtos.TAKPacket.newBuilder()
-            .setContact(contact)
-            .setChat(geochat)
-            .build();
+        return new TAKPacket(
+            false,  // is_compressed
+            contact,
+            null,  // group
+            null,  // status
+            null,  // pli
+            geochat,
+            null,  // detail (oneof - must be null when chat is set)
+            ByteString.EMPTY   // unknownFields
+        );
     }
 
     /**
