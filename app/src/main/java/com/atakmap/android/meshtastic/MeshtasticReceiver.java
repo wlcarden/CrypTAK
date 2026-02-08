@@ -188,6 +188,15 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     if (data == null) {
                         // This is a send completion, not receive
                         Log.d(TAG, "Fountain send transfer " + transferId + " completed");
+
+                        // Show success toast if wantAck is enabled (user cares about ACKs)
+                        boolean wantAck = prefs.getBoolean(Constants.PREF_PLUGIN_WANT_ACK, true);
+                        if (wantAck) {
+                            MapView.getMapView().post(() ->
+                                Toast.makeText(MapView.getMapView().getContext(),
+                                    "Meshtastic: Message delivered", Toast.LENGTH_SHORT).show()
+                            );
+                        }
                         return;
                     }
                     Log.d(TAG, "Fountain receive transfer " + transferId + " completed, " +
@@ -213,6 +222,14 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                         return;
                     }
                     failedTransfers.add(transferId);
+
+                    // Only show failure notifications if wantAck is enabled
+                    // When wantAck is disabled, users accept the lack of acknowledgments
+                    boolean wantAck = prefs.getBoolean(Constants.PREF_PLUGIN_WANT_ACK, true);
+                    if (!wantAck) {
+                        Log.d(TAG, "Suppressing transfer failure notification (wantAck disabled)");
+                        return;
+                    }
 
                     // Show failure notification/toast
                     if (activeReceiveTransferId == transferId) {
