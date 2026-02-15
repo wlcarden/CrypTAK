@@ -1839,11 +1839,10 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     CotMapComponent.getExternalDispatcher().dispatch(cotEvent);
                 }
             } else {
-                Log.w(TAG, "Fountain data not valid CoT: " + exiData.length + " bytes, xml=" + xmlStr.substring(0, Math.min(200, xmlStr.length())));
+                Log.w(TAG, "Fountain data not valid CoT: " + exiData.length + " bytes");
             }
         } catch (Throwable e) {
             Log.e(TAG, "Failed to parse CoT XML: " + e.getMessage());
-            Log.d(TAG, "XML content: " + xmlStr.substring(0, Math.min(500, xmlStr.length())));
         }
     }
 

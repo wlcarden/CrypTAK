@@ -71,9 +71,13 @@ Access plugin settings via: **Settings → Tool Preferences → Specific Tool Pr
 #### GPS Settings
 - **Use Meshtastic GPS** - Use Meshtastic device GPS as ATAK's external GPS source (default: off)
 
-#### Encryption
-- **Enable Extra Encryption** - Encrypt all outgoing messages with AES-256-GCM using PSK (default: off)
-- **Encryption PSK** - Pre-shared key for encryption, all users must have the same key
+#### Application-Layer Encryption
+- **Enable App-Layer Encryption** - Encrypt all outgoing CoT payloads with AES-256-GCM before they reach the Meshtastic radio (default: off)
+- **Pre-Shared Key (PSK)** - 256-bit key shared across the team; generate with `openssl rand -base64 32`
+- **Enable Epoch Rotation** - Automatically rotate the encryption key on a configurable interval for forward secrecy (default: off)
+- **Epoch Rotation Interval** - Key rotation period: 1h, 2h, 4h, 6h (default), 12h, or 24h
+
+See [ENCRYPTION.md](ENCRYPTION.md) for full documentation on key generation, distribution, wire format, and security considerations.
 
 ## Using Meshtastic as External GPS
 

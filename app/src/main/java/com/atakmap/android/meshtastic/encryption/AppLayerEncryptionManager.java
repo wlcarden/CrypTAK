@@ -37,8 +37,9 @@ import javax.crypto.spec.SecretKeySpec;
  * <ul>
  *   <li><b>Option B (PSK):</b> Pre-shared key distributed out-of-band (QR code, data package).
  *       Key is derived using SHA-256 and stored in Android Keystore when available.</li>
- *   <li><b>Option D (Epoch Rotation):</b> Epoch-based key rotation using HKDF chain.
- *       New epoch key = HKDF(previous_key, epoch_counter). Forward-only derivation.</li>
+ *   <li><b>Option D (Epoch Rotation):</b> Epoch-based key rotation using HMAC-SHA256 chain.
+ *       New epoch key = HMAC-SHA256(previous_key, "meshtastic-epoch-" || counter).
+ *       Forward-only derivation.</li>
  * </ul>
  *
  * <h3>Cipher</h3>
@@ -82,7 +83,11 @@ public class AppLayerEncryptionManager {
 
     // Epoch rotation constants
     private static final long DEFAULT_EPOCH_DURATION_MS = 6 * 60 * 60 * 1000L; // 6 hours
-    private static final String HKDF_INFO_PREFIX = "meshtastic-epoch-";
+    private static final String EPOCH_KDF_INFO_PREFIX = "meshtastic-epoch-";
+
+    // Maximum epoch number to prevent denial-of-service via crafted packets.
+    // At 1-hour epochs, 8760 covers one year of continuous rotation.
+    static final int MAX_EPOCH = 8760;
 
     // Singleton
     private static volatile AppLayerEncryptionManager instance;
@@ -211,15 +216,19 @@ public class AppLayerEncryptionManager {
         previousEpochKey = null;
         previousEpoch = -1;
         epochStartTimeMs = System.currentTimeMillis();
+
+        // Zero the input array to reduce key material exposure in memory
+        java.util.Arrays.fill(keyMaterial, (byte) 0);
         Log.d(TAG, "Key loaded from raw bytes");
     }
 
     /**
-     * Import a key from a base64-encoded string (e.g., from QR code scan or ATAK Import Manager).
+     * Import a key from a base64-encoded string, loading the raw decoded bytes directly.
      * Validates that the decoded key is exactly 32 bytes (AES-256).
      *
-     * <p>Typical usage: team member scans a QR code containing the output of
-     * {@code openssl rand -base64 32}, this method decodes and loads it.</p>
+     * <p><b>Important:</b> This method loads the raw 32-byte key material. For persistent
+     * key import (QR code scan, ATAK Import Manager), use {@link #importKeyAndSave} instead,
+     * which ensures the in-memory key matches what {@link #initialize} produces on restart.</p>
      *
      * @param base64Key Base64-encoded key string (standard or URL-safe encoding)
      * @return true if the key was valid and loaded, false otherwise
@@ -273,8 +282,10 @@ public class AppLayerEncryptionManager {
                     PreferenceManager.getDefaultSharedPreferences(context));
             SharedPreferences.Editor editor = prefs.edit();
 
-            // Store the base64 key as the PSK (the raw base64 string itself becomes the PSK,
-            // which loadKey() will SHA-256 hash — consistent with manual entry)
+            // Store the base64 key as the PSK value in preferences.
+            // On reload, initialize() calls loadKey() which SHA-256 hashes this string.
+            // To ensure the same key is used after restart, we also call loadKey() here
+            // so the in-memory key matches what initialize() will produce.
             editor.putString(Constants.PREF_PLUGIN_ENCRYPTION_PSK, base64Key.trim());
 
             if (enableEncryption) {
@@ -283,7 +294,9 @@ public class AppLayerEncryptionManager {
 
             editor.apply();
 
-            // Re-derive from the string PSK to stay consistent with preference-based loading
+            // Derive key from the string PSK (SHA-256 hash) so that the in-memory key
+            // matches what initialize() will produce on next app startup. This ensures
+            // that messages encrypted now can be decrypted after a restart, and vice versa.
             loadKey(base64Key.trim());
             if (enableEncryption) {
                 setEnabled(true);
@@ -445,6 +458,11 @@ public class AppLayerEncryptionManager {
                 elapsed = System.currentTimeMillis() - epochStartTimeMs;
                 if (elapsed >= epochDurationMs) {
                     int newEpoch = currentEpoch + (int) (elapsed / epochDurationMs);
+                    if (newEpoch > MAX_EPOCH) {
+                        Log.w(TAG, "Epoch overflow clamped: " + newEpoch
+                                + " -> " + MAX_EPOCH);
+                        newEpoch = MAX_EPOCH;
+                    }
                     rotateToEpoch(newEpoch);
                 }
             }
@@ -499,8 +517,8 @@ public class AppLayerEncryptionManager {
         hmac.init(parentKey);
 
         // info = "meshtastic-epoch-" || epoch_number (4 bytes big-endian)
-        byte[] info = ByteBuffer.allocate(HKDF_INFO_PREFIX.length() + 4)
-                .put(HKDF_INFO_PREFIX.getBytes(StandardCharsets.UTF_8))
+        byte[] info = ByteBuffer.allocate(EPOCH_KDF_INFO_PREFIX.length() + 4)
+                .put(EPOCH_KDF_INFO_PREFIX.getBytes(StandardCharsets.UTF_8))
                 .putInt(epoch)
                 .array();
         byte[] derivedBytes = hmac.doFinal(info);
@@ -523,6 +541,12 @@ public class AppLayerEncryptionManager {
 
         if (targetEpoch == 0) {
             return baseKey;
+        }
+
+        if (targetEpoch < 0 || targetEpoch > MAX_EPOCH) {
+            Log.w(TAG, "Epoch out of bounds: " + targetEpoch
+                    + " (max: " + MAX_EPOCH + ")");
+            return null;
         }
 
         try {
@@ -558,6 +582,9 @@ public class AppLayerEncryptionManager {
         previousEpochKey = null;
         previousEpoch = -1;
         epochStartTimeMs = System.currentTimeMillis();
+
+        // Zero the input array to reduce key material exposure in memory
+        java.util.Arrays.fill(seedKey, (byte) 0);
         Log.i(TAG, "Seed key loaded from external source, starting at epoch " + startEpoch);
     }
 
