@@ -167,4 +167,28 @@
         android:inputType="textPassword"
         android:defaultValue=""/>
 
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_epoch_rotation"
+        android:title="Enable Epoch Rotation"
+        android:summary="Automatically rotate encryption keys on a schedule. Provides forward secrecy — compromised keys cannot decrypt past traffic."
+        android:defaultValue="false"
+        android:dependency="plugin_meshtastic_extra_encryption"/>
+
+    <com.atakmap.android.gui.PanListPreference
+        android:key="plugin_meshtastic_epoch_interval"
+        android:title="Epoch Rotation Interval"
+        android:summary="How often to rotate encryption keys (all team devices rotate in sync)"
+        android:dialogTitle="Epoch Rotation Interval"
+        android:entries="@array/epoch_interval_names"
+        android:entryValues="@array/epoch_interval_values"
+        android:defaultValue="6"
+        android:dependency="plugin_meshtastic_epoch_rotation"/>
+
+    <android.preference.Preference
+        android:key="plugin_meshtastic_epoch_current"
+        android:title="Current Epoch"
+        android:summary="Not active"
+        android:selectable="false"
+        android:enabled="false"/>
+
 </PreferenceScreen>

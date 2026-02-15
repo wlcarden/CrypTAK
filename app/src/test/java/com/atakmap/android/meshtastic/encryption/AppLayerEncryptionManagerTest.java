@@ -658,4 +658,81 @@ class AppLayerEncryptionManagerTest {
 
         assertThat(encrypted.length).isGreaterThan(231);
     }
+
+    // ========================================================================
+    // Base64 Key Import Tests
+    // ========================================================================
+
+    @Test
+    void shouldImportValidBase64Key() {
+        // Generate a valid 32-byte key and base64 encode it
+        byte[] keyBytes = new byte[32];
+        new SecureRandom().nextBytes(keyBytes);
+        String base64Key = java.util.Base64.getEncoder().encodeToString(keyBytes);
+
+        boolean result = manager.importKeyFromBase64(base64Key);
+
+        assertThat(result).isTrue();
+        assertThat(manager.hasKey()).isTrue();
+    }
+
+    @Test
+    void shouldRejectBase64KeyWithWrongLength() {
+        // 16-byte key (too short)
+        byte[] shortKey = new byte[16];
+        String base64Short = java.util.Base64.getEncoder().encodeToString(shortKey);
+
+        boolean result = manager.importKeyFromBase64(base64Short);
+
+        assertThat(result).isFalse();
+    }
+
+    @Test
+    void shouldRejectNullBase64Key() {
+        boolean result = manager.importKeyFromBase64(null);
+        assertThat(result).isFalse();
+    }
+
+    @Test
+    void shouldRejectEmptyBase64Key() {
+        boolean result = manager.importKeyFromBase64("");
+        assertThat(result).isFalse();
+    }
+
+    @Test
+    void shouldRejectInvalidBase64Encoding() {
+        boolean result = manager.importKeyFromBase64("not-valid-base64!!!");
+        assertThat(result).isFalse();
+    }
+
+    @Test
+    void shouldImportBase64KeyAndEncryptDecrypt() {
+        // Full round-trip: import base64 key, encrypt, decrypt
+        byte[] keyBytes = new byte[32];
+        new SecureRandom().nextBytes(keyBytes);
+        String base64Key = java.util.Base64.getEncoder().encodeToString(keyBytes);
+
+        manager.importKeyFromBase64(base64Key);
+        manager.setEnabled(true);
+
+        byte[] plaintext = "test message after base64 import".getBytes(StandardCharsets.UTF_8);
+        byte[] encrypted = manager.encrypt(plaintext);
+        assertThat(encrypted).isNotNull();
+
+        byte[] decrypted = manager.decrypt(encrypted);
+        assertThat(decrypted).isEqualTo(plaintext);
+    }
+
+    @Test
+    void shouldHandleBase64KeyWithWhitespace() {
+        // Keys might have leading/trailing whitespace from copy-paste
+        byte[] keyBytes = new byte[32];
+        new SecureRandom().nextBytes(keyBytes);
+        String base64Key = "  " + java.util.Base64.getEncoder().encodeToString(keyBytes) + "  \n";
+
+        boolean result = manager.importKeyFromBase64(base64Key);
+
+        assertThat(result).isTrue();
+        assertThat(manager.hasKey()).isTrue();
+    }
 }

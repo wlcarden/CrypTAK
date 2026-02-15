@@ -79,6 +79,11 @@ public final class Constants {
     public static final String PREF_PLUGIN_PTT_MOMENTARY = "plugin_meshtastic_ptt_momentary";
     public static final String PREF_PLUGIN_TOT = "plugin_meshtastic_tot";
 
+    // Epoch rotation preferences
+    public static final String PREF_PLUGIN_EPOCH_ROTATION = "plugin_meshtastic_epoch_rotation";
+    public static final String PREF_PLUGIN_EPOCH_INTERVAL = "plugin_meshtastic_epoch_interval";
+    public static final String PREF_PLUGIN_EPOCH_CURRENT = "plugin_meshtastic_epoch_current";
+
     // Encrypted message prefix (to identify legacy encrypted payloads - zlib XML path)
     public static final byte ENCRYPTED_MESSAGE_MARKER = (byte) 0xEE;
 

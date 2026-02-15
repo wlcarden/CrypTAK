@@ -302,6 +302,19 @@ public class MeshtasticMapComponent extends DropDownMapComponent
         encryptionManager = AppLayerEncryptionManager.getInstance();
         encryptionManager.initialize(view.getContext());
 
+        // Initialize epoch rotation from preferences
+        if (prefs.getBoolean(Constants.PREF_PLUGIN_EXTRA_ENCRYPTION, false)
+                && prefs.getBoolean(Constants.PREF_PLUGIN_EPOCH_ROTATION, false)) {
+            int intervalHours;
+            try {
+                intervalHours = Integer.parseInt(
+                        prefs.getString(Constants.PREF_PLUGIN_EPOCH_INTERVAL, "6"));
+            } catch (NumberFormatException e) {
+                intervalHours = 6;
+            }
+            encryptionManager.enableEpochRotation(intervalHours * 60L * 60L * 1000L);
+        }
+
         // Connect to mesh service
         meshServiceManager.connect();
 
@@ -838,6 +851,27 @@ public class MeshtasticMapComponent extends DropDownMapComponent
                 } else {
                     Log.d(TAG, "App-layer encryption disabled via preference change");
                 }
+            }
+        }
+
+        // Handle epoch rotation preference changes
+        if (Constants.PREF_PLUGIN_EPOCH_ROTATION.equals(key)
+                || Constants.PREF_PLUGIN_EPOCH_INTERVAL.equals(key)) {
+            boolean encEnabled = prefs.getBoolean(Constants.PREF_PLUGIN_EXTRA_ENCRYPTION, false);
+            boolean epochEnabled = prefs.getBoolean(Constants.PREF_PLUGIN_EPOCH_ROTATION, false);
+            if (encEnabled && epochEnabled) {
+                int intervalHours;
+                try {
+                    intervalHours = Integer.parseInt(
+                            prefs.getString(Constants.PREF_PLUGIN_EPOCH_INTERVAL, "6"));
+                } catch (NumberFormatException e) {
+                    intervalHours = 6;
+                }
+                encryptionManager.enableEpochRotation(intervalHours * 60L * 60L * 1000L);
+                Log.i(TAG, "Epoch rotation enabled: " + intervalHours + "h interval");
+            } else {
+                encryptionManager.disableEpochRotation();
+                Log.d(TAG, "Epoch rotation disabled via preference change");
             }
         }
 

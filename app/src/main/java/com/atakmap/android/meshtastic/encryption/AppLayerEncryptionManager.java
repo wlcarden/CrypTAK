@@ -7,6 +7,8 @@ import com.atakmap.android.meshtastic.ProtectedSharedPreferences;
 import com.atakmap.android.meshtastic.util.Constants;
 import com.atakmap.coremap.log.Log;
 
+import android.util.Base64;
+
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
@@ -210,6 +212,90 @@ public class AppLayerEncryptionManager {
         previousEpoch = -1;
         epochStartTimeMs = System.currentTimeMillis();
         Log.d(TAG, "Key loaded from raw bytes");
+    }
+
+    /**
+     * Import a key from a base64-encoded string (e.g., from QR code scan or ATAK Import Manager).
+     * Validates that the decoded key is exactly 32 bytes (AES-256).
+     *
+     * <p>Typical usage: team member scans a QR code containing the output of
+     * {@code openssl rand -base64 32}, this method decodes and loads it.</p>
+     *
+     * @param base64Key Base64-encoded key string (standard or URL-safe encoding)
+     * @return true if the key was valid and loaded, false otherwise
+     */
+    public boolean importKeyFromBase64(String base64Key) {
+        if (base64Key == null || base64Key.trim().isEmpty()) {
+            Log.w(TAG, "Cannot import null or empty base64 key");
+            return false;
+        }
+
+        try {
+            byte[] keyBytes = Base64.decode(base64Key.trim(), Base64.DEFAULT);
+
+            if (keyBytes.length != 32) {
+                Log.w(TAG, "Invalid key length: " + keyBytes.length
+                        + " bytes (expected 32). Check that the key was generated with: "
+                        + "openssl rand -base64 32");
+                // Zero out the decoded bytes
+                java.util.Arrays.fill(keyBytes, (byte) 0);
+                return false;
+            }
+
+            loadKeyFromBytes(keyBytes);
+            // Zero the intermediate copy
+            java.util.Arrays.fill(keyBytes, (byte) 0);
+
+            Log.i(TAG, "Key imported from base64 (32 bytes)");
+            return true;
+        } catch (IllegalArgumentException e) {
+            Log.w(TAG, "Invalid base64 encoding: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Import a key from base64 and persist it to SharedPreferences.
+     * This is the full onboarding flow: decode, validate, load, and save.
+     *
+     * @param context    Application context for accessing preferences
+     * @param base64Key  Base64-encoded 32-byte key
+     * @param enableEncryption Whether to also enable encryption after import
+     * @return true if key was imported and saved successfully
+     */
+    public boolean importKeyAndSave(Context context, String base64Key, boolean enableEncryption) {
+        if (!importKeyFromBase64(base64Key)) {
+            return false;
+        }
+
+        try {
+            SharedPreferences prefs = new ProtectedSharedPreferences(
+                    PreferenceManager.getDefaultSharedPreferences(context));
+            SharedPreferences.Editor editor = prefs.edit();
+
+            // Store the base64 key as the PSK (the raw base64 string itself becomes the PSK,
+            // which loadKey() will SHA-256 hash — consistent with manual entry)
+            editor.putString(Constants.PREF_PLUGIN_ENCRYPTION_PSK, base64Key.trim());
+
+            if (enableEncryption) {
+                editor.putBoolean(Constants.PREF_PLUGIN_EXTRA_ENCRYPTION, true);
+            }
+
+            editor.apply();
+
+            // Re-derive from the string PSK to stay consistent with preference-based loading
+            loadKey(base64Key.trim());
+            if (enableEncryption) {
+                setEnabled(true);
+            }
+
+            Log.i(TAG, "Key imported and saved to preferences"
+                    + (enableEncryption ? " (encryption enabled)" : ""));
+            return true;
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to save imported key to preferences", e);
+            return false;
+        }
     }
 
     /**

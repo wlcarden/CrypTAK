@@ -1423,7 +1423,6 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                 int hopLimit = getHopLimit();
                 int channel = getChannelIndex();
 
-                DataPacket dp = null;
                 int eventType = -1;
                 double divisor = 1e-7;
                 XmlPullParserFactory factory = null;
@@ -1506,9 +1505,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     byte[] payload = encryptForRelay(takPacketBytes);
                     if (payload == null) return;
 
-                    dp = new DataPacket(DataPacket.ID_BROADCAST, ByteString.of(payload, 0, payload.length), PortNum.ATAK_PLUGIN.getValue(), DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null, null, 0, false, 0, 0, null);
-                    if (MeshtasticMapComponent.getMeshService() != null)
-                        MeshtasticMapComponent.getMeshService().sendToMesh(dp);
+                    sendOrChunkRelayPayload(payload, hopLimit, channel);
                 } else if (cotDetail.getAttribute("contact") != null) {
                     for (Contact c : Contacts.getInstance().getAllContacts()) {
                         if (cotEvent.getUID().equals(c.getUid())) {
@@ -1609,9 +1606,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                             byte[] payload = encryptForRelay(takPacketBytes);
                             if (payload == null) return;
 
-                            dp = new DataPacket(DataPacket.ID_BROADCAST, ByteString.of(payload, 0, payload.length), PortNum.ATAK_PLUGIN.getValue(), DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null, null, 0, false, 0, 0, null);
-                            if (MeshtasticMapComponent.getMeshService() != null)
-                                MeshtasticMapComponent.getMeshService().sendToMesh(dp);
+                            sendOrChunkRelayPayload(payload, hopLimit, channel);
                         }
                     }
                 }
@@ -1623,7 +1618,6 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
      * Encrypt payload for the server relay path (onCotEvent).
      * Uses the AppLayerEncryptionManager singleton if encryption is enabled.
      * Returns the original payload if encryption is disabled, or null if encryption fails.
-     * Warns if encrypted payload exceeds the single-packet limit (231 bytes).
      *
      * @param takPacketBytes The raw TAKPacket bytes to potentially encrypt
      * @return Encrypted or original payload, or null if encryption failed
@@ -1640,15 +1634,58 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
             return null;
         }
 
-        if (encrypted.length > 231) {
-            Log.w(TAG, "Server relay: encrypted payload (" + encrypted.length
-                    + " bytes) exceeds single-packet limit (231). "
-                    + "Message may be truncated by Meshtastic radio.");
-        }
-
         Log.d(TAG, "Server relay: app-layer encrypted " + takPacketBytes.length
                 + " -> " + encrypted.length + " bytes");
         return encrypted;
+    }
+
+    /**
+     * Send relay payload via Meshtastic, using fountain coding if it exceeds the
+     * single-packet limit (231 bytes). This mirrors the logic in
+     * MeshtasticMapComponent.sendOrChunkPayload but is used by the server relay path.
+     *
+     * @param payload   The payload bytes to send (possibly encrypted)
+     * @param hopLimit  Hop limit for the packet
+     * @param channel   Meshtastic channel index
+     */
+    private void sendOrChunkRelayPayload(byte[] payload, int hopLimit, int channel) {
+        final int MAX_SINGLE_PACKET = 231;
+
+        if (payload.length <= MAX_SINGLE_PACKET) {
+            DataPacket dp = new DataPacket(
+                    DataPacket.ID_BROADCAST,
+                    ByteString.of(payload, 0, payload.length),
+                    PortNum.ATAK_PLUGIN.getValue(),
+                    DataPacket.ID_LOCAL,
+                    System.currentTimeMillis(),
+                    0,
+                    MessageStatus.UNKNOWN,
+                    hopLimit,
+                    channel,
+                    getWantsAck(),
+                    0, 0f, 0, null, null, 0, false, 0, 0, null
+            );
+            if (MeshtasticMapComponent.getMeshService() != null) {
+                MeshtasticMapComponent.getMeshService().sendToMesh(dp);
+            }
+        } else {
+            Log.d(TAG, "Server relay: payload too large for single packet ("
+                    + payload.length + " > " + MAX_SINGLE_PACKET
+                    + "), using fountain coding");
+            if (fountainChunkManager != null) {
+                int transferId = fountainChunkManager.send(
+                        payload, channel, hopLimit, Constants.TRANSFER_TYPE_COT);
+                if (transferId < 0) {
+                    Log.e(TAG, "Server relay: failed to start fountain transfer");
+                } else {
+                    Log.d(TAG, "Server relay: started fountain transfer " + transferId);
+                }
+            } else {
+                Log.e(TAG, "Server relay: oversized encrypted payload ("
+                        + payload.length + " bytes) but fountain coding unavailable. "
+                        + "Message dropped to avoid silent truncation on LoRa.");
+            }
+        }
     }
 
     /**

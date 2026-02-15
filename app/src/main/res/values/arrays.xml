@@ -80,6 +80,24 @@
         <item>2</item>
     </string-array>
 
+    <!-- Epoch Rotation Interval (hours) -->
+    <string-array name="epoch_interval_names">
+        <item>1 hour</item>
+        <item>2 hours</item>
+        <item>4 hours</item>
+        <item>6 hours (Default)</item>
+        <item>12 hours</item>
+        <item>24 hours</item>
+    </string-array>
+    <string-array name="epoch_interval_values">
+        <item>1</item>
+        <item>2</item>
+        <item>4</item>
+        <item>6</item>
+        <item>12</item>
+        <item>24</item>
+    </string-array>
+
     <!-- Time Out Timer (TOT) -->
     <string-array name="tot_names">
         <item>Off (No limit)</item>
