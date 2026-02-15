@@ -19,6 +19,7 @@ import android.content.pm.PackageManager;
 
 import com.atakmap.android.maps.tilesets.EquirectangularTilesetSupport;
 import com.atakmap.android.meshtastic.cot.CotEventProcessor;
+import com.atakmap.android.meshtastic.encryption.AppLayerEncryptionManager;
 import com.atakmap.android.meshtastic.util.Constants;
 import com.atakmap.android.meshtastic.util.CryptoUtils;
 import com.atakmap.android.meshtastic.util.FileTransferManager;
@@ -876,6 +877,42 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                 // Sender side - received file transfer acknowledgment
                 Log.d(TAG, "Received MFT - file transfer complete");
                 FileTransferManager.getInstance().completeTransfer();
+            } else if (AppLayerEncryptionManager.isAppLayerEncrypted(raw)) {
+                // App-layer encrypted message (0xFE marker) - decrypt then process
+                Log.d(TAG, "Received app-layer encrypted message on FORWARDER port");
+                AppLayerEncryptionManager encManager = AppLayerEncryptionManager.getInstance();
+                byte[] decrypted = encManager.decrypt(raw);
+                if (decrypted == null) {
+                    Log.w(TAG, "Failed to decrypt app-layer message (wrong key or no key)");
+                    return;
+                }
+
+                // Decrypted data is zlib-compressed CoT
+                String xmlStr = decompressToXml(decrypted);
+                if (xmlStr != null) {
+                    Log.d(TAG, "Decrypted app-layer to XML: " + xmlStr.length() + " chars");
+                    CotEvent cotEvent = CotEvent.parse(xmlStr);
+                    if (cotEvent != null && cotEvent.isValid()) {
+                        CotDetail cotDetail = cotEvent.getDetail();
+                        if (cotDetail == null) {
+                            cotDetail = new CotDetail("detail");
+                            cotEvent.setDetail(cotDetail);
+                        }
+                        CotDetail meshDetail = new CotDetail("__meshtastic");
+                        cotDetail.addChild(meshDetail);
+                        cotEvent.setDetail(cotDetail);
+
+                        Log.d(TAG, "Dispatching app-layer decrypted CoT event");
+                        CotMapComponent.getInternalDispatcher().dispatch(cotEvent);
+                        if (prefs.getBoolean(Constants.PREF_PLUGIN_SERVER, false)) {
+                            CotMapComponent.getExternalDispatcher().dispatch(cotEvent);
+                        }
+                    } else {
+                        Log.w(TAG, "Decrypted CoT event is not valid");
+                    }
+                } else {
+                    Log.e(TAG, "Failed to decompress app-layer decrypted data");
+                }
             } else if (CryptoUtils.isEncrypted(raw)) {
                 // Encrypted message - try to decrypt
                 Log.d(TAG, "Received encrypted message");
@@ -953,7 +990,21 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
             Log.d(TAG, "Payload: " + payload);
 
             try {
-                TAKPacket tp = TAKPacket.ADAPTER.decode(payload.getBytes().toByteArray());
+                // Check for app-layer encryption before protobuf decode
+                byte[] takBytes = payload.getBytes().toByteArray();
+                if (AppLayerEncryptionManager.isAppLayerEncrypted(takBytes)) {
+                    Log.d(TAG, "TAK_PACKET is app-layer encrypted, decrypting");
+                    AppLayerEncryptionManager encManager = AppLayerEncryptionManager.getInstance();
+                    byte[] decrypted = encManager.decrypt(takBytes);
+                    if (decrypted == null) {
+                        Log.w(TAG, "Failed to decrypt app-layer encrypted TAK_PACKET "
+                                + "(wrong key or no key configured)");
+                        return;
+                    }
+                    takBytes = decrypted;
+                    Log.d(TAG, "TAK_PACKET decrypted: " + takBytes.length + " bytes");
+                }
+                TAKPacket tp = TAKPacket.ADAPTER.decode(takBytes);
                 if (tp.is_compressed()) {
                     Log.d(TAG, "TAK_PACKET is compressed");
                     return;
@@ -1660,8 +1711,20 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
 
         byte[] exiData = data;
 
-        // Check if data is encrypted
-        if (CryptoUtils.isEncrypted(data)) {
+        // Check for app-layer encryption (0xFE marker) first
+        if (AppLayerEncryptionManager.isAppLayerEncrypted(data)) {
+            Log.d(TAG, "Fountain data is app-layer encrypted - attempting decryption");
+            AppLayerEncryptionManager encManager = AppLayerEncryptionManager.getInstance();
+            byte[] decrypted = encManager.decrypt(data);
+            if (decrypted == null) {
+                Log.w(TAG, "Failed to decrypt app-layer fountain data (wrong key or no key)");
+                return;
+            }
+            Log.d(TAG, "Fountain data app-layer decrypted: " + decrypted.length + " bytes");
+            exiData = decrypted;
+        }
+        // Check for legacy encryption (0xEE marker)
+        else if (CryptoUtils.isEncrypted(data)) {
             Log.d(TAG, "Fountain data is encrypted - attempting decryption");
             String psk = prefs.getString(Constants.PREF_PLUGIN_ENCRYPTION_PSK, "");
             if (psk == null || psk.isEmpty()) {

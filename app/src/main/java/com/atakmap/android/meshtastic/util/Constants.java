@@ -79,8 +79,12 @@ public final class Constants {
     public static final String PREF_PLUGIN_PTT_MOMENTARY = "plugin_meshtastic_ptt_momentary";
     public static final String PREF_PLUGIN_TOT = "plugin_meshtastic_tot";
 
-    // Encrypted message prefix (to identify encrypted payloads)
+    // Encrypted message prefix (to identify legacy encrypted payloads - zlib XML path)
     public static final byte ENCRYPTED_MESSAGE_MARKER = (byte) 0xEE;
+
+    // App-layer encryption marker (to identify protobuf-level encrypted payloads)
+    // Chosen to not collide with valid protobuf field tags, 0xEE, or 0xC2 (codec2)
+    public static final byte APP_LAYER_ENCRYPTED_MARKER = (byte) 0xFE;
 
 
     // ATAK Intent

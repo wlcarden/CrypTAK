@@ -33,12 +33,12 @@ import com.atakmap.android.maps.MapView;
 import com.atakmap.android.maps.Marker;
 import com.atakmap.android.maps.visibility.MapItemVisibilityListener;
 import com.atakmap.android.meshtastic.cot.CotEventProcessor;
+import com.atakmap.android.meshtastic.encryption.AppLayerEncryptionManager;
 import com.atakmap.android.meshtastic.plugin.R;
 import com.atakmap.android.meshtastic.service.MeshServiceManager;
 import com.atakmap.android.meshtastic.util.fountain.FountainChunkManager;
 import com.atakmap.android.meshtastic.util.fountain.FountainPacket;
 import com.atakmap.android.meshtastic.util.Constants;
-import com.atakmap.android.meshtastic.util.CryptoUtils;
 import com.atakmap.android.meshtastic.util.NotificationHelper;
 import com.atakmap.app.preferences.ToolsPreferenceFragment;
 import com.atakmap.commoncommo.CoTMessageListener;
@@ -100,6 +100,7 @@ public class MeshtasticMapComponent extends DropDownMapComponent
     private MeshServiceManager meshServiceManager;
     private NotificationHelper notificationHelper;
     private FountainChunkManager fountainChunkManager;
+    private AppLayerEncryptionManager encryptionManager;
 
     // Static reference to the singleton instance
     private static MeshtasticMapComponent instance;
@@ -297,6 +298,10 @@ public class MeshtasticMapComponent extends DropDownMapComponent
                 meshtasticSender = new MeshtasticSender(view, pluginContext)
         );
 
+        // Initialize app-layer encryption manager
+        encryptionManager = AppLayerEncryptionManager.getInstance();
+        encryptionManager.initialize(view.getContext());
+
         // Connect to mesh service
         meshServiceManager.connect();
 
@@ -328,6 +333,11 @@ public class MeshtasticMapComponent extends DropDownMapComponent
         // Shutdown fountain chunk manager
         if (fountainChunkManager != null) {
             fountainChunkManager.shutdown();
+        }
+
+        // Clear encryption keys from memory
+        if (encryptionManager != null) {
+            encryptionManager.clearKeys();
         }
 
         meshServiceManager.disconnect();
@@ -386,16 +396,18 @@ public class MeshtasticMapComponent extends DropDownMapComponent
             Log.d(TAG, cotDetail.toString());
         }
 
-        // Check if extra encryption mode is enabled
+        // Refresh encryption state from preferences (key may have changed)
         if (prefs.getBoolean(Constants.PREF_PLUGIN_EXTRA_ENCRYPTION, false)) {
             String psk = prefs.getString(Constants.PREF_PLUGIN_ENCRYPTION_PSK, "");
             if (psk != null && !psk.isEmpty()) {
-                handleEncryptedMessage(cotEvent, hopLimit, channel, psk);
-                return;
+                encryptionManager.loadKey(psk);
+                encryptionManager.setEnabled(true);
             } else {
-                Log.w(TAG, "Extra encryption enabled but PSK is empty, aborting");
-                return;
+                Log.w(TAG, "App-layer encryption enabled but PSK is empty");
+                encryptionManager.setEnabled(false);
             }
+        } else {
+            encryptionManager.setEnabled(false);
         }
 
         // Parse the CoT event
@@ -454,32 +466,13 @@ public class MeshtasticMapComponent extends DropDownMapComponent
 
         byte[] takPacketBytes = TAKPacket.ADAPTER.encode(takPacket);
         Log.d(TAG, "Total wire size for TAKPacket: " + takPacketBytes.length);
-        //Log.d(TAG, "Sending: " + takPacket.toString());
 
-        DataPacket dp = new DataPacket(
-                DataPacket.ID_BROADCAST,
-                ByteString.of(takPacketBytes, 0, takPacketBytes.length),
-                PortNum.ATAK_PLUGIN.getValue(),
-                DataPacket.ID_LOCAL,
-                System.currentTimeMillis(),
-                0,
-                MessageStatus.UNKNOWN,
-                hopLimit,
-                channel,
-                MeshtasticReceiver.getWantsAck(),
-                0,  // hopStart
-                0f, // snr
-                0,  // rssi
-                null, // replyId
-                null, // relayNode
-                0,    // relays
-                false, // viaMqtt
-                0,    // retryCount
-                0,    // emoji
-                null  // sfppHash
-        );
+        // Apply app-layer encryption if enabled
+        byte[] payload = encryptPayloadIfEnabled(takPacketBytes);
+        if (payload == null) return;
 
-        meshServiceManager.sendToMesh(dp);
+        sendOrChunkPayload(payload, DataPacket.ID_BROADCAST, PortNum.ATAK_PLUGIN.getValue(),
+                hopLimit, channel, MeshtasticReceiver.getWantsAck());
     }
 
     private void handleAllChatMessage(CotEventProcessor.ParsedCotData data, int hopLimit, int channel) {
@@ -489,32 +482,13 @@ public class MeshtasticMapComponent extends DropDownMapComponent
 
         byte[] takPacketBytes = TAKPacket.ADAPTER.encode(takPacket);
         Log.d(TAG, "Total wire size for TAKPacket: " + takPacketBytes.length);
-        //Log.d(TAG, "Sending: " + takPacket.toString());
 
-        DataPacket dp = new DataPacket(
-                DataPacket.ID_BROADCAST,
-                ByteString.of(takPacketBytes, 0, takPacketBytes.length),
-                PortNum.ATAK_PLUGIN.getValue(),
-                DataPacket.ID_LOCAL,
-                System.currentTimeMillis(),
-                0,
-                MessageStatus.UNKNOWN,
-                hopLimit,
-                channel,
-                MeshtasticReceiver.getWantsAck(),
-                0,  // hopStart
-                0f, // snr
-                0,  // rssi
-                null, // replyId
-                null, // relayNode
-                0,    // relays
-                false, // viaMqtt
-                0,    // retryCount
-                0,    // emoji
-                null  // sfppHash
-        );
+        // Apply app-layer encryption if enabled
+        byte[] payload = encryptPayloadIfEnabled(takPacketBytes);
+        if (payload == null) return;
 
-        meshServiceManager.sendToMesh(dp);
+        sendOrChunkPayload(payload, DataPacket.ID_BROADCAST, PortNum.ATAK_PLUGIN.getValue(),
+                hopLimit, channel, MeshtasticReceiver.getWantsAck());
     }
 
     private void handleDirectMessage(CotEventProcessor.ParsedCotData data, int hopLimit, int channel) {
@@ -524,9 +498,8 @@ public class MeshtasticMapComponent extends DropDownMapComponent
             return;
         }
 
-        DataPacket dp;
         if (data.to.startsWith("!")) {
-            // Meshtastic ID - send as text message
+            // Meshtastic ID - send as text message (no app-layer encryption for native Meshtastic text)
             Log.d(TAG, "Sending to Meshtastic ID: " + data.to);
             Data dataProto = new Data(
                     PortNum.TEXT_MESSAGE_APP,
@@ -541,7 +514,7 @@ public class MeshtasticMapComponent extends DropDownMapComponent
                     ByteString.EMPTY
             );
             byte[] dataBytes = Data.ADAPTER.encode(dataProto);
-            dp = new DataPacket(
+            DataPacket dp = new DataPacket(
                     data.to,
                     ByteString.of(dataBytes, 0, dataBytes.length),
                     PortNum.TEXT_MESSAGE_APP.getValue(),
@@ -563,39 +536,21 @@ public class MeshtasticMapComponent extends DropDownMapComponent
                     0,    // emoji
                     null  // sfppHash
             );
+            meshServiceManager.sendToMesh(dp);
         } else {
-            // Regular ATAK device
+            // Regular ATAK device - encrypt TAKPacket if enabled
             TAKPacket takPacket = cotEventProcessor.buildChatPacket(data);
 
             byte[] takPacketBytes = TAKPacket.ADAPTER.encode(takPacket);
             Log.d(TAG, "Total wire size for TAKPacket: " + takPacketBytes.length);
-            //Log.d(TAG, "Sending: " + takPacket.toString());
 
-            dp = new DataPacket(
-                    DataPacket.ID_BROADCAST,
-                    ByteString.of(takPacketBytes, 0, takPacketBytes.length),
-                    PortNum.ATAK_PLUGIN.getValue(),
-                    DataPacket.ID_LOCAL,
-                    System.currentTimeMillis(),
-                    0,
-                    MessageStatus.UNKNOWN,
-                    hopLimit,
-                    channel,
-                    MeshtasticReceiver.getWantsAck(),
-                    0,  // hopStart
-                    0f, // snr
-                    0,  // rssi
-                    null, // replyId,
-                    null, // relayNode
-                    0,    // relays
-                    false, // viaMqtt
-                    0,    // retryCount
-                    0,    // emoji
-                    null  // sfppHash
-            );
+            // Apply app-layer encryption if enabled
+            byte[] payload = encryptPayloadIfEnabled(takPacketBytes);
+            if (payload == null) return;
+
+            sendOrChunkPayload(payload, DataPacket.ID_BROADCAST, PortNum.ATAK_PLUGIN.getValue(),
+                    hopLimit, channel, MeshtasticReceiver.getWantsAck());
         }
-
-        meshServiceManager.sendToMesh(dp);
     }
 
     private void handleChatReceipt(CotEvent cotEvent, int hopLimit, int channel) {
@@ -693,31 +648,12 @@ public class MeshtasticMapComponent extends DropDownMapComponent
         byte[] takPacketBytes = TAKPacket.ADAPTER.encode(takPacket);
         Log.d(TAG, "Chat receipt TAKPacket size: " + takPacketBytes.length + " bytes");
 
-        DataPacket dp = new DataPacket(
-                DataPacket.ID_BROADCAST,    // Send to specific node if known, otherwise broadcast
-                                            // TODO: This should be targetNodeId, but it doesn't work
-                ByteString.of(takPacketBytes, 0, takPacketBytes.length),
-                PortNum.ATAK_PLUGIN.getValue(),
-                DataPacket.ID_LOCAL,
-                System.currentTimeMillis(),
-                0,
-                MessageStatus.UNKNOWN,
-                hopLimit,
-                channel,
-                false,  // No ACK needed for receipts
-                0,  // hopStart
-                0f, // snr
-                0,  // rssi
-                null, // replyId,
-                null, // relayNode
-                0,    // relays
-                false, // viaMqtt
-                0,    // retryCount
-                0,    // emoji
-                null  // sfppHash
-        );
+        // Apply app-layer encryption if enabled
+        byte[] payload = encryptPayloadIfEnabled(takPacketBytes);
+        if (payload == null) return;
 
-        meshServiceManager.sendToMesh(dp);
+        sendOrChunkPayload(payload, DataPacket.ID_BROADCAST, PortNum.ATAK_PLUGIN.getValue(),
+                hopLimit, channel, false);
     }
 
     private void handleGenericCotEvent(CotEvent cotEvent, int hopLimit, int channel) {
@@ -744,51 +680,12 @@ public class MeshtasticMapComponent extends DropDownMapComponent
                 return;
             }
 
-            // Small messages can be sent directly (max payload is 233 bytes)
-            if (cotAsBytes.length < 233) {
-                Log.d(TAG, "Small send");
-                DataPacket dp = new DataPacket(
-                        DataPacket.ID_BROADCAST,
-                        ByteString.of(cotAsBytes, 0, cotAsBytes.length),
-                        PortNum.ATAK_FORWARDER.getValue(),
-                        DataPacket.ID_LOCAL,
-                        System.currentTimeMillis(),
-                        0,
-                        MessageStatus.UNKNOWN,
-                        hopLimit,
-                        channel,
-                        MeshtasticReceiver.getWantsAck(),
-                        0,  // hopStart
-                        0f, // snr
-                        0,  // rssi
-                        null, // replyId,
-                        null, // relayNode
-                        0,    // relays
-                        false, // viaMqtt
-                        0,    // retryCount
-                        0,    // emoji
-                        null  // sfppHash
-                );
-                meshServiceManager.sendToMesh(dp);
-                return;
-            }
+            // Apply app-layer encryption if enabled
+            byte[] payload = encryptPayloadIfEnabled(cotAsBytes);
+            if (payload == null) return;
 
-            // Large messages need fountain coding
-            editor.putBoolean(Constants.PREF_PLUGIN_CHUNKING, true);
-            editor.apply();
-
-            Log.d(TAG, "Sender zlib data: " + cotAsBytes.length + " bytes");
-
-            int transferId = fountainChunkManager.send(cotAsBytes, channel, hopLimit, Constants.TRANSFER_TYPE_COT);
-            if (transferId < 0) {
-                Log.e(TAG, "Failed to start fountain transfer");
-            } else {
-                Log.d(TAG, "Started fountain transfer " + transferId);
-            }
-
-            // Note: PREF_PLUGIN_CHUNKING will be cleared when transfer completes via callback
-            editor.putBoolean(Constants.PREF_PLUGIN_CHUNKING, false);
-            editor.apply();
+            sendOrChunkPayload(payload, DataPacket.ID_BROADCAST, PortNum.ATAK_FORWARDER.getValue(),
+                    hopLimit, channel, MeshtasticReceiver.getWantsAck());
         });
     }
 
@@ -824,86 +721,92 @@ public class MeshtasticMapComponent extends DropDownMapComponent
     }
 
     /**
-     * Handle outgoing messages with extra encryption enabled.
-     * All messages are zlib compressed, encrypted with AES-256-GCM, and sent via ATAK_FORWARDER.
+     * Encrypt payload bytes using AppLayerEncryptionManager if encryption is enabled.
+     * Returns the original payload if encryption is disabled, or the encrypted payload if enabled.
+     *
+     * @param payload The raw payload bytes (protobuf or compressed CoT)
+     * @return Encrypted or original payload, or null if encryption failed
      */
-    private void handleEncryptedMessage(CotEvent cotEvent, int hopLimit, int channel, String psk) {
-        if (prefs.getBoolean(Constants.PREF_PLUGIN_CHUNKING, false)) {
-            Log.d(TAG, "Chunking already in progress");
-            return;
+    private byte[] encryptPayloadIfEnabled(byte[] payload) {
+        if (!encryptionManager.isEnabled()) {
+            return payload;
         }
 
-        executorService.execute(() -> {
-            Log.d(TAG, "Sending encrypted message");
+        byte[] encrypted = encryptionManager.encrypt(payload);
+        if (encrypted == null) {
+            Log.e(TAG, "App-layer encryption failed, message not sent");
+            return null;
+        }
 
-            byte[] cotAsBytes;
-            try {
-                // Compress CoT XML to zlib format for cross-platform compatibility
-                byte[] xmlBytes = cotEvent.toString().getBytes(StandardCharsets.UTF_8);
-                cotAsBytes = zlibCompress(xmlBytes);
-                if (cotAsBytes == null) {
-                    Log.e(TAG, "Failed to compress CoT event");
-                    return;
-                }
-                Log.d(TAG, "Compressed " + xmlBytes.length + " -> " + cotAsBytes.length + " bytes");
-            } catch (Exception e) {
-                Log.e(TAG, "Failed to compress CoT event", e);
+        Log.d(TAG, "App-layer encrypted: " + payload.length + " -> " + encrypted.length + " bytes");
+        return encrypted;
+    }
+
+    /**
+     * Send payload via Meshtastic, using fountain coding if it exceeds the single-packet limit.
+     *
+     * @param payload   The payload bytes to send
+     * @param to        Destination node ID or DataPacket.ID_BROADCAST
+     * @param portNum   Meshtastic port number
+     * @param hopLimit  Hop limit for the packet
+     * @param channel   Meshtastic channel index
+     * @param wantAck   Whether to request acknowledgment
+     */
+    private void sendOrChunkPayload(byte[] payload, String to, int portNum,
+                                     int hopLimit, int channel, boolean wantAck) {
+        // Max payload that Meshtastic accepts in a single packet
+        final int MAX_SINGLE_PACKET = 231;
+
+        if (payload.length <= MAX_SINGLE_PACKET) {
+            // Fits in a single packet - send directly
+            Log.d(TAG, "Sending payload directly: " + payload.length + " bytes");
+            DataPacket dp = new DataPacket(
+                    to,
+                    ByteString.of(payload, 0, payload.length),
+                    portNum,
+                    DataPacket.ID_LOCAL,
+                    System.currentTimeMillis(),
+                    0,
+                    MessageStatus.UNKNOWN,
+                    hopLimit,
+                    channel,
+                    wantAck,
+                    0,  // hopStart
+                    0f, // snr
+                    0,  // rssi
+                    null, // replyId
+                    null, // relayNode
+                    0,    // relays
+                    false, // viaMqtt
+                    0,    // retryCount
+                    0,    // emoji
+                    null  // sfppHash
+            );
+            meshServiceManager.sendToMesh(dp);
+        } else {
+            // Too large for single packet - use fountain coding
+            Log.d(TAG, "Payload too large for single packet (" + payload.length
+                    + " > " + MAX_SINGLE_PACKET + "), using fountain coding");
+
+            if (prefs.getBoolean(Constants.PREF_PLUGIN_CHUNKING, false)) {
+                Log.d(TAG, "Chunking already in progress, dropping message");
                 return;
             }
 
-            // Encrypt the zlib data
-            byte[] encryptedBytes = CryptoUtils.encrypt(cotAsBytes, psk);
-            if (encryptedBytes == null) {
-                Log.e(TAG, "Failed to encrypt message");
-                return;
-            }
-
-            Log.d(TAG, "Encrypted size: " + encryptedBytes.length);
-
-            // Small messages can be sent directly (max payload is 233 bytes)
-            if (encryptedBytes.length < 233) {
-                Log.d(TAG, "Sending small encrypted message directly");
-                DataPacket dp = new DataPacket(
-                        DataPacket.ID_BROADCAST,
-                        ByteString.of(encryptedBytes, 0, encryptedBytes.length),
-                        PortNum.ATAK_FORWARDER.getValue(),
-                        DataPacket.ID_LOCAL,
-                        System.currentTimeMillis(),
-                        0,
-                        MessageStatus.UNKNOWN,
-                        hopLimit,
-                        channel,
-                        MeshtasticReceiver.getWantsAck(),
-                        0,  // hopStart
-                        0f, // snr
-                        0,  // rssi
-                        null, // replyId,
-                        null, // relayNode
-                        0,    // relays
-                        false, // viaMqtt
-                        0,    // retryCount
-                        0,    // emoji
-                        null  // sfppHash
-                );
-                meshServiceManager.sendToMesh(dp);
-                return;
-            }
-
-            // Large encrypted messages need fountain coding
-            Log.d(TAG, "Large encrypted message - using fountain coding");
             editor.putBoolean(Constants.PREF_PLUGIN_CHUNKING, true);
             editor.apply();
 
-            int transferId = fountainChunkManager.send(encryptedBytes, channel, hopLimit, Constants.TRANSFER_TYPE_COT);
+            int transferId = fountainChunkManager.send(payload, channel, hopLimit,
+                    Constants.TRANSFER_TYPE_COT);
             if (transferId < 0) {
-                Log.e(TAG, "Failed to start fountain transfer for encrypted message");
+                Log.e(TAG, "Failed to start fountain transfer");
             } else {
-                Log.d(TAG, "Started fountain transfer " + transferId + " for encrypted message");
+                Log.d(TAG, "Started fountain transfer " + transferId);
             }
 
             editor.putBoolean(Constants.PREF_PLUGIN_CHUNKING, false);
             editor.apply();
-        });
+        }
     }
 
     @Override
@@ -917,6 +820,25 @@ public class MeshtasticMapComponent extends DropDownMapComponent
             editor.putString("constantReportingRateUnreliable", rate);
             editor.putString("constantReportingRateReliable", rate);
             editor.apply();
+        }
+
+        // Handle encryption preference changes
+        if (Constants.PREF_PLUGIN_EXTRA_ENCRYPTION.equals(key)
+                || Constants.PREF_PLUGIN_ENCRYPTION_PSK.equals(key)) {
+            boolean encEnabled = prefs.getBoolean(Constants.PREF_PLUGIN_EXTRA_ENCRYPTION, false);
+            String psk = prefs.getString(Constants.PREF_PLUGIN_ENCRYPTION_PSK, "");
+            if (encEnabled && psk != null && !psk.isEmpty()) {
+                encryptionManager.loadKey(psk);
+                encryptionManager.setEnabled(true);
+                Log.i(TAG, "App-layer encryption enabled via preference change");
+            } else {
+                encryptionManager.setEnabled(false);
+                if (encEnabled) {
+                    Log.w(TAG, "App-layer encryption enabled but no PSK configured");
+                } else {
+                    Log.d(TAG, "App-layer encryption disabled via preference change");
+                }
+            }
         }
 
         if (Constants.PREF_PLUGIN_EXTERNAL_GPS.equals(key)) {

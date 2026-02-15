@@ -150,20 +150,20 @@
         android:summary="Use Meshtastic device GPS as ATAK's external GPS source"
         android:defaultValue="false"/>
 
-    <!-- Encryption Settings -->
-    <PreferenceCategory android:title="Encryption" />
+    <!-- Application-Layer Encryption -->
+    <PreferenceCategory android:title="Application-Layer Encryption" />
 
     <com.atakmap.android.gui.PanSwitchPreference
         android:key="plugin_meshtastic_extra_encryption"
-        android:title="Enable Extra Encryption"
-        android:summary="Encrypt all outgoing messages with AES-256-GCM using PSK"
+        android:title="Enable App-Layer Encryption"
+        android:summary="Encrypt CoT payloads with AES-256-GCM before Meshtastic handoff. Keys stored on phone only — radio compromise does not expose message content."
         android:defaultValue="false"/>
 
     <com.atakmap.android.gui.PanEditTextPreference
         android:key="plugin_meshtastic_encryption_psk"
-        android:title="Encryption PSK"
-        android:summary="Pre-shared key for encryption (all users must have same key)"
-        android:dialogTitle="Encryption PSK"
+        android:title="Pre-Shared Key (PSK)"
+        android:summary="All team members must use the same key. Distribute via QR code or ATAK Data Package over a secure channel."
+        android:dialogTitle="Pre-Shared Key"
         android:inputType="textPassword"
         android:defaultValue=""/>
 
