@@ -382,7 +382,7 @@ class AppLayerEncryptionManagerTest {
         byte[] encrypted = manager.encrypt("test".getBytes(StandardCharsets.UTF_8));
 
         // When - change version byte to unsupported version
-        encrypted[1] = 0x99;
+        encrypted[1] = (byte) 0x99;
 
         // Then
         byte[] result = manager.decrypt(encrypted);
