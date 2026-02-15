@@ -17,7 +17,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 
-import com.atakmap.android.maps.tilesets.EquirectangularTilesetSupport;
 import com.atakmap.android.meshtastic.cot.CotEventProcessor;
 import com.atakmap.android.meshtastic.encryption.AppLayerEncryptionManager;
 import com.atakmap.android.meshtastic.util.Constants;
@@ -54,8 +53,6 @@ import com.atakmap.coremap.cot.event.CotPoint;
 import com.atakmap.coremap.log.Log;
 import com.atakmap.coremap.maps.time.CoordinatedTime;
 
-import com.atakmap.map.projection.EquirectangularMapProjection;
-
 import okio.ByteString;
 import org.meshtastic.core.model.Position;
 import org.meshtastic.proto.GeoChat;
@@ -71,7 +68,6 @@ import org.meshtastic.core.model.MessageStatus;
 import org.meshtastic.core.model.NodeInfo;
 import org.meshtastic.proto.PortNum;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.util.zip.Inflater;
@@ -1505,9 +1501,12 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
 
                     byte[] takPacketBytes = TAKPacket.ADAPTER.encode(tak_packet);
                     Log.d(TAG, "Total wire size for TAKPacket: " + takPacketBytes.length);
-                    //Log.d(TAG, "Sending: " + tak_packet.toString());
 
-                    dp = new DataPacket(DataPacket.ID_BROADCAST, ByteString.of(takPacketBytes, 0, takPacketBytes.length), PortNum.ATAK_PLUGIN.getValue(), DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null, null, 0, false, 0, 0, null);
+                    // Apply app-layer encryption if enabled (server relay path)
+                    byte[] payload = encryptForRelay(takPacketBytes);
+                    if (payload == null) return;
+
+                    dp = new DataPacket(DataPacket.ID_BROADCAST, ByteString.of(payload, 0, payload.length), PortNum.ATAK_PLUGIN.getValue(), DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null, null, 0, false, 0, 0, null);
                     if (MeshtasticMapComponent.getMeshService() != null)
                         MeshtasticMapComponent.getMeshService().sendToMesh(dp);
                 } else if (cotDetail.getAttribute("contact") != null) {
@@ -1605,9 +1604,12 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
 
                             byte[] takPacketBytes = TAKPacket.ADAPTER.encode(tak_packet);
                             Log.d(TAG, "Total wire size for TAKPacket: " + takPacketBytes.length);
-                            //Log.d(TAG, "Sending: " + tak_packet.toString());
 
-                            dp = new DataPacket(DataPacket.ID_BROADCAST, ByteString.of(takPacketBytes, 0, takPacketBytes.length), PortNum.ATAK_PLUGIN.getValue(), DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null, null, 0, false, 0, 0, null);
+                            // Apply app-layer encryption if enabled (server relay path)
+                            byte[] payload = encryptForRelay(takPacketBytes);
+                            if (payload == null) return;
+
+                            dp = new DataPacket(DataPacket.ID_BROADCAST, ByteString.of(payload, 0, payload.length), PortNum.ATAK_PLUGIN.getValue(), DataPacket.ID_LOCAL, System.currentTimeMillis(), 0, MessageStatus.UNKNOWN, hopLimit, channel, getWantsAck(), 0, 0f, 0, null, null, 0, false, 0, 0, null);
                             if (MeshtasticMapComponent.getMeshService() != null)
                                 MeshtasticMapComponent.getMeshService().sendToMesh(dp);
                         }
@@ -1615,6 +1617,38 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                 }
             }
         }
+    }
+
+    /**
+     * Encrypt payload for the server relay path (onCotEvent).
+     * Uses the AppLayerEncryptionManager singleton if encryption is enabled.
+     * Returns the original payload if encryption is disabled, or null if encryption fails.
+     * Warns if encrypted payload exceeds the single-packet limit (231 bytes).
+     *
+     * @param takPacketBytes The raw TAKPacket bytes to potentially encrypt
+     * @return Encrypted or original payload, or null if encryption failed
+     */
+    private byte[] encryptForRelay(byte[] takPacketBytes) {
+        AppLayerEncryptionManager encManager = AppLayerEncryptionManager.getInstance();
+        if (!encManager.isEnabled()) {
+            return takPacketBytes;
+        }
+
+        byte[] encrypted = encManager.encrypt(takPacketBytes);
+        if (encrypted == null) {
+            Log.e(TAG, "App-layer encryption failed for server relay, message not sent");
+            return null;
+        }
+
+        if (encrypted.length > 231) {
+            Log.w(TAG, "Server relay: encrypted payload (" + encrypted.length
+                    + " bytes) exceeds single-packet limit (231). "
+                    + "Message may be truncated by Meshtastic radio.");
+        }
+
+        Log.d(TAG, "Server relay: app-layer encrypted " + takPacketBytes.length
+                + " -> " + encrypted.length + " bytes");
+        return encrypted;
     }
 
     /**

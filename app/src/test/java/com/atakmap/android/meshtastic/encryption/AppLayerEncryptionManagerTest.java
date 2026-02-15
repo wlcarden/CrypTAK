@@ -431,10 +431,7 @@ class AppLayerEncryptionManagerTest {
 
     @Test
     void shouldTrackEpochNumber() {
-        // Given
         manager.loadKey("epoch-test");
-
-        // When
         assertThat(manager.getCurrentEpoch()).isEqualTo(0);
     }
 
@@ -447,11 +444,180 @@ class AppLayerEncryptionManagerTest {
         manager.enableEpochRotation(3600000); // 1 hour
         manager.disableEpochRotation();
 
-        // Then - should still encrypt/decrypt
+        // Then - should still encrypt/decrypt (reverts to base key, v1 format)
         byte[] plaintext = "epoch test".getBytes(StandardCharsets.UTF_8);
         byte[] encrypted = manager.encrypt(plaintext);
+        assertThat(encrypted[1]).isEqualTo(AppLayerEncryptionManager.ENCRYPTION_VERSION_1);
         byte[] decrypted = manager.decrypt(encrypted);
         assertThat(decrypted).isEqualTo(plaintext);
+    }
+
+    @Test
+    void shouldUseV2WireFormatWhenEpochRotationEnabled() {
+        // Given
+        manager.loadKey("v2-format-test");
+        manager.enableEpochRotation(3600000);
+
+        byte[] plaintext = "epoch v2 test".getBytes(StandardCharsets.UTF_8);
+
+        // When
+        byte[] encrypted = manager.encrypt(plaintext);
+
+        // Then - should use v2 format with epoch embedded
+        assertThat(encrypted[0]).isEqualTo(AppLayerEncryptionManager.APP_LAYER_MARKER);
+        assertThat(encrypted[1]).isEqualTo(AppLayerEncryptionManager.ENCRYPTION_VERSION_2);
+        // Bytes 2-5 are the epoch (should be 0 initially)
+        int epoch = java.nio.ByteBuffer.wrap(encrypted, 2, 4).getInt();
+        assertThat(epoch).isEqualTo(0);
+        // V2 overhead: 34 bytes
+        assertThat(encrypted.length).isEqualTo(plaintext.length + 34);
+    }
+
+    @Test
+    void shouldDecryptV2MessageWithEpochDerived() {
+        // Given - encrypt with epoch rotation enabled
+        manager.loadKey("v2-decrypt-test");
+        manager.enableEpochRotation(3600000);
+        byte[] plaintext = "epoch v2 decrypt".getBytes(StandardCharsets.UTF_8);
+        byte[] encrypted = manager.encrypt(plaintext);
+
+        // When - decrypt
+        byte[] decrypted = manager.decrypt(encrypted);
+
+        // Then
+        assertThat(decrypted).isEqualTo(plaintext);
+    }
+
+    @Test
+    void shouldDeriveConsistentEpochKeys() throws Exception {
+        // Given - same PSK should produce same epoch keys
+        manager.loadKey("consistent-epoch-key");
+
+        // When - derive keys for epochs 1, 2, 3
+        javax.crypto.spec.SecretKeySpec key1 = manager.deriveKeyForEpoch(1);
+        javax.crypto.spec.SecretKeySpec key2 = manager.deriveKeyForEpoch(2);
+        javax.crypto.spec.SecretKeySpec key3 = manager.deriveKeyForEpoch(3);
+
+        // Then - all keys should be different
+        assertThat(key1.getEncoded()).isNotEqualTo(key2.getEncoded());
+        assertThat(key2.getEncoded()).isNotEqualTo(key3.getEncoded());
+        assertThat(key1.getEncoded()).isNotEqualTo(key3.getEncoded());
+
+        // And - deriving again should produce the same keys (deterministic)
+        javax.crypto.spec.SecretKeySpec key1Again = manager.deriveKeyForEpoch(1);
+        assertThat(key1Again.getEncoded()).isEqualTo(key1.getEncoded());
+    }
+
+    @Test
+    void shouldRetainPreviousEpochKeyForInFlightMessages() {
+        // Given - encrypt at epoch 0
+        manager.loadKey("inflight-test");
+        manager.enableEpochRotation(1); // 1ms epochs for fast rotation
+        byte[] plaintext = "in-flight message".getBytes(StandardCharsets.UTF_8);
+        byte[] encrypted = manager.encrypt(plaintext);
+
+        // When - force time to advance and trigger rotation
+        try { Thread.sleep(10); } catch (InterruptedException ignored) {}
+        // Encrypt again to trigger rotation
+        manager.encrypt("trigger rotation".getBytes(StandardCharsets.UTF_8));
+
+        // The epoch should have advanced
+        // But the v2 message contains its epoch, so it should still decrypt
+        byte[] decrypted = manager.decrypt(encrypted);
+        assertThat(decrypted).isEqualTo(plaintext);
+    }
+
+    @Test
+    void shouldLoadSeedKeyFromExternalSource() {
+        // Given - simulate TAK Server pushing a new seed key
+        byte[] seedKey = new byte[32];
+        new SecureRandom().nextBytes(seedKey);
+
+        // When
+        manager.loadSeedKeyFromExternal(seedKey, 0);
+        manager.setEnabled(true);
+
+        // Then - should be able to encrypt/decrypt
+        byte[] plaintext = "external seed test".getBytes(StandardCharsets.UTF_8);
+        byte[] encrypted = manager.encrypt(plaintext);
+        assertThat(encrypted).isNotNull();
+        byte[] decrypted = manager.decrypt(encrypted);
+        assertThat(decrypted).isEqualTo(plaintext);
+    }
+
+    @Test
+    void shouldRejectInvalidSeedKey() {
+        // Given - seed key of wrong length
+        manager.loadSeedKeyFromExternal(new byte[16], 0);
+
+        // Then - should not have a key loaded
+        assertThat(manager.hasKey()).isFalse();
+    }
+
+    @Test
+    void shouldDecryptCrossEpochWithBaseKeyDerivation() {
+        // Simulate: sender at epoch 3 sends to receiver at epoch 0
+        // Both have same PSK, receiver derives key for epoch 3
+        manager.loadKey("cross-epoch-test");
+        manager.enableEpochRotation(1); // 1ms for fast rotation
+
+        // Wait and trigger rotation to epoch 3+
+        try { Thread.sleep(10); } catch (InterruptedException ignored) {}
+        byte[] plaintext = "epoch-3-message".getBytes(StandardCharsets.UTF_8);
+        byte[] encrypted = manager.encrypt(plaintext);
+        int senderEpoch = manager.getCurrentEpoch();
+
+        // Now simulate a fresh receiver with same PSK (at epoch 0)
+        resetSingletonForTest();
+        AppLayerEncryptionManager freshReceiver = AppLayerEncryptionManager.getInstance();
+        freshReceiver.loadKey("cross-epoch-test");
+
+        // The receiver should be able to decrypt by deriving the epoch key
+        byte[] decrypted = freshReceiver.decrypt(encrypted);
+        assertThat(decrypted).isEqualTo(plaintext);
+    }
+
+    @Test
+    void shouldReportEpochRotationEnabledState() {
+        manager.loadKey("state-test");
+
+        assertThat(manager.isEpochRotationEnabled()).isFalse();
+
+        manager.enableEpochRotation(3600000);
+        assertThat(manager.isEpochRotationEnabled()).isTrue();
+
+        manager.disableEpochRotation();
+        assertThat(manager.isEpochRotationEnabled()).isFalse();
+    }
+
+    @Test
+    void shouldDecryptV1MessageEvenWhenEpochRotationEnabled() {
+        // Simulate: receiver has epoch rotation enabled but receives a v1 message
+        // from a device that doesn't support epoch rotation
+        manager.loadKey("v1-compat-test");
+
+        // Encrypt without epoch rotation (v1)
+        byte[] plaintext = "v1 legacy message".getBytes(StandardCharsets.UTF_8);
+        byte[] v1Encrypted = manager.encrypt(plaintext);
+        assertThat(v1Encrypted[1]).isEqualTo(AppLayerEncryptionManager.ENCRYPTION_VERSION_1);
+
+        // Enable epoch rotation on receiver
+        manager.enableEpochRotation(3600000);
+
+        // Should still decrypt v1 messages (current key = base key at epoch 0)
+        byte[] decrypted = manager.decrypt(v1Encrypted);
+        assertThat(decrypted).isEqualTo(plaintext);
+    }
+
+    private void resetSingletonForTest() {
+        try {
+            java.lang.reflect.Field instanceField =
+                    AppLayerEncryptionManager.class.getDeclaredField("instance");
+            instanceField.setAccessible(true);
+            instanceField.set(null, null);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to reset singleton", e);
+        }
     }
 
     // ========================================================================

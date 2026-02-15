@@ -14,6 +14,7 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 
 import javax.crypto.Cipher;
+import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -54,19 +55,24 @@ public class AppLayerEncryptionManager {
      *  with valid protobuf field tags or existing markers (0xEE, 0xC2). */
     public static final byte APP_LAYER_MARKER = (byte) 0xFE;
 
-    /** Current encryption format version. Receivers check this to select the
-     *  appropriate decryption logic. */
+    /** Encryption format version 1: PSK only, no epoch.
+     *  Wire: [0xFE][0x01][IV(12)][ciphertext+tag] = 30 bytes overhead */
     public static final byte ENCRYPTION_VERSION_1 = 0x01;
+
+    /** Encryption format version 2: PSK with epoch rotation.
+     *  Wire: [0xFE][0x02][epoch(4)][IV(12)][ciphertext+tag] = 34 bytes overhead */
+    public static final byte ENCRYPTION_VERSION_2 = 0x02;
 
     // AES-256-GCM parameters
     private static final String ALGORITHM = "AES/GCM/NoPadding";
     private static final int GCM_IV_LENGTH = 12;   // 96 bits, recommended for GCM
     private static final int GCM_TAG_LENGTH = 128;  // 128-bit authentication tag
 
-    // Header size: marker (1) + version (1) + IV (12) = 14 bytes
-    // Auth tag appended by GCM: 16 bytes
-    // Total overhead: 30 bytes
+    // V1 overhead: marker (1) + version (1) + IV (12) + auth tag (16) = 30 bytes
     public static final int ENCRYPTION_OVERHEAD = 1 + 1 + GCM_IV_LENGTH + (GCM_TAG_LENGTH / 8);
+
+    // V2 overhead: marker (1) + version (1) + epoch (4) + IV (12) + auth tag (16) = 34 bytes
+    public static final int ENCRYPTION_OVERHEAD_V2 = ENCRYPTION_OVERHEAD + 4;
 
     // Android Keystore alias for the derived key
     private static final String KEYSTORE_ALIAS = "meshtastic_app_layer_key";
@@ -84,12 +90,17 @@ public class AppLayerEncryptionManager {
     private final SecureRandom secureRandom = new SecureRandom();
     private volatile SecretKeySpec currentKey;
     private volatile String currentPsk;
+    private volatile SecretKeySpec baseKey; // Original PSK-derived key (epoch 0)
 
     // Epoch rotation state
     private volatile int currentEpoch = 0;
     private volatile long epochStartTimeMs = 0;
     private volatile long epochDurationMs = DEFAULT_EPOCH_DURATION_MS;
     private volatile boolean epochRotationEnabled = false;
+
+    // Previous epoch key retention — allows decrypting in-flight messages during rotation
+    private volatile SecretKeySpec previousEpochKey;
+    private volatile int previousEpoch = -1;
 
     // Configuration
     private volatile boolean enabled = false;
@@ -164,13 +175,17 @@ public class AppLayerEncryptionManager {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(psk.getBytes(StandardCharsets.UTF_8));
             currentKey = new SecretKeySpec(hash, "AES");
+            baseKey = currentKey;
             currentPsk = psk;
             currentEpoch = 0;
+            previousEpochKey = null;
+            previousEpoch = -1;
             epochStartTimeMs = System.currentTimeMillis();
             Log.d(TAG, "Key derived from PSK");
         } catch (Exception e) {
             Log.e(TAG, "Failed to derive key from PSK", e);
             currentKey = null;
+            baseKey = null;
             currentPsk = null;
         }
     }
@@ -188,8 +203,11 @@ public class AppLayerEncryptionManager {
         }
 
         currentKey = new SecretKeySpec(keyMaterial, "AES");
+        baseKey = currentKey;
         currentPsk = null; // Raw key, not from PSK
         currentEpoch = 0;
+        previousEpochKey = null;
+        previousEpoch = -1;
         epochStartTimeMs = System.currentTimeMillis();
         Log.d(TAG, "Key loaded from raw bytes");
     }
@@ -274,7 +292,11 @@ public class AppLayerEncryptionManager {
     /**
      * Enable epoch-based key rotation.
      * When enabled, the key is automatically rotated every epochDurationMs milliseconds.
-     * New epoch keys are derived forward-only: HKDF(previous_key, epoch_counter).
+     * New epoch keys are derived forward-only using HMAC-SHA256:
+     *   epoch_key[n] = HMAC-SHA256(epoch_key[n-1], "meshtastic-epoch-" || epoch_counter)
+     *
+     * <p>When epoch rotation is active, the encrypt() method uses version 0x02 wire format
+     * which embeds the epoch number so receivers can derive the correct decryption key.</p>
      *
      * @param epochDurationMs Duration of each epoch in milliseconds
      */
@@ -288,20 +310,40 @@ public class AppLayerEncryptionManager {
         this.epochRotationEnabled = true;
         this.epochStartTimeMs = System.currentTimeMillis();
         this.currentEpoch = 0;
+        this.previousEpochKey = null;
+        this.previousEpoch = -1;
         Log.i(TAG, "Epoch rotation enabled, duration: " + this.epochDurationMs + "ms");
     }
 
     /**
      * Disable epoch-based key rotation.
+     * Reverts to base key (epoch 0) and v1 wire format.
      */
     public void disableEpochRotation() {
         this.epochRotationEnabled = false;
-        Log.i(TAG, "Epoch rotation disabled");
+        if (baseKey != null) {
+            this.currentKey = baseKey;
+            this.currentEpoch = 0;
+        }
+        this.previousEpochKey = null;
+        this.previousEpoch = -1;
+        Log.i(TAG, "Epoch rotation disabled, reverted to base key");
     }
 
     /**
+     * Check if epoch rotation is currently enabled.
+     */
+    public boolean isEpochRotationEnabled() {
+        return epochRotationEnabled;
+    }
+
+    // Lock for epoch rotation to prevent concurrent encrypt() calls from
+    // observing partially-updated key+epoch state
+    private final Object epochLock = new Object();
+
+    /**
      * Check if the current epoch has expired and rotate if needed.
-     * Called before each encrypt operation.
+     * Called before each encrypt operation. Thread-safe via epochLock.
      */
     private void checkAndRotateEpoch() {
         if (!epochRotationEnabled || currentKey == null) {
@@ -312,15 +354,23 @@ public class AppLayerEncryptionManager {
         long elapsed = now - epochStartTimeMs;
 
         if (elapsed >= epochDurationMs) {
-            int newEpoch = currentEpoch + (int) (elapsed / epochDurationMs);
-            rotateToEpoch(newEpoch);
+            synchronized (epochLock) {
+                // Re-check under lock (another thread may have rotated already)
+                elapsed = System.currentTimeMillis() - epochStartTimeMs;
+                if (elapsed >= epochDurationMs) {
+                    int newEpoch = currentEpoch + (int) (elapsed / epochDurationMs);
+                    rotateToEpoch(newEpoch);
+                }
+            }
         }
     }
 
     /**
-     * Rotate key to a specific epoch.
-     * Derives the new key using a forward-only KDF chain:
-     *   epoch_key[n] = SHA-256(epoch_key[n-1] || epoch_counter)
+     * Rotate key to a specific epoch using HMAC-SHA256 forward-only KDF chain.
+     * Retains the previous epoch key so in-flight messages can still be decrypted.
+     * Must be called under epochLock.
+     *
+     * <p>Derivation: epoch_key[n] = HMAC-SHA256(epoch_key[n-1], "meshtastic-epoch-" || n)</p>
      *
      * @param targetEpoch The target epoch number
      */
@@ -330,33 +380,114 @@ public class AppLayerEncryptionManager {
         }
 
         try {
+            // Retain the current key as previous (for in-flight message decryption)
+            previousEpochKey = currentKey;
+            previousEpoch = currentEpoch;
+
             SecretKeySpec key = currentKey;
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
 
             for (int epoch = currentEpoch + 1; epoch <= targetEpoch; epoch++) {
-                // Forward-only derivation: new_key = SHA-256(current_key || epoch_bytes)
-                byte[] epochBytes = ByteBuffer.allocate(4).putInt(epoch).array();
-                digest.reset();
-                digest.update(key.getEncoded());
-                digest.update(epochBytes);
-                byte[] newKeyBytes = digest.digest();
-                key = new SecretKeySpec(newKeyBytes, "AES");
+                key = deriveEpochKey(key, epoch);
             }
 
+            // Update all state atomically (under epochLock)
             currentKey = key;
             currentEpoch = targetEpoch;
             epochStartTimeMs = System.currentTimeMillis();
-            Log.i(TAG, "Key rotated to epoch " + targetEpoch);
+            Log.i(TAG, "Key rotated to epoch " + targetEpoch
+                    + " (previous epoch " + previousEpoch + " key retained)");
         } catch (Exception e) {
             Log.e(TAG, "Failed to rotate key to epoch " + targetEpoch, e);
         }
     }
 
     /**
-     * Get the current epoch number (for inclusion in message headers if needed).
+     * Derive an epoch key from the given parent key and epoch number using HMAC-SHA256.
+     *
+     * @param parentKey The key from the previous epoch
+     * @param epoch     The epoch number to derive for
+     * @return The derived key for the given epoch
+     */
+    SecretKeySpec deriveEpochKey(SecretKeySpec parentKey, int epoch) throws Exception {
+        Mac hmac = Mac.getInstance("HmacSHA256");
+        hmac.init(parentKey);
+
+        // info = "meshtastic-epoch-" || epoch_number (4 bytes big-endian)
+        byte[] info = ByteBuffer.allocate(HKDF_INFO_PREFIX.length() + 4)
+                .put(HKDF_INFO_PREFIX.getBytes(StandardCharsets.UTF_8))
+                .putInt(epoch)
+                .array();
+        byte[] derivedBytes = hmac.doFinal(info);
+        return new SecretKeySpec(derivedBytes, "AES");
+    }
+
+    /**
+     * Derive the key for a specific epoch from the base key (epoch 0).
+     * This is used by the receiver to derive the correct key for a message
+     * encrypted at a given epoch without needing to have seen every intermediate epoch.
+     *
+     * @param targetEpoch The epoch to derive the key for
+     * @return The derived key, or null on failure
+     */
+    SecretKeySpec deriveKeyForEpoch(int targetEpoch) {
+        if (baseKey == null) {
+            Log.w(TAG, "Cannot derive epoch key: no base key");
+            return null;
+        }
+
+        if (targetEpoch == 0) {
+            return baseKey;
+        }
+
+        try {
+            SecretKeySpec key = baseKey;
+            for (int epoch = 1; epoch <= targetEpoch; epoch++) {
+                key = deriveEpochKey(key, epoch);
+            }
+            return key;
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to derive key for epoch " + targetEpoch, e);
+            return null;
+        }
+    }
+
+    /**
+     * Load a new seed key from an external source (e.g., TAK Server).
+     * This replaces the current key hierarchy and resets the epoch counter.
+     * Use this when the TAK Server pushes a new encryption key to all clients.
+     *
+     * @param seedKey Raw 256-bit seed key from the external source
+     * @param startEpoch The epoch number to start from (usually 0)
+     */
+    public void loadSeedKeyFromExternal(byte[] seedKey, int startEpoch) {
+        if (seedKey == null || seedKey.length != 32) {
+            Log.w(TAG, "Invalid external seed key: must be exactly 32 bytes");
+            return;
+        }
+
+        currentKey = new SecretKeySpec(seedKey, "AES");
+        baseKey = currentKey;
+        currentPsk = null;
+        currentEpoch = startEpoch;
+        previousEpochKey = null;
+        previousEpoch = -1;
+        epochStartTimeMs = System.currentTimeMillis();
+        Log.i(TAG, "Seed key loaded from external source, starting at epoch " + startEpoch);
+    }
+
+    /**
+     * Get the current epoch number.
      */
     public int getCurrentEpoch() {
         return currentEpoch;
+    }
+
+    /**
+     * Get the previous epoch number (for diagnostics).
+     * Returns -1 if no previous epoch key is retained.
+     */
+    public int getPreviousEpoch() {
+        return previousEpoch;
     }
 
     // ========================================================================
@@ -366,9 +497,14 @@ public class AppLayerEncryptionManager {
     /**
      * Encrypt a payload using AES-256-GCM.
      *
-     * <p>Wire format:
+     * <p>Wire format (v1, epoch rotation disabled):
      * <pre>
-     * [0xFE marker (1)] [version (1)] [IV (12)] [ciphertext + auth_tag (N + 16)]
+     * [0xFE marker (1)] [0x01 version (1)] [IV (12)] [ciphertext + auth_tag (N + 16)]
+     * </pre>
+     *
+     * <p>Wire format (v2, epoch rotation enabled):
+     * <pre>
+     * [0xFE marker (1)] [0x02 version (1)] [epoch (4 BE)] [IV (12)] [ciphertext + auth_tag (N + 16)]
      * </pre>
      *
      * @param plaintext The payload to encrypt (protobuf bytes or compressed CoT)
@@ -401,13 +537,24 @@ public class AppLayerEncryptionManager {
             // Encrypt (GCM appends 16-byte auth tag to ciphertext)
             byte[] ciphertext = cipher.doFinal(plaintext);
 
-            // Assemble wire format: marker + version + IV + ciphertext
-            ByteBuffer buffer = ByteBuffer.allocate(
-                    1 + 1 + GCM_IV_LENGTH + ciphertext.length);
-            buffer.put(APP_LAYER_MARKER);
-            buffer.put(ENCRYPTION_VERSION_1);
-            buffer.put(iv);
-            buffer.put(ciphertext);
+            // Assemble wire format based on whether epoch rotation is active
+            ByteBuffer buffer;
+            if (epochRotationEnabled) {
+                // V2: marker + version + epoch + IV + ciphertext
+                buffer = ByteBuffer.allocate(1 + 1 + 4 + GCM_IV_LENGTH + ciphertext.length);
+                buffer.put(APP_LAYER_MARKER);
+                buffer.put(ENCRYPTION_VERSION_2);
+                buffer.putInt(currentEpoch);
+                buffer.put(iv);
+                buffer.put(ciphertext);
+            } else {
+                // V1: marker + version + IV + ciphertext
+                buffer = ByteBuffer.allocate(1 + 1 + GCM_IV_LENGTH + ciphertext.length);
+                buffer.put(APP_LAYER_MARKER);
+                buffer.put(ENCRYPTION_VERSION_1);
+                buffer.put(iv);
+                buffer.put(ciphertext);
+            }
 
             Log.d(TAG, "Encrypted " + plaintext.length + " -> " + buffer.capacity()
                     + " bytes (overhead: " + (buffer.capacity() - plaintext.length) + ")");
@@ -421,6 +568,10 @@ public class AppLayerEncryptionManager {
 
     /**
      * Decrypt an app-layer encrypted payload.
+     * Supports both v1 (no epoch) and v2 (with epoch) wire formats.
+     *
+     * <p>For v2 messages, the receiver derives the correct epoch key from the base key.
+     * If the derived key fails, falls back to the previous epoch key for in-flight messages.</p>
      *
      * @param encryptedData The full encrypted payload including header
      * @return Decrypted plaintext, or null on failure (wrong key, tampered data, etc.)
@@ -446,15 +597,24 @@ public class AppLayerEncryptionManager {
             return null;
         }
 
-        // Check version
+        // Route based on version
         byte version = encryptedData[1];
-        if (version != ENCRYPTION_VERSION_1) {
+        if (version == ENCRYPTION_VERSION_1) {
+            return decryptV1(encryptedData);
+        } else if (version == ENCRYPTION_VERSION_2) {
+            return decryptV2(encryptedData);
+        } else {
             Log.w(TAG, "Unsupported encryption version: " + version);
             return null;
         }
+    }
 
+    /**
+     * Decrypt a v1 payload (no epoch, uses current key).
+     */
+    private byte[] decryptV1(byte[] encryptedData) {
         if (currentKey == null) {
-            Log.w(TAG, "Cannot decrypt: no key loaded");
+            Log.w(TAG, "Cannot decrypt v1: no key loaded");
             return null;
         }
 
@@ -469,23 +629,112 @@ public class AppLayerEncryptionManager {
             byte[] ciphertext = new byte[ciphertextLength];
             System.arraycopy(encryptedData, ciphertextOffset, ciphertext, 0, ciphertextLength);
 
-            // Initialize AES-256-GCM cipher for decryption
+            byte[] plaintext = decryptWithKey(currentKey, iv, ciphertext);
+            if (plaintext != null) {
+                Log.d(TAG, "Decrypted v1 " + encryptedData.length + " -> " + plaintext.length + " bytes");
+                return plaintext;
+            }
+
+            // If current key fails and we have a previous epoch key, try that
+            if (previousEpochKey != null) {
+                plaintext = decryptWithKey(previousEpochKey, iv, ciphertext);
+                if (plaintext != null) {
+                    Log.d(TAG, "Decrypted v1 with previous epoch key ("
+                            + previousEpoch + "): " + plaintext.length + " bytes");
+                    return plaintext;
+                }
+            }
+
+            Log.d(TAG, "Decryption failed v1: authentication tag mismatch");
+            return null;
+
+        } catch (Exception e) {
+            Log.e(TAG, "Decryption failed v1", e);
+            return null;
+        }
+    }
+
+    /**
+     * Decrypt a v2 payload (with epoch number embedded).
+     * Derives the correct epoch key from the base key using the epoch in the header.
+     */
+    private byte[] decryptV2(byte[] encryptedData) {
+        // V2 minimum: marker(1) + version(1) + epoch(4) + IV(12) + tag(16) = 34 bytes
+        int minSizeV2 = 1 + 1 + 4 + GCM_IV_LENGTH + (GCM_TAG_LENGTH / 8);
+        if (encryptedData.length < minSizeV2) {
+            Log.w(TAG, "V2 encrypted data too short: " + encryptedData.length
+                    + " (minimum: " + minSizeV2 + ")");
+            return null;
+        }
+
+        if (baseKey == null && currentKey == null) {
+            Log.w(TAG, "Cannot decrypt v2: no key loaded");
+            return null;
+        }
+
+        // Extract epoch (bytes 2-5, big-endian)
+        int messageEpoch = ByteBuffer.wrap(encryptedData, 2, 4).getInt();
+
+        // Extract IV (bytes 6-17)
+        byte[] iv = new byte[GCM_IV_LENGTH];
+        System.arraycopy(encryptedData, 6, iv, 0, GCM_IV_LENGTH);
+
+        // Extract ciphertext + auth tag (bytes 18 onwards)
+        int ciphertextOffset = 1 + 1 + 4 + GCM_IV_LENGTH;
+        int ciphertextLength = encryptedData.length - ciphertextOffset;
+        byte[] ciphertext = new byte[ciphertextLength];
+        System.arraycopy(encryptedData, ciphertextOffset, ciphertext, 0, ciphertextLength);
+
+        // Try current key first (if we're at the same epoch)
+        if (messageEpoch == currentEpoch) {
+            byte[] plaintext = decryptWithKey(currentKey, iv, ciphertext);
+            if (plaintext != null) {
+                Log.d(TAG, "Decrypted v2 epoch " + messageEpoch + ": "
+                        + encryptedData.length + " -> " + plaintext.length + " bytes");
+                return plaintext;
+            }
+        }
+
+        // Try previous epoch key (in-flight message during rotation)
+        if (previousEpochKey != null && messageEpoch == previousEpoch) {
+            byte[] plaintext = decryptWithKey(previousEpochKey, iv, ciphertext);
+            if (plaintext != null) {
+                Log.d(TAG, "Decrypted v2 with previous epoch key ("
+                        + messageEpoch + "): " + plaintext.length + " bytes");
+                return plaintext;
+            }
+        }
+
+        // Derive key from base key for the message's epoch
+        SecretKeySpec epochKey = deriveKeyForEpoch(messageEpoch);
+        if (epochKey != null) {
+            byte[] plaintext = decryptWithKey(epochKey, iv, ciphertext);
+            if (plaintext != null) {
+                Log.d(TAG, "Decrypted v2 by deriving key for epoch " + messageEpoch
+                        + ": " + plaintext.length + " bytes");
+                return plaintext;
+            }
+        }
+
+        Log.d(TAG, "Decryption failed v2 epoch " + messageEpoch
+                + ": no matching key found");
+        return null;
+    }
+
+    /**
+     * Attempt decryption with a specific key. Returns null on failure.
+     */
+    private byte[] decryptWithKey(SecretKeySpec key, byte[] iv, byte[] ciphertext) {
+        try {
             Cipher cipher = Cipher.getInstance(ALGORITHM);
             GCMParameterSpec gcmSpec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
-            cipher.init(Cipher.DECRYPT_MODE, currentKey, gcmSpec);
-
-            // Decrypt and verify auth tag
-            byte[] plaintext = cipher.doFinal(ciphertext);
-
-            Log.d(TAG, "Decrypted " + encryptedData.length + " -> " + plaintext.length + " bytes");
-            return plaintext;
-
+            cipher.init(Cipher.DECRYPT_MODE, key, gcmSpec);
+            return cipher.doFinal(ciphertext);
         } catch (javax.crypto.AEADBadTagException e) {
-            // Wrong key or tampered data - expected in mixed-key deployments
-            Log.d(TAG, "Decryption failed: authentication tag mismatch (wrong key or tampered data)");
+            // Wrong key or tampered data
             return null;
         } catch (Exception e) {
-            Log.e(TAG, "Decryption failed", e);
+            Log.e(TAG, "decryptWithKey failed", e);
             return null;
         }
     }
@@ -542,14 +791,13 @@ public class AppLayerEncryptionManager {
      * Call this when the plugin is destroyed or encryption is disabled.
      */
     public void clearKeys() {
-        if (currentKey != null) {
-            // Zero out key material
-            byte[] encoded = currentKey.getEncoded();
-            if (encoded != null) {
-                java.util.Arrays.fill(encoded, (byte) 0);
-            }
-        }
+        zeroKey(currentKey);
+        zeroKey(baseKey);
+        zeroKey(previousEpochKey);
         currentKey = null;
+        baseKey = null;
+        previousEpochKey = null;
+        previousEpoch = -1;
         currentPsk = null;
         currentEpoch = 0;
         epochStartTimeMs = 0;
@@ -557,8 +805,32 @@ public class AppLayerEncryptionManager {
     }
 
     /**
-     * Get the encryption overhead in bytes.
+     * Best-effort zeroing of key material.
+     * Note: SecretKeySpec.getEncoded() returns a copy, so this only zeros the copy.
+     * The actual key bytes inside SecretKeySpec persist until GC. This is a known JCA
+     * limitation. Setting the reference to null (done by callers) is the primary mitigation.
+     */
+    private void zeroKey(SecretKeySpec key) {
+        if (key != null) {
+            byte[] encoded = key.getEncoded();
+            if (encoded != null) {
+                java.util.Arrays.fill(encoded, (byte) 0);
+            }
+        }
+    }
+
+    /**
+     * Get the encryption overhead in bytes for the current mode.
+     * Returns 34 bytes when epoch rotation is active (V2), 30 bytes otherwise (V1).
      * Useful for message size budget calculations.
+     */
+    public int getActiveOverhead() {
+        return epochRotationEnabled ? ENCRYPTION_OVERHEAD_V2 : ENCRYPTION_OVERHEAD;
+    }
+
+    /**
+     * Get the V1 encryption overhead in bytes (always 30).
+     * Use {@link #getActiveOverhead()} for mode-aware overhead.
      */
     public static int getOverhead() {
         return ENCRYPTION_OVERHEAD;
