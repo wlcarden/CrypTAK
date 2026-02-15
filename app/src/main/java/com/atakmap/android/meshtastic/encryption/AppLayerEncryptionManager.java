@@ -134,6 +134,12 @@ public class AppLayerEncryptionManager {
      * Initialize the manager from SharedPreferences.
      * Call this during plugin startup to load saved encryption configuration.
      *
+     * <p>The stored PSK is tested for base64-encoded 32-byte keys first (the format
+     * produced by {@code openssl rand -base64 32} and saved by {@link #importKeyAndSave}).
+     * If the PSK decodes to exactly 32 bytes, it is loaded as raw key material via
+     * {@link #importKeyFromBase64}. Otherwise, it is treated as a passphrase and
+     * hashed with SHA-256 via {@link #loadKey}.</p>
+     *
      * @param context Application context for accessing preferences
      */
     public void initialize(Context context) {
@@ -145,13 +151,35 @@ public class AppLayerEncryptionManager {
         String psk = prefs.getString(Constants.PREF_PLUGIN_ENCRYPTION_PSK, "");
 
         if (enabled && psk != null && !psk.isEmpty()) {
-            loadKey(psk);
-            Log.i(TAG, "Initialized with PSK (app-layer encryption enabled)");
+            if (isValidBase64Key(psk)) {
+                importKeyFromBase64(psk);
+                Log.i(TAG, "Initialized with base64 PSK (raw 32-byte key)");
+            } else {
+                loadKey(psk);
+                Log.i(TAG, "Initialized with passphrase PSK (SHA-256 derived)");
+            }
         } else if (enabled) {
             Log.w(TAG, "App-layer encryption enabled but no PSK configured");
             enabled = false;
         } else {
             Log.d(TAG, "App-layer encryption disabled");
+        }
+    }
+
+    /**
+     * Check if a string is a valid base64-encoded 32-byte key.
+     * Used by {@link #initialize} to detect keys stored by QR import
+     * vs passphrase-style keys that need SHA-256 derivation.
+     */
+    private boolean isValidBase64Key(String psk) {
+        try {
+            byte[] decoded = Base64.decode(psk.trim(), Base64.DEFAULT);
+            boolean valid = decoded.length == 32;
+            // Zero the decoded bytes immediately — we only needed to check the length
+            java.util.Arrays.fill(decoded, (byte) 0);
+            return valid;
+        } catch (Exception e) {
+            return false;
         }
     }
 
@@ -226,9 +254,12 @@ public class AppLayerEncryptionManager {
      * Import a key from a base64-encoded string, loading the raw decoded bytes directly.
      * Validates that the decoded key is exactly 32 bytes (AES-256).
      *
-     * <p><b>Important:</b> This method loads the raw 32-byte key material. For persistent
-     * key import (QR code scan, ATAK Import Manager), use {@link #importKeyAndSave} instead,
-     * which ensures the in-memory key matches what {@link #initialize} produces on restart.</p>
+     * <p>This method loads the raw 32-byte key material (no SHA-256 derivation).
+     * Both {@link #importKeyAndSave} and {@link #initialize} use this method for
+     * base64 keys, ensuring the same raw key is used across import and restart.</p>
+     *
+     * <p>For persistent key import (QR code scan, ATAK Import Manager), use
+     * {@link #importKeyAndSave} instead, which also saves the key to preferences.</p>
      *
      * @param base64Key Base64-encoded key string (standard or URL-safe encoding)
      * @return true if the key was valid and loaded, false otherwise
@@ -283,9 +314,9 @@ public class AppLayerEncryptionManager {
             SharedPreferences.Editor editor = prefs.edit();
 
             // Store the base64 key as the PSK value in preferences.
-            // On reload, initialize() calls loadKey() which SHA-256 hashes this string.
-            // To ensure the same key is used after restart, we also call loadKey() here
-            // so the in-memory key matches what initialize() will produce.
+            // On reload, initialize() detects this as a valid base64 32-byte key
+            // and calls importKeyFromBase64() — producing the same raw key material
+            // that importKeyFromBase64() loaded above.
             editor.putString(Constants.PREF_PLUGIN_ENCRYPTION_PSK, base64Key.trim());
 
             if (enableEncryption) {
@@ -294,10 +325,10 @@ public class AppLayerEncryptionManager {
 
             editor.apply();
 
-            // Derive key from the string PSK (SHA-256 hash) so that the in-memory key
-            // matches what initialize() will produce on next app startup. This ensures
-            // that messages encrypted now can be decrypted after a restart, and vice versa.
-            loadKey(base64Key.trim());
+            // The key is already loaded by importKeyFromBase64() above.
+            // Do NOT call loadKey() here — that would SHA-256 hash the base64 string,
+            // producing a different key than initialize() will load on restart
+            // (since initialize() now detects base64 keys and loads raw bytes).
             if (enableEncryption) {
                 setEnabled(true);
             }

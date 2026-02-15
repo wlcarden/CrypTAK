@@ -207,6 +207,152 @@ class TwoPartyProtocolTest {
     }
 
     // ========================================================================
+    // Restart-Cycle Key Persistence Tests
+    // ========================================================================
+
+    /**
+     * Simulates the full QR import + restart cycle for a base64 key:
+     *   1. Manager A imports a base64 key via importKeyFromBase64() (mimics importKeyAndSave)
+     *   2. The base64 string is "stored in preferences"
+     *   3. Manager B (fresh, simulating restart) loads the same string via the
+     *      initialize() code path: detects valid base64 → importKeyFromBase64()
+     *   4. Both managers must produce the same key (cross-decrypt succeeds)
+     *
+     * This is the exact bug scenario: pre-fix, initialize() would call loadKey()
+     * which SHA-256 hashes the string, producing a different key than the raw
+     * base64 decode that importKeyFromBase64() used.
+     */
+    @Test
+    void restartCycle_base64Key_sameKeyAfterReload() {
+        // Given: generate a random 32-byte key, encode as base64
+        byte[] keyBytes = new byte[32];
+        new SecureRandom().nextBytes(keyBytes);
+        String base64Key = java.util.Base64.getEncoder().encodeToString(keyBytes);
+
+        // Step 1: Manager A imports via base64 (as importKeyAndSave would)
+        assertThat(managerA.importKeyFromBase64(base64Key)).isTrue();
+        managerA.setEnabled(true);
+
+        // Step 2: A encrypts a message
+        byte[] plaintext = "restart-cycle test message".getBytes(StandardCharsets.UTF_8);
+        byte[] encrypted = managerA.encrypt(plaintext);
+        assertThat(encrypted).isNotNull();
+
+        // Step 3: Manager B simulates restart — loads from "stored" base64 string
+        // This mirrors what initialize() now does: detect base64, use importKeyFromBase64
+        assertThat(managerB.importKeyFromBase64(base64Key)).isTrue();
+        managerB.setEnabled(true);
+
+        // Step 4: B must successfully decrypt A's message
+        byte[] decrypted = managerB.decrypt(encrypted);
+        assertThat(decrypted).isEqualTo(plaintext);
+
+        // And vice versa: B encrypts, A decrypts
+        byte[] encrypted2 = managerB.encrypt(plaintext);
+        byte[] decrypted2 = managerA.decrypt(encrypted2);
+        assertThat(decrypted2).isEqualTo(plaintext);
+    }
+
+    /**
+     * Verifies that the SHA-256 loadKey() path is NOT used for base64 keys.
+     * If loadKey() were used instead of importKeyFromBase64(), the resulting key
+     * would be SHA-256(base64_string) instead of the raw decoded bytes.
+     * This test ensures those produce different keys (proving the bug would be detectable).
+     */
+    @Test
+    void base64Key_loadKeyVsImportFromBase64_produceDifferentKeys() {
+        // Given: a valid base64 key
+        byte[] keyBytes = new byte[32];
+        new SecureRandom().nextBytes(keyBytes);
+        String base64Key = java.util.Base64.getEncoder().encodeToString(keyBytes);
+
+        // Manager A uses the WRONG path: loadKey (SHA-256 of string)
+        managerA.loadKey(base64Key);
+        managerA.setEnabled(true);
+
+        // Manager B uses the CORRECT path: importKeyFromBase64 (raw bytes)
+        assertThat(managerB.importKeyFromBase64(base64Key)).isTrue();
+        managerB.setEnabled(true);
+
+        // When: A encrypts
+        byte[] plaintext = "cross-path test".getBytes(StandardCharsets.UTF_8);
+        byte[] encrypted = managerA.encrypt(plaintext);
+
+        // Then: B cannot decrypt (keys are different)
+        byte[] decrypted = managerB.decrypt(encrypted);
+        assertThat(decrypted).isNull();
+    }
+
+    /**
+     * Verifies that passphrase-style keys (non-base64) still work correctly
+     * across a simulated restart. Both the import and reload paths use loadKey()
+     * which applies SHA-256 derivation.
+     */
+    @Test
+    void restartCycle_passphraseKey_sameKeyAfterReload() {
+        // Given: a passphrase that is NOT valid base64 decoding to 32 bytes
+        String passphrase = "my-team-secret-key-2025!";
+
+        // Step 1: Manager A loads via passphrase
+        managerA.loadKey(passphrase);
+        managerA.setEnabled(true);
+
+        // Step 2: A encrypts a message
+        byte[] plaintext = "passphrase restart test".getBytes(StandardCharsets.UTF_8);
+        byte[] encrypted = managerA.encrypt(plaintext);
+        assertThat(encrypted).isNotNull();
+
+        // Step 3: Manager B simulates restart with same passphrase
+        managerB.loadKey(passphrase);
+        managerB.setEnabled(true);
+
+        // Step 4: B must decrypt A's message
+        byte[] decrypted = managerB.decrypt(encrypted);
+        assertThat(decrypted).isEqualTo(plaintext);
+    }
+
+    /**
+     * Verifies that a team of 3 devices using the same base64 key can all
+     * communicate after independent restarts (all using importKeyFromBase64).
+     */
+    @Test
+    void restartCycle_threeParty_base64Key_allInteroperate() {
+        // Given: same base64 key for all three
+        byte[] keyBytes = new byte[32];
+        new SecureRandom().nextBytes(keyBytes);
+        String base64Key = java.util.Base64.getEncoder().encodeToString(keyBytes);
+
+        AppLayerEncryptionManager managerC = createFreshManager();
+
+        // All three import the same key (simulating independent QR scans + restarts)
+        assertThat(managerA.importKeyFromBase64(base64Key)).isTrue();
+        managerA.setEnabled(true);
+        assertThat(managerB.importKeyFromBase64(base64Key)).isTrue();
+        managerB.setEnabled(true);
+        assertThat(managerC.importKeyFromBase64(base64Key)).isTrue();
+        managerC.setEnabled(true);
+
+        byte[] msgA = "from A".getBytes(StandardCharsets.UTF_8);
+        byte[] msgB = "from B".getBytes(StandardCharsets.UTF_8);
+        byte[] msgC = "from C".getBytes(StandardCharsets.UTF_8);
+
+        // A -> B, A -> C
+        byte[] encA = managerA.encrypt(msgA);
+        assertThat(managerB.decrypt(encA)).isEqualTo(msgA);
+        assertThat(managerC.decrypt(encA)).isEqualTo(msgA);
+
+        // B -> A, B -> C
+        byte[] encB = managerB.encrypt(msgB);
+        assertThat(managerA.decrypt(encB)).isEqualTo(msgB);
+        assertThat(managerC.decrypt(encB)).isEqualTo(msgB);
+
+        // C -> A, C -> B
+        byte[] encC = managerC.encrypt(msgC);
+        assertThat(managerA.decrypt(encC)).isEqualTo(msgC);
+        assertThat(managerB.decrypt(encC)).isEqualTo(msgC);
+    }
+
+    // ========================================================================
     // Helpers
     // ========================================================================
 

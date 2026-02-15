@@ -34,6 +34,7 @@ import com.atakmap.android.maps.Marker;
 import com.atakmap.android.maps.visibility.MapItemVisibilityListener;
 import com.atakmap.android.meshtastic.cot.CotEventProcessor;
 import com.atakmap.android.meshtastic.encryption.AppLayerEncryptionManager;
+import com.atakmap.android.meshtastic.encryption.KeyImportReceiver;
 import com.atakmap.android.meshtastic.plugin.R;
 import com.atakmap.android.meshtastic.service.MeshServiceManager;
 import com.atakmap.android.meshtastic.util.fountain.FountainChunkManager;
@@ -93,6 +94,7 @@ public class MeshtasticMapComponent extends DropDownMapComponent
     private Context pluginContext;
     private MeshtasticDropDownReceiver ddr;
     private MeshtasticReceiver mr;
+    private KeyImportReceiver keyImportReceiver;
     private final MeshtasticExternalGPS meshtasticExternalGPS;
     private MeshtasticSender meshtasticSender;
 
@@ -288,6 +290,12 @@ public class MeshtasticMapComponent extends DropDownMapComponent
         IntentFilter intentFilter = getIntentFilter();
         view.getContext().registerReceiver(mr, intentFilter, Context.RECEIVER_EXPORTED);
 
+        // Register key import receiver for QR code and broadcast-based key import
+        keyImportReceiver = new KeyImportReceiver();
+        IntentFilter keyImportFilter = new IntentFilter(KeyImportReceiver.ACTION_IMPORT_KEY);
+        view.getContext().registerReceiver(keyImportReceiver, keyImportFilter,
+                Context.RECEIVER_NOT_EXPORTED);
+
         // Setup CoT service
         CotServiceRemote cotService = new CotServiceRemote();
         cotService.setCotEventListener(mr);
@@ -355,6 +363,9 @@ public class MeshtasticMapComponent extends DropDownMapComponent
 
         meshServiceManager.disconnect();
         view.getContext().unregisterReceiver(mr);
+        if (keyImportReceiver != null) {
+            view.getContext().unregisterReceiver(keyImportReceiver);
+        }
         if (mw != null) {
             mw.destroy();
         }
