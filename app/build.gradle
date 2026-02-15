@@ -189,6 +189,13 @@ android {
         jvmToolchain(17)
     }
 
+    testOptions {
+        unitTests.all {
+            useJUnitPlatform()
+        }
+        unitTests.returnDefaultValues = true
+    }
+
     lintOptions {
         checkReleaseBuilds true
         // Or, if you prefer, you can continue to check for errors in release builds,
