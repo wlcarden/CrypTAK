@@ -33,5 +33,6 @@ Thumbs.db
 *.iml
 .idea/
 .takdev/
+pluginsdk/
 *.keystore
 app/src/main/protobufs

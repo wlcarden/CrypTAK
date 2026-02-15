@@ -42,7 +42,68 @@ buildscript {
     ext.takrepoUrl = getProperty(urlKey, 'https://localhost/')
     ext.takrepoUser = getProperty('takrepo.user', 'invalid')
     ext.takrepoPassword = getProperty('takrepo.password', 'invalid')
-    ext.takdevPlugin = getProperty('takdev.plugin', "${rootDir}/../../atak-gradle-takdev.jar")
+
+    // SDK resolution order:
+    //   1. Explicit takdev.plugin property (local.properties or -P flag)
+    //   2. Project-local pluginsdk/ directory (auto-downloaded from GitHub)
+    //   3. Legacy ../../atak-gradle-takdev.jar path
+    def localSdkJar = "${rootDir}/pluginsdk/atak-gradle-takdev.jar"
+    def legacySdkJar = "${rootDir}/../../atak-gradle-takdev.jar"
+    ext.takdevPlugin = getProperty('takdev.plugin', null) ?:
+            (file(localSdkJar).exists() ? localSdkJar : legacySdkJar)
+
+    // Auto-download pluginsdk.zip from ATAK CIV GitHub if no JAR is found locally.
+    // The pluginsdk.zip contains atak-gradle-takdev.jar which provides the ATAK build
+    // environment (compile stubs, signing, APK packaging).
+    // Source: https://github.com/deptofdefense/AndroidTacticalAssaultKit-CIV
+    if (!file(ext.takdevPlugin).exists() && !isDevKitEnabled()) {
+        def sdkDir = file("${rootDir}/pluginsdk")
+        def sdkZip = file("${rootDir}/pluginsdk/pluginsdk.zip")
+        def sdkUrl = getProperty('pluginsdk.url',
+                'https://github.com/deptofdefense/AndroidTacticalAssaultKit-CIV/raw/refs/heads/main/pluginsdk.zip')
+
+        logger.lifecycle("ATAK SDK not found at ${ext.takdevPlugin}")
+        logger.lifecycle("Downloading pluginsdk.zip from ${sdkUrl} ...")
+
+        sdkDir.mkdirs()
+        try {
+            new URL(sdkUrl).withInputStream { input ->
+                sdkZip.withOutputStream { output ->
+                    output << input
+                }
+            }
+            logger.lifecycle("Extracting pluginsdk.zip ...")
+            ant.unzip(src: sdkZip, dest: sdkDir)
+
+            // The JAR may be at the root of the zip or in a subdirectory.
+            // Search for it and copy to the expected location.
+            def found = false
+            sdkDir.eachFileRecurse { f ->
+                if (f.name == 'atak-gradle-takdev.jar') {
+                    if (f.parentFile != sdkDir) {
+                        java.nio.file.Files.copy(f.toPath(),
+                                file("${sdkDir}/atak-gradle-takdev.jar").toPath(),
+                                java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                    }
+                    found = true
+                }
+            }
+
+            if (found) {
+                ext.takdevPlugin = localSdkJar
+                logger.lifecycle("ATAK SDK ready at ${localSdkJar}")
+            } else {
+                logger.error("atak-gradle-takdev.jar not found inside pluginsdk.zip")
+                logger.error("Contents of ${sdkDir}:")
+                sdkDir.eachFileRecurse { logger.error("  ${it}") }
+            }
+        } catch (Exception e) {
+            logger.error("Failed to download ATAK SDK: ${e.message}")
+            logger.error("You can manually download it from:")
+            logger.error("  ${sdkUrl}")
+            logger.error("Extract to: ${sdkDir}/")
+        }
+    }
 
     repositories {
         google()
