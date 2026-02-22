@@ -249,8 +249,8 @@ public class CotEventProcessor {
             (int) (data.latitude / Constants.GPS_COORD_DIVISOR),
             (int) (data.longitude / Constants.GPS_COORD_DIVISOR),
             Double.valueOf(data.altitude).intValue(),
-            data.course,
             data.speed,
+            data.course,
             ByteString.EMPTY
         );
 

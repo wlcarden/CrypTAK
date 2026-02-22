@@ -1583,8 +1583,8 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                                 (int) (lat / divisor),
                                 (int) (lng / divisor),
                                 Double.valueOf(alt).intValue(),
-                                course,
-                                speed,
+                                speed,   // arg4: speed (Wire proto field order)
+                                course,  // arg5: course (Wire proto field order)
                                 ByteString.EMPTY
                             );
 

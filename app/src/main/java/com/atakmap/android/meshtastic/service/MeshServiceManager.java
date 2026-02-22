@@ -109,7 +109,8 @@ public class MeshServiceManager {
     public boolean connect() {
         boolean result = context.bindService(serviceIntent, serviceConnection, Context.BIND_AUTO_CREATE);
         if (!result) {
-            Toast.makeText(context, "Failed to bind to Meshtastic IMeshService", Toast.LENGTH_LONG).show();
+            Toast toast = Toast.makeText(context, "Failed to bind to Meshtastic IMeshService", Toast.LENGTH_LONG);
+            if (toast != null) toast.show();
         }
         return result;
     }

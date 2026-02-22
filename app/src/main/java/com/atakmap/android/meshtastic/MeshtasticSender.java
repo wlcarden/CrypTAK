@@ -26,7 +26,7 @@ public class MeshtasticSender extends MissionPackageSender {
     @Override
     public boolean sendMissionPackage(MissionPackageManifest missionPackageManifest, MissionPackageBaseTask.Callback callback, Callback callback1) {
         Log.d(TAG, "sendMissionPackage");
-        Log.d(TAG, missionPackageManifest.toString());
+        Log.d(TAG, missionPackageManifest != null ? missionPackageManifest.toString() : "null manifest");
         MissionPackageMapComponent.getInstance().getFileIO().save(missionPackageManifest, true, new MeshtasticCallback());
         return true;
     }

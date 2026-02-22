@@ -10,7 +10,7 @@ buildscript {
 
 
     ext.PLUGIN_VERSION = "1.1.40"
-    ext.ATAK_VERSION = "5.6.0"
+    ext.ATAK_VERSION = "5.5.1.8"
 
     def takdevVersion = '3.+'
 
@@ -401,6 +401,9 @@ dependencies {
     testImplementation 'org.assertj:assertj-core:3.27.3'
     testImplementation 'org.mockito:mockito-core:5.16.1'
     testImplementation 'org.mockito:mockito-junit-jupiter:5.16.1'
+    // XmlPull implementation required for CotEventProcessor.parseCotEvent() in JVM tests
+    // (XmlPullParserFactory.newInstance() throws if no provider is on the classpath)
+    testImplementation 'net.sf.kxml:kxml2:2.3.0'
 }
 
 configurations.all {

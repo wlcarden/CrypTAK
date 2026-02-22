@@ -19,11 +19,11 @@ import android.content.ServiceConnection;
 import android.os.IBinder;
 import android.os.RemoteException;
 
-import com.geeksville.mesh.DataPacket;
-import com.geeksville.mesh.IMeshService;
-import com.geeksville.mesh.MeshUser;
-import com.geeksville.mesh.MyNodeInfo;
-import com.geeksville.mesh.NodeInfo;
+import org.meshtastic.core.model.DataPacket;
+import org.meshtastic.core.service.IMeshService;
+import org.meshtastic.core.model.MeshUser;
+import org.meshtastic.core.model.MyNodeInfo;
+import org.meshtastic.core.model.NodeInfo;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,6 +34,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Arrays;
 import java.util.List;
+
+import okio.ByteString;
 
 @ExtendWith(MockitoExtension.class)
 class MeshServiceManagerTest {
@@ -57,7 +59,15 @@ class MeshServiceManagerTest {
     private ServiceConnection capturedServiceConnection;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
+        // Reset singleton so each test gets a fresh instance bound to fresh mocks.
+        // Without this, the singleton holds the first test's mock references and
+        // subsequent tests' ArgumentCaptors never fire.
+        java.lang.reflect.Field instanceField =
+                MeshServiceManager.class.getDeclaredField("instance");
+        instanceField.setAccessible(true);
+        instanceField.set(null, null);
+
         when(context.getApplicationContext()).thenReturn(applicationContext);
         
         // Capture the ServiceConnection when bindService is called
@@ -153,10 +163,13 @@ class MeshServiceManagerTest {
         // Given
         DataPacket packet = mock(DataPacket.class);
         when(packet.getTo()).thenReturn("recipient");
-        
+        // sendToMesh validates getBytes().toByteArray() != null and getDataType() != 0
+        when(packet.getBytes()).thenReturn(ByteString.of((byte) 1));
+        when(packet.getDataType()).thenReturn(1);
+
         // When
         meshServiceManager.sendToMesh(packet);
-        
+
         // Then
         verify(meshService).send(packet);
     }
@@ -174,11 +187,14 @@ class MeshServiceManagerTest {
     void shouldHandleRemoteExceptionWhenSending() throws RemoteException {
         // Given
         DataPacket packet = mock(DataPacket.class);
+        // Must pass sendToMesh validation before the RemoteException can be triggered
+        when(packet.getBytes()).thenReturn(ByteString.of((byte) 1));
+        when(packet.getDataType()).thenReturn(1);
         doThrow(new RemoteException()).when(meshService).send(any());
-        
+
         // When
         meshServiceManager.sendToMesh(packet);
-        
+
         // Then - should not throw, just log error
         verify(meshService).send(packet);
     }
@@ -287,7 +303,7 @@ class MeshServiceManagerTest {
     }
 
     @Test
-    void shouldGetPacketId() throws RemoteException {
+    void shouldGetPacketId() throws Exception {
         // Given
         int expectedId = 42;
         when(meshService.getPacketId()).thenReturn(expectedId);

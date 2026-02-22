@@ -2,7 +2,7 @@ package com.atakmap.android.meshtastic;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.geeksville.mesh.Position;
+import org.meshtastic.core.model.Position;
 
 import org.junit.jupiter.api.Test;
 

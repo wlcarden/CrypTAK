@@ -12,7 +12,7 @@ import com.atakmap.coremap.cot.event.CotEvent;
 import com.atakmap.coremap.cot.event.CotPoint;
 import com.atakmap.coremap.maps.coords.GeoPoint;
 import com.atakmap.coremap.maps.time.CoordinatedTime;
-import com.geeksville.mesh.ATAKProtos;
+import org.meshtastic.proto.TAKPacket;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -142,15 +142,15 @@ class CotEventProcessorTest {
         data.speed = 20;
 
         // When
-        ATAKProtos.TAKPacket packet = cotEventProcessor.buildPLIPacket(data);
+        TAKPacket packet = cotEventProcessor.buildPLIPacket(data);
 
         // Then
-        assertThat(packet.hasContact()).isTrue();
+        assertThat(packet.getContact()).isNotNull();
         assertThat(packet.getContact().getCallsign()).isEqualTo("TestCallsign");
-        assertThat(packet.getContact().getDeviceCallsign()).isEqualTo("DeviceCallsign");
-        assertThat(packet.hasStatus()).isTrue();
+        assertThat(packet.getContact().getDevice_callsign()).isEqualTo("DeviceCallsign");
+        assertThat(packet.getStatus()).isNotNull();
         assertThat(packet.getStatus().getBattery()).isEqualTo(80);
-        assertThat(packet.hasPli()).isTrue();
+        assertThat(packet.getPli()).isNotNull();
         assertThat(packet.getPli().getAltitude()).isEqualTo(100);
         assertThat(packet.getPli().getCourse()).isEqualTo(180);
         assertThat(packet.getPli().getSpeed()).isEqualTo(20);
@@ -166,12 +166,12 @@ class CotEventProcessorTest {
         data.to = "TeamChat";
 
         // When
-        ATAKProtos.TAKPacket packet = cotEventProcessor.buildChatPacket(data);
+        TAKPacket packet = cotEventProcessor.buildChatPacket(data);
 
         // Then
-        assertThat(packet.hasContact()).isTrue();
+        assertThat(packet.getContact()).isNotNull();
         assertThat(packet.getContact().getCallsign()).isEqualTo("Sender");
-        assertThat(packet.hasChat()).isTrue();
+        assertThat(packet.getChat()).isNotNull();
         assertThat(packet.getChat().getMessage()).isEqualTo("Hello, team!");
         assertThat(packet.getChat().getTo()).isEqualTo("TeamChat");
     }
@@ -182,12 +182,12 @@ class CotEventProcessorTest {
         CotEventProcessor.ParsedCotData data = new CotEventProcessor.ParsedCotData();
 
         // When
-        ATAKProtos.TAKPacket packet = cotEventProcessor.buildPLIPacket(data);
+        TAKPacket packet = cotEventProcessor.buildPLIPacket(data);
 
         // Then
-        assertThat(packet.hasContact()).isTrue();
-        assertThat(packet.getContact().getCallsign()).isEmpty();
-        assertThat(packet.getContact().getDeviceCallsign()).isEmpty();
+        assertThat(packet.getContact()).isNotNull();
+        assertThat(packet.getContact().getCallsign()).isNullOrEmpty();
+        assertThat(packet.getContact().getDevice_callsign()).isNullOrEmpty();
     }
 
     @Test
@@ -196,13 +196,13 @@ class CotEventProcessorTest {
         CotEventProcessor.ParsedCotData data = new CotEventProcessor.ParsedCotData();
 
         // When
-        ATAKProtos.TAKPacket packet = cotEventProcessor.buildChatPacket(data);
+        TAKPacket packet = cotEventProcessor.buildChatPacket(data);
 
         // Then
-        assertThat(packet.hasContact()).isTrue();
-        assertThat(packet.getContact().getCallsign()).isEmpty();
-        assertThat(packet.hasChat()).isTrue();
-        assertThat(packet.getChat().getMessage()).isEmpty();
+        assertThat(packet.getContact()).isNotNull();
+        assertThat(packet.getContact().getCallsign()).isNullOrEmpty();
+        assertThat(packet.getChat()).isNotNull();
+        assertThat(packet.getChat().getMessage()).isNullOrEmpty();
         assertThat(packet.getChat().getTo()).isEqualTo("All Chat Rooms");
     }
 
