@@ -1506,6 +1506,74 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     if (payload == null) return;
 
                     sendOrChunkRelayPayload(payload, hopLimit, channel);
+                } else if (cotEvent.getType().startsWith("b-t-f")) {
+                    // Direct message relay: b-t-f type but UID does NOT contain "All Chat Rooms"
+                    String toCallsign = null;
+                    try {
+                        while (eventType != XmlPullParser.END_DOCUMENT) {
+                            if (eventType == XmlPullParser.START_TAG) {
+                                if (xpp.getName().equalsIgnoreCase("remarks")) {
+                                    if (xpp.next() == XmlPullParser.TEXT)
+                                        message = xpp.getText();
+                                } else if (xpp.getName().equalsIgnoreCase("__chat")) {
+                                    int attributeCount = xpp.getAttributeCount();
+                                    for (int i = 0; i < attributeCount; i++) {
+                                        if (xpp.getAttributeName(i).equalsIgnoreCase("senderCallsign"))
+                                            callsign = xpp.getAttributeValue(i);
+                                        else if (xpp.getAttributeName(i).equalsIgnoreCase("to"))
+                                            toCallsign = xpp.getAttributeValue(i);
+                                    }
+                                } else if (xpp.getName().equalsIgnoreCase("link")) {
+                                    int attributeCount = xpp.getAttributeCount();
+                                    for (int i = 0; i < attributeCount; i++) {
+                                        if (xpp.getAttributeName(i).equalsIgnoreCase("uid"))
+                                            deviceCallsign = xpp.getAttributeValue(i);
+                                    }
+                                }
+                            }
+                            eventType = xpp.next();
+                        }
+                    } catch (XmlPullParserException | IOException e) {
+                        e.printStackTrace();
+                        return;
+                    }
+
+                    if (message == null || callsign == null) {
+                        Log.w(TAG, "DM relay: missing required fields, dropping");
+                        return;
+                    }
+
+                    org.meshtastic.proto.Contact contact = new org.meshtastic.proto.Contact(
+                        callsign,
+                        deviceCallsign,
+                        ByteString.EMPTY
+                    );
+
+                    GeoChat geochat = new GeoChat(
+                        message,
+                        toCallsign != null ? toCallsign : "",
+                        null,
+                        ByteString.EMPTY
+                    );
+
+                    TAKPacket tak_packet = new TAKPacket(
+                        false,
+                        contact,
+                        null,
+                        null,
+                        null,
+                        geochat,
+                        null,
+                        ByteString.EMPTY
+                    );
+
+                    byte[] takPacketBytes = TAKPacket.ADAPTER.encode(tak_packet);
+                    Log.d(TAG, "DM relay wire size: " + takPacketBytes.length);
+
+                    byte[] payload = encryptForRelay(takPacketBytes);
+                    if (payload == null) return;
+
+                    sendOrChunkRelayPayload(payload, hopLimit, channel);
                 } else if (cotDetail.getAttribute("contact") != null) {
                     for (Contact c : Contacts.getInstance().getAllContacts()) {
                         if (cotEvent.getUID().equals(c.getUid())) {

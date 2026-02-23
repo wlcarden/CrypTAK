@@ -306,6 +306,28 @@ class AppLayerEncryptionIntegrationTest {
     }
 
     @Test
+    void serverRelay_shouldEncryptDMRelayPacket() {
+        // Simulate onCotEvent DM relay: b-t-f type, UID without "All Chat Rooms"
+        // -> build TAKPacket with GeoChat(to="Bob") -> encryptForRelay -> sendOrChunkRelayPayload
+        // DM TAKPacket is structurally identical to chat but with a specific target callsign.
+        // Typical size is similar to All Chat Rooms relay (~90-120 bytes).
+        byte[] dmTakPacket = createMockProtobuf(95);
+
+        AppLayerEncryptionManager encManager = AppLayerEncryptionManager.getInstance();
+        assertThat(encManager.isEnabled()).isTrue();
+
+        byte[] encrypted = encManager.encrypt(dmTakPacket);
+        assertThat(encrypted).isNotNull();
+        assertThat(encrypted[0]).isEqualTo(AppLayerEncryptionManager.APP_LAYER_MARKER);
+        // 95 + 34 (v2 overhead) = 129 — fits single packet without fountain coding
+        assertThat(encrypted.length).isLessThanOrEqualTo(MAX_SINGLE_PACKET);
+
+        // Receiving device decrypts back to the original TAKPacket bytes
+        byte[] decrypted = receiver.decrypt(encrypted);
+        assertThat(decrypted).isEqualTo(dmTakPacket);
+    }
+
+    @Test
     void serverRelay_shouldPassThroughWhenEncryptionDisabled() {
         // Simulate encryptForRelay when encryption is disabled
         sender.setEnabled(false);

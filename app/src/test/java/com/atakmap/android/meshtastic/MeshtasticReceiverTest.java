@@ -16,9 +16,12 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 
 import com.atakmap.android.maps.MapView;
+import com.atakmap.android.meshtastic.encryption.AppLayerEncryptionManager;
+import com.atakmap.android.meshtastic.service.MeshServiceManager;
 import com.atakmap.android.meshtastic.util.Constants;
 import com.atakmap.android.meshtastic.util.fountain.FountainChunkManager;
 import com.atakmap.comms.CotServiceRemote;
+import com.atakmap.coremap.cot.event.CotDetail;
 import com.atakmap.coremap.cot.event.CotEvent;
 
 import android.preference.PreferenceManager;
@@ -27,10 +30,14 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.meshtastic.core.model.DataPacket;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.lang.reflect.Field;
 
 @ExtendWith(MockitoExtension.class)
 class MeshtasticReceiverTest {
@@ -97,12 +104,32 @@ class MeshtasticReceiverTest {
 
             meshtasticReceiver = new MeshtasticReceiver(meshtasticExternalGPS, fountainChunkManager);
         }
+
+        // Reset the static prefs field to wrap the current test's sharedPreferences mock.
+        // prefs is initialized once at class load time, so without this reset each test
+        // after the first would be reading from a stale mock reference.
+        try {
+            Field prefsField = MeshtasticReceiver.class.getDeclaredField("prefs");
+            prefsField.setAccessible(true);
+            prefsField.set(null, new ProtectedSharedPreferences(sharedPreferences));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @AfterEach
     void tearDown() {
         // Reset the static stub field to avoid cross-test contamination.
         MapView._mapView = null;
+
+        // Reset AppLayerEncryptionManager singleton so DM relay tests don't pollute others.
+        try {
+            Field encField = AppLayerEncryptionManager.class.getDeclaredField("instance");
+            encField.setAccessible(true);
+            encField.set(null, null);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test
@@ -268,5 +295,74 @@ class MeshtasticReceiverTest {
 
         // Then - verify it implements the interface
         assertThat(meshtasticReceiver).isInstanceOf(CotServiceRemote.CotEventListener.class);
+    }
+
+    @Test
+    void onCotEvent_dmRelay_sendsEncryptedPacket() throws Exception {
+        // Reset AppLayerEncryptionManager singleton and configure with encryption enabled
+        Field encField = AppLayerEncryptionManager.class.getDeclaredField("instance");
+        encField.setAccessible(true);
+        encField.set(null, null);
+        AppLayerEncryptionManager encManager = AppLayerEncryptionManager.getInstance();
+        encManager.setEnabled(true);
+        encManager.loadKey("test-psk-for-dm-relay");
+
+        // Enable server relay via preference
+        when(sharedPreferences.getBoolean(eq(Constants.PREF_PLUGIN_FROM_SERVER), eq(false)))
+                .thenReturn(true);
+
+        // Build DM CoT detail with __chat, link, and remarks elements
+        CotDetail detail = new CotDetail("detail");
+        CotDetail chat = new CotDetail("__chat");
+        chat.setAttribute("senderCallsign", "Alice");
+        chat.setAttribute("to", "Bob");
+        detail.addChild(chat);
+        CotDetail link = new CotDetail("link");
+        link.setAttribute("uid", "ANDROID-abc123");
+        detail.addChild(link);
+        CotDetail remarks = new CotDetail("remarks");
+        remarks.setInnerText("Hi Bob");
+        detail.addChild(remarks);
+
+        // Mock CotEvent as a direct message (b-t-f type, UID without "All Chat Rooms")
+        CotEvent cotEvent = mock(CotEvent.class);
+        when(cotEvent.isValid()).thenReturn(true);
+        when(cotEvent.getType()).thenReturn("b-t-f");
+        when(cotEvent.getUID()).thenReturn("GeoChat.Alice.Bob.UUID123");
+        when(cotEvent.getDetail()).thenReturn(detail);
+
+        // Capture the DataPacket sent to the mesh layer
+        MeshServiceManager mockMeshService = mock(MeshServiceManager.class);
+        ArgumentCaptor<DataPacket> captor = ArgumentCaptor.forClass(DataPacket.class);
+
+        try (MockedStatic<MeshtasticMapComponent> componentMockedStatic =
+                     Mockito.mockStatic(MeshtasticMapComponent.class)) {
+            componentMockedStatic.when(MeshtasticMapComponent::getMeshService)
+                    .thenReturn(mockMeshService);
+
+            // When
+            meshtasticReceiver.onCotEvent(cotEvent, null);
+
+            // Then - payload sent and starts with app-layer encryption marker
+            verify(mockMeshService).sendToMesh(captor.capture());
+            byte[] payload = captor.getValue().getBytes().toByteArray();
+            assertThat(payload[0]).isEqualTo(AppLayerEncryptionManager.APP_LAYER_MARKER);
+        }
+    }
+
+    @Test
+    void onCotEvent_dmRelay_serverRelayDisabled_drops() {
+        // PREF_PLUGIN_FROM_SERVER defaults to false — no stub needed
+        CotEvent cotEvent = mock(CotEvent.class);
+
+        try (MockedStatic<MeshtasticMapComponent> componentMockedStatic =
+                     Mockito.mockStatic(MeshtasticMapComponent.class)) {
+            // When
+            meshtasticReceiver.onCotEvent(cotEvent, null);
+
+            // Then - getMeshService() never called, proving sendToMesh was never invoked
+            componentMockedStatic.verify(
+                    () -> MeshtasticMapComponent.getMeshService(), Mockito.never());
+        }
     }
 }
