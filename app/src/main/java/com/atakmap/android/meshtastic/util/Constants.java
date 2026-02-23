@@ -84,6 +84,10 @@ public final class Constants {
     public static final String PREF_PLUGIN_EPOCH_INTERVAL = "plugin_meshtastic_epoch_interval";
     public static final String PREF_PLUGIN_EPOCH_CURRENT = "plugin_meshtastic_epoch_current";
 
+    // TAK server connection profile (used by Data Package export)
+    public static final String PREF_TAK_SERVER_HOST = "plugin_meshtastic_tak_server_host";
+    public static final String PREF_TAK_SERVER_PORT = "plugin_meshtastic_tak_server_port";
+
     // Encrypted message prefix (to identify legacy encrypted payloads - zlib XML path)
     public static final byte ENCRYPTED_MESSAGE_MARKER = (byte) 0xEE;
 

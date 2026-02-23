@@ -10,6 +10,7 @@ import android.preference.PreferenceManager;
 import android.preference.PreferenceScreen;
 
 import com.atakmap.android.meshtastic.encryption.AppLayerEncryptionManager;
+import com.atakmap.android.meshtastic.encryption.DataPackageExporter;
 import com.atakmap.android.meshtastic.encryption.KeyQrDialog;
 import com.atakmap.android.meshtastic.plugin.R;
 import com.atakmap.android.meshtastic.util.Constants;
@@ -130,6 +131,18 @@ public class PluginPreferencesFragment extends PluginPreferenceFragment
                     ? prefs.getString(Constants.PREF_PLUGIN_ENCRYPTION_PSK, "").trim()
                     : "";
             KeyQrDialog.show(activity, pskValue);
+            return true;
+        }
+        if ("plugin_meshtastic_export_data_package".equals(preference.getKey())) {
+            Activity activity = getActivity();
+            if (activity == null) return true;
+            try {
+                DataPackageExporter.generateAndShare(activity, prefs);
+            } catch (java.io.IOException e) {
+                android.widget.Toast.makeText(pluginContext,
+                        "Export failed: " + e.getMessage(),
+                        android.widget.Toast.LENGTH_SHORT).show();
+            }
             return true;
         }
         return super.onPreferenceTreeClick(screen, preference);

@@ -100,6 +100,24 @@
         android:summary="Forward PLI and chat from TAK servers to Meshtastic"
         android:defaultValue="false"/>
 
+    <PreferenceCategory android:title="TAK Server Connection" />
+
+    <com.atakmap.android.gui.PanEditTextPreference
+        android:key="plugin_meshtastic_tak_server_host"
+        android:title="TAK Server Address"
+        android:summary="IP or hostname for the TAK server (included in onboarding package)"
+        android:dialogTitle="TAK Server Address"
+        android:inputType="text"
+        android:defaultValue=""/>
+
+    <com.atakmap.android.gui.PanEditTextPreference
+        android:key="plugin_meshtastic_tak_server_port"
+        android:title="TAK Server Port"
+        android:summary="Port for CoT TCP connections (default: 8087)"
+        android:dialogTitle="TAK Server Port"
+        android:inputType="number"
+        android:defaultValue="8087"/>
+
     <!-- File Transfer -->
     <PreferenceCategory android:title="File Transfer" />
 
@@ -171,6 +189,12 @@
         android:key="plugin_meshtastic_show_key_qr"
         android:title="Show Key QR Code"
         android:summary="Display the encryption key as a QR code for team distribution"
+        android:dependency="plugin_meshtastic_extra_encryption"/>
+
+    <android.preference.Preference
+        android:key="plugin_meshtastic_export_data_package"
+        android:title="Export Onboarding Package"
+        android:summary="Share a ZIP that fully configures a new team device (keys + server profile)"
         android:dependency="plugin_meshtastic_extra_encryption"/>
 
     <com.atakmap.android.gui.PanSwitchPreference

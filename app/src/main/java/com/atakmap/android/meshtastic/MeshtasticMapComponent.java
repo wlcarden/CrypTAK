@@ -35,6 +35,7 @@ import com.atakmap.android.maps.visibility.MapItemVisibilityListener;
 import com.atakmap.android.meshtastic.cot.CotEventProcessor;
 import com.atakmap.android.meshtastic.encryption.AppLayerEncryptionManager;
 import com.atakmap.android.meshtastic.encryption.KeyImportReceiver;
+import com.atakmap.android.meshtastic.encryption.MeshtasticConfigImporter;
 import com.atakmap.android.meshtastic.plugin.R;
 import com.atakmap.android.meshtastic.service.MeshServiceManager;
 import com.atakmap.android.meshtastic.util.fountain.FountainChunkManager;
@@ -95,6 +96,7 @@ public class MeshtasticMapComponent extends DropDownMapComponent
     private MeshtasticDropDownReceiver ddr;
     private MeshtasticReceiver mr;
     private KeyImportReceiver keyImportReceiver;
+    private MeshtasticConfigImporter configImporter;
     private final MeshtasticExternalGPS meshtasticExternalGPS;
     private MeshtasticSender meshtasticSender;
 
@@ -296,6 +298,10 @@ public class MeshtasticMapComponent extends DropDownMapComponent
         view.getContext().registerReceiver(keyImportReceiver, keyImportFilter,
                 Context.RECEIVER_NOT_EXPORTED);
 
+        // Register Meshtastic config importer for Data Package import
+        configImporter = new MeshtasticConfigImporter(pluginContext);
+        ImporterManager.registerImporter(configImporter);
+
         // Setup CoT service
         CotServiceRemote cotService = new CotServiceRemote();
         cotService.setCotEventListener(mr);
@@ -365,6 +371,9 @@ public class MeshtasticMapComponent extends DropDownMapComponent
         view.getContext().unregisterReceiver(mr);
         if (keyImportReceiver != null) {
             view.getContext().unregisterReceiver(keyImportReceiver);
+        }
+        if (configImporter != null) {
+            ImporterManager.unregisterImporter(configImporter);
         }
         if (mw != null) {
             mw.destroy();
