@@ -32,6 +32,7 @@ class AppLayerEncryptionManagerTest {
         }
 
         manager = AppLayerEncryptionManager.getInstance();
+        manager.setEnabled(true);
     }
 
     // ========================================================================
@@ -571,6 +572,7 @@ class AppLayerEncryptionManagerTest {
         resetSingletonForTest();
         AppLayerEncryptionManager freshReceiver = AppLayerEncryptionManager.getInstance();
         freshReceiver.loadKey("cross-epoch-test");
+        freshReceiver.setEnabled(true);
 
         // The receiver should be able to decrypt by deriving the epoch key
         byte[] decrypted = freshReceiver.decrypt(encrypted);
@@ -734,5 +736,29 @@ class AppLayerEncryptionManagerTest {
 
         assertThat(result).isTrue();
         assertThat(manager.hasKey()).isTrue();
+    }
+
+    // ========================================================================
+    // Disabled-State Guard Tests
+    // ========================================================================
+
+    @Test
+    void shouldReturnNullFromDecryptWhenDisabled() {
+        // Regression test: disabling encryption must stop decryption even if key is still in memory.
+        // Previously, decrypt() did not check enabled, so the cached key silently decrypted
+        // incoming packets even after the user toggled encryption off.
+        manager.loadKey("disable-guard-test");
+
+        byte[] plaintext = "should not decrypt".getBytes(StandardCharsets.UTF_8);
+        byte[] encrypted = manager.encrypt(plaintext);
+        assertThat(encrypted).isNotNull();
+
+        // Disable — key stays in memory but decryption must stop
+        manager.setEnabled(false);
+        assertThat(manager.decrypt(encrypted)).isNull();
+
+        // Re-enable — decryption resumes without re-entering PSK
+        manager.setEnabled(true);
+        assertThat(manager.decrypt(encrypted)).isEqualTo(plaintext);
     }
 }

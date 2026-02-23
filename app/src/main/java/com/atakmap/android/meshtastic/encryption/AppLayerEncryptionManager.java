@@ -721,6 +721,10 @@ public class AppLayerEncryptionManager {
      * @return Decrypted plaintext, or null on failure (wrong key, tampered data, etc.)
      */
     public byte[] decrypt(byte[] encryptedData) {
+        if (!enabled) {
+            Log.d(TAG, "Decryption skipped: app-layer encryption is disabled");
+            return null;
+        }
         if (encryptedData == null) {
             Log.w(TAG, "Cannot decrypt null data");
             return null;

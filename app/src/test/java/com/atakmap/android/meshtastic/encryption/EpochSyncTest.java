@@ -251,7 +251,9 @@ class EpochSyncTest {
         } catch (Exception e) {
             throw new RuntimeException("Failed to reset singleton", e);
         }
-        return AppLayerEncryptionManager.getInstance();
+        AppLayerEncryptionManager mgr = AppLayerEncryptionManager.getInstance();
+        mgr.setEnabled(true);
+        return mgr;
     }
 
     private void sleep(long ms) {
