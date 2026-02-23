@@ -1,13 +1,16 @@
 package com.atakmap.android.meshtastic;
 
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.preference.Preference;
 import android.preference.PreferenceManager;
+import android.preference.PreferenceScreen;
 
 import com.atakmap.android.meshtastic.encryption.AppLayerEncryptionManager;
+import com.atakmap.android.meshtastic.encryption.KeyQrDialog;
 import com.atakmap.android.meshtastic.plugin.R;
 import com.atakmap.android.meshtastic.util.Constants;
 import com.atakmap.android.preference.PluginPreferenceFragment;
@@ -116,6 +119,20 @@ public class PluginPreferencesFragment extends PluginPreferenceFragment
         } else {
             epochPref.setSummary("Not active");
         }
+    }
+
+    @Override
+    public boolean onPreferenceTreeClick(PreferenceScreen screen, Preference preference) {
+        if ("plugin_meshtastic_show_key_qr".equals(preference.getKey())) {
+            Activity activity = getActivity();
+            if (activity == null) return true;
+            String pskValue = prefs != null
+                    ? prefs.getString(Constants.PREF_PLUGIN_ENCRYPTION_PSK, "").trim()
+                    : "";
+            KeyQrDialog.show(activity, pskValue);
+            return true;
+        }
+        return super.onPreferenceTreeClick(screen, preference);
     }
 
     @Override

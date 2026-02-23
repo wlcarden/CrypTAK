@@ -3,6 +3,8 @@ package com.atakmap.android.meshtastic;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyByte;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -361,6 +363,129 @@ class MeshtasticReceiverTest {
             meshtasticReceiver.onCotEvent(cotEvent, null);
 
             // Then - getMeshService() never called, proving sendToMesh was never invoked
+            componentMockedStatic.verify(
+                    () -> MeshtasticMapComponent.getMeshService(), Mockito.never());
+        }
+    }
+
+    @Test
+    void relay_underMTU_sendsDirect() throws Exception {
+        // Encryption adds 34-byte V2 overhead; "Hi" message keeps payload well under the 231-byte MTU
+        AppLayerEncryptionManager encManager = AppLayerEncryptionManager.getInstance();
+        encManager.setEnabled(true);
+        encManager.loadKey("test-psk-for-relay-routing");
+        when(sharedPreferences.getBoolean(eq(Constants.PREF_PLUGIN_FROM_SERVER), eq(false)))
+                .thenReturn(true);
+
+        CotDetail detail = new CotDetail("detail");
+        CotDetail chat = new CotDetail("__chat");
+        chat.setAttribute("senderCallsign", "Alice");
+        detail.addChild(chat);
+        CotDetail link = new CotDetail("link");
+        link.setAttribute("uid", "ANDROID-abc123");
+        detail.addChild(link);
+        CotDetail remarks = new CotDetail("remarks");
+        remarks.setInnerText("Hi");
+        detail.addChild(remarks);
+
+        CotEvent cotEvent = mock(CotEvent.class);
+        when(cotEvent.isValid()).thenReturn(true);
+        when(cotEvent.getType()).thenReturn("b-t-f");
+        when(cotEvent.getUID()).thenReturn("GeoChat.Alice.All Chat Rooms.UUID");
+        when(cotEvent.getDetail()).thenReturn(detail);
+
+        MeshServiceManager mockMeshService = mock(MeshServiceManager.class);
+        try (MockedStatic<MeshtasticMapComponent> componentMockedStatic =
+                     Mockito.mockStatic(MeshtasticMapComponent.class)) {
+            componentMockedStatic.when(MeshtasticMapComponent::getMeshService)
+                    .thenReturn(mockMeshService);
+
+            meshtasticReceiver.onCotEvent(cotEvent, null);
+
+            // Under-MTU: sent as single DataPacket; fountain coding never invoked
+            verify(mockMeshService).sendToMesh(any(DataPacket.class));
+            verify(fountainChunkManager, never()).send(
+                    any(byte[].class), anyInt(), anyInt(), anyByte());
+        }
+    }
+
+    @Test
+    void relay_overMTU_usesFountainCoding() throws Exception {
+        // 200-char message encodes to a TAKPacket >> 197 bytes; encrypted payload >> 231-byte MTU
+        AppLayerEncryptionManager encManager = AppLayerEncryptionManager.getInstance();
+        encManager.setEnabled(true);
+        encManager.loadKey("test-psk-for-relay-routing");
+        when(sharedPreferences.getBoolean(eq(Constants.PREF_PLUGIN_FROM_SERVER), eq(false)))
+                .thenReturn(true);
+
+        CotDetail detail = new CotDetail("detail");
+        CotDetail chat = new CotDetail("__chat");
+        chat.setAttribute("senderCallsign", "Alice");
+        detail.addChild(chat);
+        CotDetail link = new CotDetail("link");
+        link.setAttribute("uid", "ANDROID-abc123");
+        detail.addChild(link);
+        CotDetail remarks = new CotDetail("remarks");
+        remarks.setInnerText("X".repeat(200));
+        detail.addChild(remarks);
+
+        CotEvent cotEvent = mock(CotEvent.class);
+        when(cotEvent.isValid()).thenReturn(true);
+        when(cotEvent.getType()).thenReturn("b-t-f");
+        when(cotEvent.getUID()).thenReturn("GeoChat.Alice.All Chat Rooms.UUID");
+        when(cotEvent.getDetail()).thenReturn(detail);
+
+        try (MockedStatic<MeshtasticMapComponent> componentMockedStatic =
+                     Mockito.mockStatic(MeshtasticMapComponent.class)) {
+            meshtasticReceiver.onCotEvent(cotEvent, null);
+
+            // Over-MTU: routed to fountain coding; sendToMesh never invoked
+            componentMockedStatic.verify(
+                    () -> MeshtasticMapComponent.getMeshService(), Mockito.never());
+            verify(fountainChunkManager).send(
+                    any(byte[].class), anyInt(), anyInt(), anyByte());
+        }
+    }
+
+    @Test
+    void relay_noFountainManager_dropsWithError() throws Exception {
+        // Over-MTU payload with null fountain manager: dropped gracefully, no send at all
+        AppLayerEncryptionManager encManager = AppLayerEncryptionManager.getInstance();
+        encManager.setEnabled(true);
+        encManager.loadKey("test-psk-for-relay-routing");
+        when(sharedPreferences.getBoolean(eq(Constants.PREF_PLUGIN_FROM_SERVER), eq(false)))
+                .thenReturn(true);
+
+        CotDetail detail = new CotDetail("detail");
+        CotDetail chat = new CotDetail("__chat");
+        chat.setAttribute("senderCallsign", "Alice");
+        detail.addChild(chat);
+        CotDetail link = new CotDetail("link");
+        link.setAttribute("uid", "ANDROID-abc123");
+        detail.addChild(link);
+        CotDetail remarks = new CotDetail("remarks");
+        remarks.setInnerText("X".repeat(200));
+        detail.addChild(remarks);
+
+        CotEvent cotEvent = mock(CotEvent.class);
+        when(cotEvent.isValid()).thenReturn(true);
+        when(cotEvent.getType()).thenReturn("b-t-f");
+        when(cotEvent.getUID()).thenReturn("GeoChat.Alice.All Chat Rooms.UUID");
+        when(cotEvent.getDetail()).thenReturn(detail);
+
+        // Class is already loaded; static initializer won't re-run. MapView._mapView is set
+        // from setUp(), so the constructor's getMapView() calls resolve correctly.
+        MeshtasticReceiver nullFountainReceiver;
+        try (MockedStatic<MapView> mapViewStatic = Mockito.mockStatic(MapView.class)) {
+            mapViewStatic.when(MapView::getMapView).thenReturn(mapView);
+            nullFountainReceiver = new MeshtasticReceiver(meshtasticExternalGPS, null);
+        }
+
+        try (MockedStatic<MeshtasticMapComponent> componentMockedStatic =
+                     Mockito.mockStatic(MeshtasticMapComponent.class)) {
+            nullFountainReceiver.onCotEvent(cotEvent, null);
+
+            // Null fountain + oversized payload: message dropped, no transmission attempted
             componentMockedStatic.verify(
                     () -> MeshtasticMapComponent.getMeshService(), Mockito.never());
         }

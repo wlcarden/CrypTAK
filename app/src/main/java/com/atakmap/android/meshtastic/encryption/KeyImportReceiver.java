@@ -7,26 +7,17 @@ import android.widget.Toast;
 
 import com.atakmap.coremap.log.Log;
 
+
 /**
- * BroadcastReceiver that handles encryption key import from QR code scans
- * or ATAK Import Manager.
+ * BroadcastReceiver that handles encryption key import via broadcast intent.
  *
  * <h3>Supported intents:</h3>
  * <ul>
  *   <li>{@code com.atakmap.android.meshtastic.IMPORT_ENCRYPTION_KEY} — direct key import.
  *       Expects extra {@code "key"} containing a base64-encoded 32-byte key.</li>
- *   <li>Standard {@code android.intent.action.VIEW} with data URI containing the key
- *       (e.g., from a QR code scanner app).</li>
  * </ul>
  *
- * <h3>QR Code format:</h3>
- * The QR code should encode a plain base64 string (44 characters for a 32-byte key):
- * <pre>
- *   openssl rand -base64 32
- *   # produces something like: K7gNU3sdo+OL0wNhqoVWhr3g6s1xYv72ol/pe/Unols=
- * </pre>
- *
- * <h3>Usage from ATAK Import Manager or external scanner:</h3>
+ * <h3>Usage:</h3>
  * <pre>
  *   Intent intent = new Intent("com.atakmap.android.meshtastic.IMPORT_ENCRYPTION_KEY");
  *   intent.putExtra("key", "K7gNU3sdo+OL0wNhqoVWhr3g6s1xYv72ol/pe/Unols=");
@@ -51,20 +42,12 @@ public class KeyImportReceiver extends BroadcastReceiver {
 
         if (ACTION_IMPORT_KEY.equals(action)) {
             base64Key = intent.getStringExtra(EXTRA_KEY);
-        } else if (Intent.ACTION_VIEW.equals(action) && intent.getData() != null) {
-            // QR scanner apps typically put the scanned text in the data URI
-            base64Key = intent.getData().toString();
         }
 
         if (base64Key == null || base64Key.trim().isEmpty()) {
             Log.w(TAG, "No key data in intent");
             showToast(context, "Key import failed: no key data received");
             return;
-        }
-
-        // Strip any URI scheme prefix if present (e.g., "meshtastic-key://")
-        if (base64Key.contains("://")) {
-            base64Key = base64Key.substring(base64Key.lastIndexOf("://") + 3);
         }
 
         AppLayerEncryptionManager encManager = AppLayerEncryptionManager.getInstance();

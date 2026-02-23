@@ -167,6 +167,12 @@
         android:inputType="textPassword"
         android:defaultValue=""/>
 
+    <android.preference.Preference
+        android:key="plugin_meshtastic_show_key_qr"
+        android:title="Show Key QR Code"
+        android:summary="Display the encryption key as a QR code for team distribution"
+        android:dependency="plugin_meshtastic_extra_encryption"/>
+
     <com.atakmap.android.gui.PanSwitchPreference
         android:key="plugin_meshtastic_epoch_rotation"
         android:title="Enable Epoch Rotation"

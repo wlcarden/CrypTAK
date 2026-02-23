@@ -362,6 +362,7 @@ def getCommandFlavor() {
 
 dependencies {
     implementation fileTree(dir: 'libs', include: '*.jar')
+    implementation 'com.google.zxing:core:3.5.3'
 
     implementation project(":libcodec2-android")
 
