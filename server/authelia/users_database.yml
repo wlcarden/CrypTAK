@@ -1,0 +1,37 @@
+---
+# Authelia user database — TAK team members
+#
+# This is the TEMPLATE. The live file is at:
+#   /mnt/user/appdata/authelia/users_database.yml
+#
+# Password hashes are Argon2id. Generate with:
+#   docker run --rm ghcr.io/authelia/authelia:latest \
+#     authelia crypto hash generate argon2 --password 'their_password'
+#
+# Workflow for onboarding a new team member:
+#   1. Create their password (or have them send you a desired one securely)
+#   2. Generate the Argon2id hash with the command above
+#   3. Add entry below, set disabled: false
+#   4. docker restart authelia
+#   5. Give them: server URL + username + password
+#   6. They install Tailscale, set server to https://tak.thousand-pikes.com,
+#      tap Log In → Authelia login page → enters credentials → enrolled in VPN
+
+users:
+  # Replace ARGON2ID_HASH with output of the crypto hash command above.
+  # The initial admin password is set during deploy — see deploy output.
+  admin:
+    disabled: false
+    displayname: 'Admin'
+    password: 'REPLACE_WITH_ARGON2ID_HASH'
+    email: 'admin@tak.local'
+    groups:
+      - admins
+
+  # Template for additional team members:
+  # callsign:
+  #   disabled: false
+  #   displayname: 'Callsign'
+  #   password: 'REPLACE_WITH_ARGON2ID_HASH'
+  #   email: 'callsign@tak.local'
+  #   groups: []

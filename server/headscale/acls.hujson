@@ -1,0 +1,17 @@
+{
+  // TAK team access control policy
+  //
+  // Trust model: enrollment controls access, not ACLs.
+  // Anyone who has a pre-auth key can join. Anyone who joins is trusted.
+  // Do not share pre-auth keys with untrusted parties.
+  //
+  // Allow all traffic between enrolled nodes.
+  // Add per-port restrictions here if the team grows or trust model changes.
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["*"],
+      "dst": ["*:*"]
+    }
+  ]
+}

@@ -1,0 +1,222 @@
+# FreeTAKServer full stack — Unraid deployment
+# Four containers: core FTS + FTS-UI (admin panel :5000) + Node-RED webmap (:1880/tak-map) + Mosquitto MQTT broker (:1883)
+#
+# Usage:
+#   cp .env.example .env
+#   edit .env  — set UNRAID_IP and all passwords
+#   docker compose up -d freetakserver          # start core first (wait ~60s)
+#   # Default API key is literally "Bearer token" — set in .env:
+#   #   FTS_API_KEY=Bearer token
+#   # Change via FTS-UI at :5000 after first login (admin/password)
+#   docker compose up -d freetakserver-ui
+
+services:
+  freetakserver:
+    image: ghcr.io/freetakteam/freetakserver:latest
+    container_name: freetakserver
+    hostname: freetakserver
+    restart: unless-stopped
+    networks:
+      - taknet
+    ports:
+      - "8087:8087"      # CoT TCP  — ATAK client connections
+      - "8089:8089"      # CoT SSL  — encrypted client connections
+      - "8080:8080"      # Data Package HTTP
+      - "8443:8443"      # Data Package HTTPS
+      - "19023:19023"    # REST API — used by FTS-UI; do not expose to internet
+      - "9000:9000"      # Federation — server-to-server linking
+    volumes:
+      - /mnt/user/appdata/fts/data:/opt/fts
+      # FTS 2.2.1 patch: use session.merge() (UPSERT) instead of session.add() (INSERT-only)
+      # to prevent SQLAlchemy session corruption on client reconnects.
+      - /mnt/user/appdata/fts/table_controllers_patched.py:/home/freetak/FreeTAKServer/core/persistence/table_controllers.py:ro
+      # FTS 2.2.1 patch: EventTableController.create() overrides base class with its own session.add(row).
+      # Must also patch this file; the table_controllers.py patch alone is insufficient.
+      - /mnt/user/appdata/fts/event_table_controller_patched.py:/home/freetak/FreeTAKServer/core/persistence/EventTableController.py:ro
+    environment:
+      # Ports
+      FTS_COT_PORT: 8087
+      FTS_SSLCOT_PORT: 8089
+      FTS_API_PORT: 19023
+      FTS_FED_PORT: 9000
+
+      # FTS_DP_ADDRESS = external IP — embedded in data-package download URLs ATAK fetches.
+      # FTS_USER_ADDRESS / FTS_API_ADDRESS = bind address inside container — use 0.0.0.0;
+      # Docker port-maps these outward. Do NOT set to the external IP (bind will fail).
+      FTS_DP_ADDRESS: ${UNRAID_IP}
+      FTS_USER_ADDRESS: "0.0.0.0"
+      FTS_API_ADDRESS: "0.0.0.0"
+
+      # Internal microservices routing (FTS 2.x — do not expose these ports on host)
+      FTS_ROUTING_PROXY_SUBSCRIBE_PORT: 19030
+      FTS_ROUTING_PROXY_SUBSCRIBE_IP: "freetakserver"
+      FTS_ROUTING_PROXY_PUBLISHER_PORT: 19032
+      FTS_ROUTING_PROXY_PUBLISHER_IP: "freetakserver"
+      FTS_ROUTING_PROXY_SERVER_PORT: 19031
+      FTS_ROUTING_PROXY_SERVER_IP: "freetakserver"
+      FTS_INTEGRATION_MANAGER_PULLER_PORT: 19033
+      FTS_INTEGRATION_MANAGER_PULLER_ADDRESS: "freetakserver"
+      FTS_INTEGRATION_MANAGER_PUBLISHER_PORT: 19034
+      FTS_INTEGRATION_MANAGER_PUBLISHER_ADDRESS: "freetakserver"
+
+      # Security — all must be changed from defaults before first boot
+      FTS_FED_PASSWORD: ${FTS_FED_PASSWORD}
+      FTS_CLIENT_CERT_PASSWORD: ${FTS_CLIENT_CERT_PASSWORD}
+      FTS_WEBSOCKET_KEY: ${FTS_WEBSOCKET_KEY}
+      FTS_SECRET_KEY: ${FTS_SECRET_KEY}
+
+      # Behavior
+      # FTS_CONNECTION_MESSAGE disabled — FTS 2.2.1 IAMUsersController CoT encoding bug:
+      # setting this causes 'bytes-like object required, not NoneType' on every client connect,
+      # which drops the socket immediately after the welcome is sent.
+      # FTS_CONNECTION_MESSAGE: "Welcome to Meshtastic-ATAK mesh"
+      FTS_COT_TO_DB: "true"
+      FTS_OPTIMIZE_API: "true"
+      FTS_LOG_LEVEL: "info"
+      FTS_EMERGENCY_RADIUS: 0
+      FTS_NUM_ROUTING_WORKERS: 3
+      FTS_MAINLOOP_DELAY: 100
+
+    # Healthcheck disabled: Docker's exec-based healthchecks fail on Unraid due to a
+    # runc state directory issue (/run/user/0/ missing in daemon context). The service
+    # IS healthy — verify manually: python3 -c "import socket; s=socket.socket();
+    # s.connect(('localhost',8087))" should succeed ~60s after container start.
+    healthcheck:
+      disable: true
+
+  freetakserver-ui:
+    image: ghcr.io/freetakteam/ui:latest
+    container_name: freetakserver-ui
+    hostname: freetakserver-ui
+    restart: unless-stopped
+    depends_on:
+      freetakserver:
+        condition: service_started    # service_healthy unavailable — healthcheck disabled on Unraid
+    networks:
+      - taknet
+    ports:
+      - "5000:5000"      # Admin web panel — user mgmt, config, DataPackages
+    volumes:
+      - /mnt/user/appdata/fts-ui/data:/home/freetak/data
+      # socket.io v3 shim — FTS-UI ships v1.4.5 (EIO=3) which is incompatible with FTS core 2.x Flask-SocketIO 5.x (EIO=4).
+      # Flask serves from the pip-installed package path, NOT the source tree. Both paths needed.
+      - /mnt/user/appdata/fts-ui/socket.io.v4.min.js:/home/freetak/FreeTAKServer-UI/app/base/static/assets/js/socket.io-1.4.5.js
+      - /mnt/user/appdata/fts-ui/socket.io.v4.min.js:/home/freetak/.local/lib/python3.11/site-packages/FreeTAKServer-UI/app/base/static/assets/js/socket.io-1.4.5.js
+    environment:
+      FTS_IP: ${UNRAID_IP}               # External IP — what browsers use to reach FTS
+      FTS_API_PORT: 19023
+      FTS_API_PROTO: "http"
+      FTS_UI_EXPOSED_IP: "freetakserver-ui"
+      FTS_UI_PORT: 5000
+      FTS_UI_WSKEY: ${FTS_WEBSOCKET_KEY}
+      FTS_API_KEY: ${FTS_API_KEY}        # Default: "Bearer token" — change via FTS-UI after first login
+      FTS_UI_SQLALCHEMY_DATABASE_URI: "sqlite:////home/freetak/data/FTSServer-UI.db"
+      # Webmap iframe: points FTS-UI to Node-RED worldmap serving at /tak-map
+      FTS_MAP_EXPOSED_IP: ${UNRAID_IP}   # Browser-facing IP for the iframe src
+      FTS_MAP_PORT: 1880
+      FTS_MAP_PROTO: "http"
+
+  nodered:
+    image: nodered/node-red:latest
+    container_name: nodered
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    ports:
+      - "1880:1880"          # Node-RED UI + worldmap at /tak-map
+    volumes:
+      - /mnt/user/appdata/nodered/data:/data
+    user: "1000:1000"
+
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"          # MQTT — Meshtastic node telemetry
+    volumes:
+      - /mnt/user/appdata/mosquitto/config:/mosquitto/config
+      - /mnt/user/appdata/mosquitto/data:/mosquitto/data
+      - /mnt/user/appdata/mosquitto/log:/mosquitto/log
+
+  # ── Headscale VPN stack ──────────────────────────────────────────────────────
+  #
+  # Headscale is a self-hosted replacement for Tailscale's coordination server.
+  # It manages WireGuard keys and peer discovery for team devices without any
+  # Tailscale accounts or fees. Team phones use the official Tailscale app
+  # pointed at https://tak.thousand-pikes.com instead of Tailscale's cloud.
+  #
+  # Internet access path (zero port forwarding on router):
+  #   Phones ──HTTPS──► tak.thousand-pikes.com (Cloudflare) ──► nginx:8082 ──► headscale:8080
+  #   Phones ──WireGuard P2P──► Tailscale on Unraid host ──► FTS ports
+  #
+  # OIDC enrollment path (browser-based, recommended for onboarding):
+  #   Phone Tailscale app → "Log In" → nginx:8082/auth → Authelia login page
+  #   → user enters credentials → Authelia → headscale OIDC callback → enrolled
+  #
+  # nginx sits between cloudflared and headscale to inject the correct Upgrade
+  # header on /ts2021 and to proxy /auth/* to Authelia for OIDC enrollment.
+  #
+  # To enroll the Unraid host after Headscale is running, see README.
+
+  authelia:
+    image: ghcr.io/authelia/authelia:latest
+    container_name: authelia
+    restart: unless-stopped
+    networks:
+      - taknet
+    volumes:
+      # configuration.yml + users_database.yml + db.sqlite3 + notification.txt
+      - /mnt/user/appdata/authelia:/config
+      # RSA signing key + session/storage/hmac secrets (files, not env vars — avoids $ escaping)
+      - /mnt/user/appdata/authelia/secrets:/secrets:ro
+    environment:
+      AUTHELIA_SESSION_SECRET_FILE: /secrets/session_secret
+      AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: /secrets/storage_key
+      AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE: /secrets/oidc_hmac_secret
+      # client_secret is delivered via !secret directive in configuration.yml
+    # No exposed ports — nginx proxies /auth/* internally
+
+  headscale-nginx:
+    image: ghcr.io/nginxinc/nginx-unprivileged:alpine
+    container_name: headscale-nginx
+    restart: unless-stopped
+    depends_on:
+      - headscale
+      - authelia
+    networks:
+      - taknet
+    ports:
+      - "8082:8080"    # Control plane — cloudflared routes tak.thousand-pikes.com → :8082
+    volumes:
+      - ./headscale/nginx.conf:/etc/nginx/nginx.conf:ro
+
+  headscale:
+    image: ghcr.io/juanfont/headscale:latest
+    container_name: headscale
+    restart: unless-stopped
+    networks:
+      - taknet
+    ports:
+      - "9090:9090"    # Prometheus metrics — LAN only, not routed via cloudflared
+    volumes:
+      - ./headscale:/etc/headscale              # config.yaml + acls.hujson (this repo)
+      - /mnt/user/appdata/headscale:/var/lib/headscale  # keys, DB, node state — persists
+    command: serve
+    # No healthcheck — headscale image is distroless (no wget/curl/sh available)
+
+  headscale-ui:
+    image: ghcr.io/gurucomputing/headscale-ui:latest
+    container_name: headscale-ui
+    restart: unless-stopped
+    depends_on:
+      - headscale
+    networks:
+      - taknet
+    ports:
+      - "8083:80"      # Admin web UI — LAN only at http://192.168.50.120:8083
+                       # Configure with: URL=https://tak.thousand-pikes.com, API key from CLI
+
+networks:
+  taknet:
+    driver: bridge

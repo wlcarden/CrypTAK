@@ -1,0 +1,36 @@
+# Lilygo 868/915 LORA32 — Meshtastic device configuration
+# Apply with: meshtastic --configure firmware/lilygo-lora32/device.yaml
+#
+# NOTE: This device has no GPS module. Position is disabled.
+# TODO: Set channel PSK to match ATAK plugin passphrase before deployment.
+
+config:
+  lora:
+    modem_preset: LONG_FAST        # 915MHz US; switch to SHORT_TURBO for file transfer
+    region: US
+    tx_power: 30
+    hop_limit: 3
+    channel_num: 0
+
+  device:
+    role: CLIENT                   # TODO: ROUTER for fixed relay nodes
+    serial_enabled: false
+
+  position:
+    position_broadcast_smart_enabled: false
+    gps_enabled: false             # No GPS module on this device
+    fixed_position: false
+
+  power:
+    is_power_saving: false
+
+  display:
+    auto_screen_carousel_secs: 0
+
+channel_config:
+  settings:
+    - index: 0
+      name: "ATAK"
+      psk: "AQ=="                # Meshtastic default LongFast channel key — matches all nodes in this mesh
+      downlink_enabled: false
+      uplink_enabled: false

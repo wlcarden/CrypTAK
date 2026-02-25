@@ -1,0 +1,104 @@
+---
+# Headscale configuration — tak.thousand-pikes.com
+# Full reference: https://github.com/juanfont/headscale/blob/main/config-example.yaml
+
+# Public URL that Tailscale clients connect to for coordination.
+# Must match the cloudflared tunnel hostname exactly.
+server_url: https://tak.thousand-pikes.com
+
+# Internal listen address inside the container (mapped to host :8082).
+# Cloudflare Tunnel connects to http://192.168.50.120:8082
+listen_addr: 0.0.0.0:8080
+
+# Prometheus metrics (LAN only — not routed through cloudflared)
+metrics_listen_addr: 0.0.0.0:9090
+
+# gRPC — used by headscale CLI commands run via `docker exec headscale headscale ...`
+# grpc_allow_insecure: TLS is handled by Cloudflare at the edge; internal traffic is plain HTTP
+grpc_listen_addr: 0.0.0.0:50443
+grpc_allow_insecure: true
+
+# Long-lived node key — persists the server identity across container restarts
+private_key_path: /var/lib/headscale/private.key
+
+# Noise protocol key — used for WireGuard session setup
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+
+# IP address ranges assigned to nodes joining the tailnet.
+# 100.64.0.0/10 is the standard Tailscale CGNAT range.
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+
+# SQLite database — all node registrations, keys, and state
+database:
+  type: sqlite
+  sqlite:
+    path: /var/lib/headscale/db.sqlite
+
+# Access control policy — see acls.hujson
+policy:
+  path: /etc/headscale/acls.hujson
+
+# DNS — MagicDNS gives nodes stable hostnames (e.g. unraid.tak.ts.net)
+dns:
+  magic_dns: true
+  base_domain: tak.ts.net
+  nameservers:
+    global:
+      - 1.1.1.1
+      - 8.8.8.8
+  search_domains: []
+  extra_records: []
+
+# DERP relay — fall back to Tailscale's public DERP servers when direct P2P fails.
+# Traffic through DERP is WireGuard-encrypted end-to-end; Tailscale cannot read it.
+# To run a fully self-contained DERP server, see: https://github.com/tailscale/tailscale/tree/main/cmd/derper
+derp:
+  server:
+    enabled: false
+  urls:
+    - https://controlplane.tailscale.com/derpmap/default
+  auto_update_enabled: true
+  update_frequency: 24h
+
+# Ephemeral nodes (no persistent state) expire after this period of inactivity
+ephemeral_node_inactivity_timeout: 30m
+
+# How often nodes check for peer updates
+node_update_check_interval: 10s
+
+log:
+  level: info
+
+# Suppress update nag — running self-hosted
+disable_check_updates: true
+
+# Unix socket for CLI commands via `docker exec headscale headscale <cmd>`
+unix_socket: /var/run/headscale/headscale.sock
+unix_socket_permission: "0770"
+
+# OIDC — required for browser-based enrollment in headscale v0.28.
+# Without OIDC, the /register page returns a blank HTML body and the Tailscale
+# Android app's "Log In" button opens a browser that shows nothing and closes.
+#
+# Using Google as the OIDC provider (free, no extra containers):
+#   1. Go to https://console.cloud.google.com/apis/credentials
+#   2. Create project → Create credentials → OAuth 2.0 Client ID → Web application
+#   3. Name: "Headscale TAK"
+#   4. Authorized redirect URIs: https://tak.thousand-pikes.com/oidc/callback
+#   5. Copy Client ID and Client Secret below, then:
+#        cat tak-server/headscale/config.yaml | ssh -i ~/.ssh/id_ed25519 root@192.168.50.120 \
+#          "cat > /mnt/user/appdata/tak-server/headscale/config.yaml && docker restart headscale"
+#   6. Tap "Log In" in Tailscale → Google login page opens → sign in → enrolled
+#
+oidc:
+  # Authelia serves at /auth — issuer must include path prefix.
+  # headscale discovers all endpoints via /.well-known/openid-configuration.
+  issuer: "https://tak.thousand-pikes.com/auth"
+  client_id: "headscale"
+  # Plain-text client secret — must match what's in /mnt/user/appdata/authelia/secrets/oidc_client_secret_plain
+  client_secret: "REPLACE_WITH_PLAIN_CLIENT_SECRET"
+  # Map OIDC users to the takteam headscale user by email
+  user_by: "email"

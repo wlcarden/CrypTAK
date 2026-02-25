@@ -1,0 +1,29 @@
+# SDK and build artifacts (must be obtained per ATAK SDK terms)
+plugin/sdk/
+sdk-archives/
+
+# APKs (ATAK-CIV cannot be redistributed)
+apks/
+
+# Test artifacts and logs
+test-artifacts/
+
+# Local machine config
+plugin/local.properties
+plugin/app/local.properties
+*.local.properties
+
+# Secrets and credentials
+auth/
+.env
+**/.env
+
+# Android/Gradle
+*.class
+*.dex
+*.apk
+build/
+.gradle/
+.kotlin/
+.DS_Store
+Thumbs.db

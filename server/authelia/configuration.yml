@@ -1,0 +1,95 @@
+---
+# Authelia OIDC provider for Headscale TAK VPN
+# Serves at https://tak.thousand-pikes.com/auth
+#
+# This file lives in /mnt/user/appdata/authelia/configuration.yml on Unraid
+# (inside the /config volume mount). Secrets are separate files in /secrets/.
+#
+# To add a team member:
+#   1. Generate password hash:
+#        docker run --rm ghcr.io/authelia/authelia:latest \
+#          authelia crypto hash generate argon2 --password 'their_password'
+#   2. Add entry to /mnt/user/appdata/authelia/users_database.yml
+#   3. docker restart authelia
+#
+# To remove a team member: set disabled: true, restart authelia.
+
+server:
+  # Path prefix included in address (v4.39+: server.path is deprecated)
+  address: 'tcp://:9091/auth'
+
+# No email server — admin manages passwords via CLI hash generation.
+# jwt_secret is required in v4.39 for the reset_password subsystem to initialize
+# even when password reset is not actively used. File already generated at:
+#   /mnt/user/appdata/authelia/secrets/jwt_secret
+identity_validation:
+  reset_password:
+    jwt_secret: !secret /secrets/jwt_secret
+
+authentication_backend:
+  file:
+    path: '/config/users_database.yml'
+    password:
+      algorithm: argon2id
+
+access_control:
+  default_policy: 'one_factor'
+
+session:
+  # secret injected via AUTHELIA_SESSION_SECRET_FILE env var
+  cookies:
+    - name: 'authelia_session'
+      domain: 'thousand-pikes.com'
+      authelia_url: 'https://tak.thousand-pikes.com/auth'
+      expiration: '1h'
+      inactivity: '5m'
+      remember_me: '6M'
+
+storage:
+  # encryption_key injected via AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE env var
+  local:
+    path: '/config/db.sqlite3'
+
+notifier:
+  disable_startup_check: true
+  filesystem:
+    filename: '/config/notification.txt'
+
+identity_providers:
+  oidc:
+    # hmac_secret injected via AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE env var
+    jwks:
+      - key_id: 'headscale'
+        algorithm: 'RS256'
+        use: 'sig'
+        # v4.39+: jwks[].path is not supported; key must be inline PEM.
+        # On Unraid, generate with:
+        #   openssl genrsa 2048 | openssl pkcs8 -topk8 -nocrypt \
+        #     > /mnt/user/appdata/authelia/secrets/oidc.key
+        # Then paste the PEM content here (in the deployed copy, not this template).
+        key: |
+          REPLACE_WITH_RSA_PRIVATE_KEY_PEM
+    clients:
+      - client_id: 'headscale'
+        client_name: 'Headscale TAK VPN'
+        # !secret reads the plain-text client secret from the file.
+        # The secret must match headscale's oidc.client_secret value exactly.
+        # Authelia v4.39 warns "plaintext" for any non-client_secret_jwt method —
+        # this is a known cosmetic warning; enrollment works correctly.
+        # Generate a strong secret: openssl rand -base64 32 | tr '/+' '_-' | tr -d '='
+        client_secret: !secret /secrets/oidc_client_secret_plain
+        public: false
+        authorization_policy: 'one_factor'
+        redirect_uris:
+          - 'https://tak.thousand-pikes.com/oidc/callback'
+        scopes:
+          - 'openid'
+          - 'profile'
+          - 'email'
+        # headscale hardcodes client_secret_post (credentials in POST body) for token exchange.
+        # client_secret_basic would require HTTP Basic Auth header, which headscale doesn't send.
+        token_endpoint_auth_method: 'client_secret_post'
+        userinfo_signed_response_alg: 'none'
+        # Skip the "Authorize headscale?" consent screen — this is an internal VPN,
+        # all enrolled users implicitly consent to headscale seeing their identity.
+        consent_mode: 'implicit'
