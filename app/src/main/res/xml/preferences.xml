@@ -177,13 +177,15 @@
         android:summary="Encrypt CoT payloads with AES-256-GCM before Meshtastic handoff. Keys stored on phone only — radio compromise does not expose message content."
         android:defaultValue="false"/>
 
-    <com.atakmap.android.gui.PanEditTextPreference
+    <android.preference.Preference
         android:key="plugin_meshtastic_encryption_psk"
         android:title="Pre-Shared Key (PSK)"
-        android:summary="All team members must use the same key. Distribute via QR code or ATAK Data Package over a secure channel."
-        android:dialogTitle="Pre-Shared Key"
-        android:inputType="textPassword"
-        android:defaultValue=""/>
+        android:summary="Tap to configure"/>
+
+    <android.preference.Preference
+        android:key="plugin_meshtastic_scan_key_qr"
+        android:title="Scan Key QR Code"
+        android:summary="Scan a team member's QR code to import their encryption key"/>
 
     <android.preference.Preference
         android:key="plugin_meshtastic_show_key_qr"
@@ -196,6 +198,11 @@
         android:title="Export Onboarding Package"
         android:summary="Share a ZIP that fully configures a new team device (keys + server profile)"
         android:dependency="plugin_meshtastic_extra_encryption"/>
+
+    <android.preference.Preference
+        android:key="plugin_meshtastic_import_data_package"
+        android:title="Import Onboarding Package"
+        android:summary="Apply encryption keys and server settings from a team configuration ZIP"/>
 
     <com.atakmap.android.gui.PanSwitchPreference
         android:key="plugin_meshtastic_epoch_rotation"
