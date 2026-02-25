@@ -1,119 +1,86 @@
-# Meshtastic ATAK Plugin — Project Handoff Context
+# CrypTAK — Project Context
 
 ## Project Summary
 
-AES-256-GCM app-layer encryption for the Meshtastic ATAK Plugin, a fork of the
-Android plugin that bridges ATAK (Android Team Awareness Kit) with Meshtastic
-LoRa mesh radios, for a 10-person volunteer emergency response team in Northern
-Virginia.
+CrypTAK: AES-256-GCM encrypted tactical communications over Meshtastic LoRa mesh,
+with a self-hosted FreeTAKServer backend and ATAK-CIV plugin. CrypTAK traffic
+rides as standard Meshtastic packets, relayable by any community node on the same
+channel.
 
 ## Repository
 
-- **Fork**: `https://github.com/wlcarden/ATAK-Plugin`
-- **Branch**: `claude/meshtastic-app-encryption-SAcS1`
-- **Base**: upstream Meshtastic ATAK Plugin
+- **Monorepo**: `https://github.com/wlcarden/CrypTAK` (private)
+- **Branch**: `main`
+- **Plugin lineage**: forked from upstream `meshtastic/ATAK-Plugin`, history
+  absorbed via `git subtree add`
 
-## Completed Work (Phases 1–3)
+## Current State
 
-- AES-256-GCM encryption implemented in `AppLayerEncryptionManager.java`
-- CoT event processor hooked in `CotEventProcessor.java`
-- Decrypt path in `MeshtasticReceiver.java`
-- **117 unit tests** written and passing
+- AES-256-GCM encryption, server relay (chat + PLI + DM), epoch rotation — done
+- QR key distribution (display + in-app scanner), Data Package export — done
+- Self-hosted server stack (FTS + headscale VPN + Authelia OIDC) — deployed
+- **199 unit tests** passing
+- Hardware testing partially complete (FTS relay + LoRa link confirmed; PLI
+  inbound pending outdoor GPS fix)
 
-## Critical Files
-
-| File                                                                              | Role                                    |
-| --------------------------------------------------------------------------------- | --------------------------------------- |
-| `app/src/main/java/com/atakmap/android/meshtastic/AppLayerEncryptionManager.java` | Core AES-256-GCM encrypt/decrypt        |
-| `app/src/main/java/com/atakmap/android/meshtastic/CotEventProcessor.java`         | CoT event hook → encrypt before LoRa TX |
-| `app/src/main/java/com/atakmap/android/meshtastic/MeshtasticReceiver.java`        | Receive → decrypt path                  |
-| `ATAK-Plugin/sdk/android_keystore`                                                | Debug signing key (MUST match ATAK-CIV) |
-| `ATAK-Plugin/local.properties`                                                    | Generated; points to `~/Android/Sdk`    |
-
-## Build Environment
+## Repository Layout
 
 ```
-~/Desktop/Meshtastic/
-├── ATAK-Plugin/          ← git clone of wlcarden/ATAK-Plugin
-│   ├── sdk/              ← ATAK SDK files (gitignored)
+~/Desktop/CrypTAK/
+├── plugin/              ← ATAK plugin (Android Gradle project)
+│   ├── sdk/             ← ATAK SDK files (gitignored, obtain separately)
 │   │   ├── main.jar
 │   │   ├── android_keystore
 │   │   └── proguard-release-keep.txt
-│   └── local.properties  ← sdk.dir=~/Android/Sdk
-├── sdk-archives/         ← Original SDK download zips
-│   └── atak-civ-5.5.1.8/
-├── apks/
-│   ├── atak-civ/         ← ATAK-CIV APKs for signing comparison
-│   └── releases/         ← Built plugin APKs
-├── test-artifacts/
-│   ├── logcat/           ← adb logcat captures
-│   └── notes/            ← Phase test results
-├── scripts/
-│   ├── gen-test-keys.sh
-│   ├── install-plugin.sh
-│   └── verify-signing.sh
-└── docs/
-    └── claude-code-context.md  ← This file
+│   └── app/             ← Plugin source
+├── server/              ← Docker Compose stack
+│   ├── docker-compose.yml
+│   ├── .env.example
+│   ├── headscale/       ← VPN coordination server config
+│   └── authelia/        ← OIDC auth config (templates, no secrets)
+├── firmware/            ← Meshtastic node configs and firmware files
+├── docs/                ← Deployment runbook, hardware builds, network architecture
+├── scripts/             ← Build, install, signing, SDK setup scripts
+├── apks/                ← (gitignored) ATAK-CIV APKs
+├── sdk-archives/        ← (gitignored) SDK download zips
+├── auth/                ← (gitignored) Credentials
+└── test-artifacts/      ← (gitignored) Logcat captures, test notes
 ```
 
-Android SDK: `~/Android/Sdk/` (standard location)
+## Critical Plugin Files
+
+All paths relative to `plugin/app/src/main/java/com/atakmap/android/meshtastic/`:
+
+| File                                        | Role                                    |
+| ------------------------------------------- | --------------------------------------- |
+| `encryption/AppLayerEncryptionManager.java` | Core AES-256-GCM encrypt/decrypt        |
+| `encryption/KeyQrDialog.java`               | QR code display for key sharing         |
+| `encryption/KeyQrScanDialog.java`           | In-app camera scanner for QR key import |
+| `encryption/DataPackageExporter.java`       | ZIP export for key distribution         |
+| `CotEventProcessor.java`                    | CoT event hook — encrypt before LoRa TX |
+| `MeshtasticReceiver.java`                   | Receive from mesh — decrypt path        |
 
 ## Build Commands
 
 ```bash
-cd ~/Desktop/Meshtastic/ATAK-Plugin
+cd ~/Desktop/CrypTAK/plugin
 
-# Build
-./gradlew assembleCivDebug
+./gradlew test                # Run unit tests (199 passing)
+./gradlew assembleCivDebug    # Build debug APK
 
-# Test
-./gradlew test
-
-# APK location
-app/build/outputs/apk/civ/debug/
+# APK output: app/build/outputs/apk/civ/debug/
 ```
 
 ## ATAK SDK Setup
 
-1. Download SDK zip from: `https://github.com/TAK-Product-Center/atak-civ/releases`
-   - Target version: 5.5.1.8 (or latest)
-   - Save to `~/Desktop/Meshtastic/sdk-archives/atak-civ-5.5.1.8/`
-
-2. Extract these files to `ATAK-Plugin/sdk/`:
-   - `main.jar` — ATAK API stubs
-   - `android_keystore` — Debug signing keystore
-   - `proguard-release-keep.txt`
-
-## Pending Work (Priority Order)
-
-1. **Patch `onCotEvent` server relay path** — LoRa-bound copy needs encryption applied
-2. **Hardware test phases 1–8** — Two devices, log results in `test-artifacts/`
-3. **Integration tests** — MeshtasticReceiver decrypt path + relay routing
-4. **Epoch rotation** — End-to-end hardware verification
-
-## Hardware Test Setup
-
-- Two Android devices with ATAK-CIV installed (matching signed APK)
-- USB debugging enabled
-- Same encryption key provisioned on both devices via:
-  ```bash
-  ./scripts/gen-test-keys.sh phase1
-  # then deploy key via adb broadcast (see script output)
-  ```
-
-## Signing Verification
-
-Before installing on device:
-
-```bash
-./scripts/verify-signing.sh
-# Must show PASS — certificate mismatch causes silent plugin rejection
-```
+1. Download `pluginsdk.zip` from [TAK Product Center](https://github.com/TAK-Product-Center/atak-civ)
+2. Extract to `plugin/sdk/`: `main.jar`, `android_keystore`, `proguard-release-keep.txt`
 
 ## Key Security Notes
 
-- The `android_keystore` in `sdk/` is the **debug** keystore from the ATAK SDK.
-  It is not a secret — it's distributed with every ATAK SDK release.
-- For a production/fielded build, a real key signing process would be required.
-- AES-256 keys for testing are generated by `gen-test-keys.sh` and stored in
-  `test-artifacts/notes/` (not committed to git).
+- `android_keystore` in `sdk/` is the **debug** keystore from the ATAK SDK
+  release. Not a secret.
+- AES-256 keys for testing are generated by `scripts/gen-test-keys.sh` and stored
+  in `test-artifacts/notes/` (gitignored).
+- Server configs in `server/` are templates with placeholder secrets. Real secrets
+  live in `/secrets/` volume mounts on the server host.
