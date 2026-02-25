@@ -75,6 +75,8 @@ public final class Constants {
     public static final String PREF_PLUGIN_LOCAL_NODE_ID = "plugin_meshtastic_local_node_id";
     public static final String PREF_PLUGIN_EXTRA_ENCRYPTION = "plugin_meshtastic_extra_encryption";
     public static final String PREF_PLUGIN_ENCRYPTION_PSK = "plugin_meshtastic_encryption_psk";
+    /** Tracks how the PSK was last set: "manual", "generated", or "scanned". Hidden — no UI. */
+    public static final String PREF_PLUGIN_ENCRYPTION_PSK_ORIGIN = "plugin_meshtastic_encryption_psk_origin";
     public static final String PREF_PLUGIN_CHAT_RECEIPTS = "plugin_meshtastic_chat_receipts";
     public static final String PREF_PLUGIN_PTT_MOMENTARY = "plugin_meshtastic_ptt_momentary";
     public static final String PREF_PLUGIN_TOT = "plugin_meshtastic_tot";

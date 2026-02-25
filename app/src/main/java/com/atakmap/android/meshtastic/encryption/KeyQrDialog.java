@@ -3,7 +3,6 @@ package com.atakmap.android.meshtastic.encryption;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.graphics.Bitmap;
-import android.view.Gravity;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -105,42 +104,46 @@ public class KeyQrDialog {
             return;
         }
 
+        android.util.DisplayMetrics dm = new android.util.DisplayMetrics();
+        activity.getWindowManager().getDefaultDisplay().getMetrics(dm);
+
+        // Root layout fills the dialog window — QR image takes all remaining height via weight.
         LinearLayout layout = new LinearLayout(activity);
         layout.setOrientation(LinearLayout.VERTICAL);
-        int pad = dp(activity, 16);
+        int pad = dp(activity, 12);
         layout.setPadding(pad, pad, pad, pad);
+        layout.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT));
 
         TextView warning = new TextView(activity);
-        warning.setText("KEEP SCREEN PRIVATE — Only show to authorized team members.");
+        warning.setText("KEEP SCREEN PRIVATE — Authorized team members only.");
         warning.setTextColor(0xFFCC0000);
+        warning.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12);
         LinearLayout.LayoutParams warnParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        warnParams.bottomMargin = dp(activity, 12);
+        warnParams.bottomMargin = dp(activity, 6);
         warning.setLayoutParams(warnParams);
         layout.addView(warning);
 
+        // weight=1, height=0 — ImageView expands to fill all space between the text rows.
         ImageView imageView = new ImageView(activity);
         imageView.setImageBitmap(qrBitmap);
         imageView.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        int imgSize = dp(activity, 280);
-        LinearLayout.LayoutParams imgParams = new LinearLayout.LayoutParams(imgSize, imgSize);
-        imgParams.gravity = Gravity.CENTER_HORIZONTAL;
+        LinearLayout.LayoutParams imgParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
         imageView.setLayoutParams(imgParams);
         layout.addView(imageView);
 
-        TextView instruction = new TextView(activity);
-        instruction.setText("Recipient scans with camera app, then pastes the result into their PSK field.");
-        LinearLayout.LayoutParams instrParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        instrParams.topMargin = dp(activity, 12);
-        instruction.setLayoutParams(instrParams);
-        layout.addView(instruction);
-
-        new AlertDialog.Builder(activity)
+        AlertDialog dialog = new AlertDialog.Builder(activity)
                 .setTitle("Encryption Key QR Code")
                 .setView(layout)
                 .setPositiveButton("Close", null)
-                .show();
+                .create();
+        dialog.show();
+        // Size dialog to 90% of the screen in both dimensions so QR has maximum room.
+        dialog.getWindow().setLayout(
+                (int) (dm.widthPixels * 0.90f),
+                (int) (dm.heightPixels * 0.90f));
     }
 
     private static int dp(Activity activity, int dp) {
