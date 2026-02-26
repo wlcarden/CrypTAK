@@ -30,17 +30,23 @@ volumes:
 
 ### 2. Settings.js
 
-Add the external module reference to Node-RED's settings file on the server
+Add the following to Node-RED's settings file on the server
 (`/mnt/user/appdata/nodered/data/settings.js`):
 
 ```javascript
+// Serve custom favicon and top bar logo from public/
+httpStatic: '/data/public',
+
 functionGlobalContext: {
     cotMaps: require('/data/lib/cot-maps')
 },
 ```
 
-This loads `lib/cot-maps.js` (color, icon, and affiliation maps) into the
-Node-RED global context, referenced by the FTS CoT TCP Client function node.
+- `httpStatic` serves `public/favicon.ico` and `public/cryptak-logo.png` as
+  static files at the Node-RED root (used by the browser tab and map title bar)
+- `functionGlobalContext` loads `lib/cot-maps.js` (color, icon, and affiliation
+  maps) into the global context, referenced by the FTS CoT TCP Client function
+  node
 
 ### 3. Flow Import
 
