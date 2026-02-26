@@ -1,9 +1,13 @@
+<p align="center">
+  <img src="logo.png" alt="CrypTAK" width="120">
+</p>
+
 # CrypTAK
 
 CrypTAK adds AES-256-GCM content encryption to
 [Meshtastic](https://meshtastic.org/) LoRa mesh radio, bundled with a self-hosted
 [FreeTAKServer](https://github.com/FreeTAKTeam/FreeTAKServer) backend and an
-[ATAK-CIV](https://www.tak.gov/) plugin that ties it all together.
+[ATAK-CIV](https://www.tak.gov/) plugin that bridges the two.
 
 CrypTAK traffic is carried as standard Meshtastic packets, so it can be relayed
 by any Meshtastic node on the same channel — including existing community
@@ -111,6 +115,12 @@ See `firmware/README.md` for per-device flash and configuration procedures.
 
 ### 3. Plugin
 
+> **Note:** CrypTAK Plugin replaces the upstream
+> [Meshtastic ATAK Plugin](https://github.com/meshtastic/ATAK-Plugin). They
+> share the same Android package name and cannot be installed side by side.
+> Installing CrypTAK Plugin will upgrade/replace any existing Meshtastic Plugin
+> installation.
+
 ```bash
 cd plugin/
 
@@ -125,7 +135,9 @@ cd plugin/
 ../scripts/install-plugin.sh
 ```
 
-See `docs/hardware-builds.md` for device setup and ATAK-CIV installation.
+See `plugin/README.md` for the full settings reference, encryption setup, and
+key distribution. See `docs/hardware-builds.md` for device setup and ATAK-CIV
+installation.
 
 ### 4. Incident Tracker (optional)
 

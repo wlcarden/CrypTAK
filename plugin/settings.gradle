@@ -17,4 +17,4 @@ dependencyResolutionManagement {
 include ':models',
         ':libcodec2-android',
         ':app'
-rootProject.name = "Meshtastic Plugin"
+rootProject.name = "CrypTAK Plugin"

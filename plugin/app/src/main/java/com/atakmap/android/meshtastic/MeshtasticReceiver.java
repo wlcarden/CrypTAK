@@ -654,7 +654,7 @@ public class MeshtasticReceiver extends BroadcastReceiver implements CotServiceR
                     }
 
                     CotDetail takvDetail = new CotDetail("takv");
-                    takvDetail.setAttribute("platform", "Meshtastic Plugin");
+                    takvDetail.setAttribute("platform", "CrypTAK Plugin");
                     takvDetail.setAttribute("version", "\n----NodeInfo----\n" + ni.toString());
                     takvDetail.setAttribute("device", ni.getUser().getHwModelString());
                     takvDetail.setAttribute("os", "1");

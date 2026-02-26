@@ -22,13 +22,13 @@
             android:layout_marginBottom="16dp">
 
             <ImageView
-                android:id="@+id/meshtasticLogo"
+                android:id="@+id/cryptakLogo"
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:src="@drawable/meshtastic_logo"
+                android:src="@drawable/cryptak_logo"
                 android:scaleType="fitCenter"
                 android:background="?android:attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Meshtastic Logo - Tap to visit website" />
+                android:contentDescription="CrypTAK Logo" />
 
             <LinearLayout
                 android:layout_width="0dp"

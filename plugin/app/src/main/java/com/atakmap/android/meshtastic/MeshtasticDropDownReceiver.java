@@ -91,7 +91,7 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
     private final View mainView;
     private Button voiceMemoBtn, talk, refreshMetricsBtn;
     private ImageButton settingsBtn;
-    private ImageView meshtasticLogo;
+    private ImageView cryptakLogo;
     private Model model;
     public SpeechService speechService;
     private TextView tv;
@@ -169,8 +169,8 @@ public class MeshtasticDropDownReceiver extends DropDownReceiver implements
         settingsBtn.setOnClickListener(v -> openPluginPreferences());
 
         // Setup logo click to open Meshtastic website
-        meshtasticLogo = mainView.findViewById(R.id.meshtasticLogo);
-        meshtasticLogo.setOnClickListener(v -> openMeshtasticWebsite());
+        cryptakLogo = mainView.findViewById(R.id.cryptakLogo);
+        cryptakLogo.setOnClickListener(v -> openMeshtasticWebsite());
 
         voiceMemoBtn = mainView.findViewById(R.id.voiceMemoBtn);
         voiceMemoBtn.setOnClickListener(v -> {

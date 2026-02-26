@@ -1,214 +1,205 @@
-# Meshtastic ATAK Plugin
+# CrypTAK Plugin
 
-Official Meshtastic ATAK Plugin for sending Cursor on Target (CoT) events to IMeshService in the Meshtastic Android app.
+ATAK plugin that adds AES-256-GCM content encryption to Meshtastic LoRa mesh
+radio. Fork of the
+[Meshtastic ATAK Plugin](https://github.com/meshtastic/ATAK-Plugin) with
+application-layer encryption, epoch-based key rotation, QR key distribution,
+and FreeTAKServer relay integration.
 
-## Overview
+## Relationship to Meshtastic ATAK Plugin
 
-The Meshtastic ATAK Plugin enables seamless integration between the Android Team Awareness Kit (ATAK) and Meshtastic mesh networking devices. This plugin allows tactical teams to share position location information (PLI), chat messages, and other CoT events over Meshtastic's long-range, low-power mesh network.
+CrypTAK Plugin is a fork that shares the same Android package name
+(`com.atakmap.android.meshtastic.plugin`) and ATAK intent actions as the
+upstream Meshtastic ATAK Plugin. **They cannot be installed side by side.**
+Installing CrypTAK Plugin will replace any existing Meshtastic ATAK Plugin
+installation, and vice versa.
 
-## Features
+All upstream functionality (PLI, chat, file transfer, voice memos, external
+GPS, server relay) is preserved. CrypTAK adds:
 
-### Core Functionality
-- **Position Location Information (PLI)** - Share real-time location data between ATAK devices via Meshtastic
-- **Chat Integration** - Send and receive GeoChat messages through the mesh network
-- **File Transfer** - Transfer mission packages and files using fountain code encoding (requires Short_Turbo modem preset)
-- **Voice Memos** - Record speech-to-text messages and broadcast via Meshtastic
-- **External GPS Support** - Use Meshtastic device's GPS as external GPS source for ATAK
-- **Server Relay** - Forward CoT events between Meshtastic mesh and TAK servers
+- **AES-256-GCM encryption** of all outgoing CoT payloads before they reach
+  the Meshtastic radio
+- **Epoch-based key rotation** for forward secrecy (configurable 1h–24h
+  intervals)
+- **QR code key distribution** — display on one device, scan on another
+- **Data Package export** — share keys via `.zip` file transfer
+- **FreeTAKServer relay** — bridge encrypted mesh traffic to/from a TAK server
+  over WireGuard VPN
 
-### Architecture Improvements (v1.1.15+)
-The plugin has been refactored for better maintainability and performance:
-- Modular architecture with separated concerns
-- Centralized service management
-- Improved error handling and logging
-- Fountain code encoding for reliable large data transfers over lossy networks
-- Thread-safe singleton patterns for shared resources
+See [ENCRYPTION.md](ENCRYPTION.md) for the wire format, key generation,
+rotation mechanism, and security considerations.
 
-## Installation
+## Prerequisites
 
-1. Install the Meshtastic Android app from [Google Play](https://play.google.com/store/apps/details?id=com.geeksville.mesh)
-2. Install ATAK-CIV from [tak.gov](https://tak.gov)
-3. Download the latest Meshtastic ATAK Plugin APK from [Releases](https://github.com/meshtastic/ATAK-Plugin/releases)
-4. Install the plugin APK on your Android device
-5. Launch ATAK and load the Meshtastic plugin from the plugins menu
-<img width="1080" height="2400" alt="image" src="https://github.com/user-attachments/assets/5f58a101-7293-476d-94a1-0e98925f2402" />
+| Requirement                       | Source                                                                                   |
+| --------------------------------- | ---------------------------------------------------------------------------------------- |
+| ATAK-CIV                          | [tak.gov](https://www.tak.gov/) or [ATAK.app](https://www.atak.app/)                     |
+| ATAK Plugin SDK (`pluginsdk.zip`) | [TAK Product Center](https://github.com/TAK-Product-Center/atak-civ) — extract to `sdk/` |
+| Meshtastic Android app            | [Google Play](https://play.google.com/store/apps/details?id=com.geeksville.mesh)         |
+| Meshtastic hardware               | RAK WisBlock (RAK4631) or LilyGo T-Beam — 868/915 MHz                                    |
 
+## Building
+
+```bash
+cd plugin/
+
+# Place ATAK Plugin SDK files first:
+#   sdk/main.jar
+#   sdk/android_keystore
+#   sdk/proguard-release-keep.txt
+
+./gradlew assembleCivDebug
+
+# Output APK: app/build/outputs/apk/civ/debug/
+```
+
+Install to a connected device:
+
+```bash
+../scripts/install-plugin.sh
+```
 
 ## Configuration
 
-### Plugin Settings
+Access plugin settings via: **Settings > Tool Preferences > Specific Tool
+Preferences > CrypTAK Preferences**
 
-Access plugin settings via: **Settings → Tool Preferences → Specific Tool Preferences → Meshtastic Preferences**
+### Encryption
 
-#### Mesh Settings
-- **Meshtastic Channel Index** - Select the Meshtastic channel to use for ATAK traffic (0-7, default: 0)
-- **Filter by Channel Index** - Only receive messages from the specified channel (default: off)
-- **Hop Limit** - Maximum number of hops for outgoing messages (1-7, default: 3)
-- **Request ACK** - Request delivery acknowledgment, increases channel usage (default: off)
+| Setting                     | Default | Description                                          |
+| --------------------------- | ------- | ---------------------------------------------------- |
+| Enable App-Layer Encryption | off     | Encrypt all outgoing CoT with AES-256-GCM            |
+| Pre-Shared Key (PSK)        | —       | 256-bit key; generate with `openssl rand -base64 32` |
+| Enable Epoch Rotation       | off     | Rotate key on a schedule for forward secrecy         |
+| Epoch Rotation Interval     | 6h      | 1h, 2h, 4h, 6h, 12h, or 24h                          |
 
-#### PLI & Reporting
-- **Limit PLI Reporting Rate** - Reduce PLI frequency to conserve mesh bandwidth (default: on)
-- **PLI Reporting Interval** - How often to send position updates (30s to 30min, default: 5min)
-- **Only Send PLI and Chat** - Use optimized protobuf format, recommended for Meshtastic (default: off)
-- **Send Read/Delivery Receipts** - Send delivery and read receipts for chat messages (default: on)
+Key distribution options (from the encryption settings screen):
 
-#### Display Settings
-- **Show Meshtastic Devices** - Display all Meshtastic nodes as markers on the map (default: on)
-- **Hide Devices Without GPS** - Don't show nodes reporting 0,0 coordinates (default: off)
-- **Hide Local Node** - Don't show your own Meshtastic device on map (default: off)
+- **QR code** — display on one device, scan with another's camera
+- **Data Package** — export a `.zip` to share via side-channel
+- **Manual entry** — paste a Base64-encoded key
 
-#### Server Relay
-- **Relay to Server** - Forward messages from Meshtastic to connected TAK servers (default: off)
-- **Relay from Server** - Forward PLI and chat from TAK servers to Meshtastic (default: off)
+### Mesh Settings
 
-#### File Transfer
-- **Enable File Transfer** - Allow sending files via Meshtastic, requires Short_Turbo preset, max 56KB (default: off)
+| Setting                 | Default | Description                               |
+| ----------------------- | ------- | ----------------------------------------- |
+| Channel Index           | 0       | Meshtastic channel for ATAK traffic (0–7) |
+| Filter by Channel Index | off     | Only receive from specified channel       |
+| Hop Limit               | 3       | Max hops for outgoing messages (1–7)      |
+| Request ACK             | off     | Request delivery acknowledgment           |
 
-#### Audio & Voice
-- **Text to Speech** - Read incoming Meshtastic text messages aloud (default: off)
-- **PTT KeyCode** - Hardware button code for voice memo recording (default: 79)
+### PLI & Reporting
 
-#### GPS Settings
-- **Use Meshtastic GPS** - Use Meshtastic device GPS as ATAK's external GPS source (default: off)
+| Setting                     | Default | Description                                |
+| --------------------------- | ------- | ------------------------------------------ |
+| Limit PLI Reporting Rate    | on      | Reduce PLI frequency to conserve bandwidth |
+| PLI Reporting Interval      | 5min    | Position update frequency (30s–30min)      |
+| Only Send PLI and Chat      | off     | Optimized protobuf format                  |
+| Send Read/Delivery Receipts | on      | Chat delivery and read receipts            |
 
-#### Application-Layer Encryption
-- **Enable App-Layer Encryption** - Encrypt all outgoing CoT payloads with AES-256-GCM before they reach the Meshtastic radio (default: off)
-- **Pre-Shared Key (PSK)** - 256-bit key shared across the team; generate with `openssl rand -base64 32`
-- **Enable Epoch Rotation** - Automatically rotate the encryption key on a configurable interval for forward secrecy (default: off)
-- **Epoch Rotation Interval** - Key rotation period: 1h, 2h, 4h, 6h (default), 12h, or 24h
+### Display
 
-See [ENCRYPTION.md](ENCRYPTION.md) for full documentation on key generation, distribution, wire format, and security considerations.
+| Setting                  | Default | Description                       |
+| ------------------------ | ------- | --------------------------------- |
+| Show Meshtastic Devices  | on      | Display mesh nodes as map markers |
+| Hide Devices Without GPS | off     | Don't show nodes at 0,0           |
+| Hide Local Node          | off     | Don't show your own device        |
 
-## Using Meshtastic as External GPS
+### Server Relay
 
-To use your Meshtastic device as ATAK's GPS source:
+| Setting           | Default | Description                         |
+| ----------------- | ------- | ----------------------------------- |
+| Relay to Server   | off     | Forward mesh messages to TAK server |
+| Relay from Server | off     | Forward TAK server PLI/chat to mesh |
 
-### Requirements
-- Meshtastic device with GPS receiver (e.g., LILYGO T-Beam)
-- GPS enabled and configured on Meshtastic device
-- Position packets configured in Meshtastic settings
+### File Transfer
 
-### ATAK Configuration
-1. Navigate to **Settings → Callsign and Device Preferences → Device Preferences → GPS Preferences**
-2. Set **GPS Option** to "Ignore internal GPS / Use External or Network GPS Only"
-3. Enable **Use Meshtastic GPS** in plugin settings
-4. Disable **Show Meshtastic Devices** to avoid duplicate markers
+| Setting              | Default | Description                                              |
+| -------------------- | ------- | -------------------------------------------------------- |
+| Enable File Transfer | off     | Send files via Meshtastic (Short_Turbo preset, max 56KB) |
 
-## Voice Memo Feature
+### Audio & Voice
 
-The Voice Memo tool allows hands-free message transmission:
+| Setting        | Default | Description                    |
+| -------------- | ------- | ------------------------------ |
+| Text to Speech | off     | Read incoming messages aloud   |
+| PTT KeyCode    | 79      | Hardware button for voice memo |
 
-1. Access via **Meshtastic Plugin Tool Menu → Voice Memo**
-2. Press and hold configured PTT button to record
-3. Release to convert speech to text and transmit
-4. Recipients with TTS enabled will hear the message
+### External GPS
 
-**Note:** Currently supports English only, powered by Vosk speech recognition library.
+| Setting            | Default | Description                     |
+| ------------------ | ------- | ------------------------------- |
+| Use Meshtastic GPS | off     | Use device GPS as ATAK's source |
 
-## Technical Details
+To use external GPS: **Settings > Callsign and Device Preferences > Device
+Preferences > GPS Preferences** — set GPS Option to "Ignore internal GPS / Use
+External or Network GPS Only", enable **Use Meshtastic GPS** in plugin
+settings, and disable **Show Meshtastic Devices** to avoid duplicate markers.
 
-### Architecture Components
+## Architecture
 
-#### Core Services
-- **MeshServiceManager** - Handles connection and communication with Meshtastic Android app
-- **CotEventProcessor** - Processes and converts between CoT and Meshtastic formats
-- **FountainChunkManager** - Manages fountain code encoding for large data transfers
-- **NotificationHelper** - Handles user notifications for file transfers
-
-#### Data Flow
-1. CoT events from ATAK are intercepted by the plugin
-2. Events are processed and converted to Meshtastic protobuf format
-3. Large messages (>231 bytes) are encoded using fountain codes (LT codes)
-4. Packets are sent via IMeshService to connected Meshtastic device
-5. Incoming Meshtastic packets are converted back to CoT format
-6. CoT events are injected into ATAK's event dispatcher
-
-### Message Types Supported
-- Position Location Information (PLI)
-- GeoChat messages (All Chat Rooms and Direct Messages)
-- Sensor data from Meshtastic nodes
-- Generic CoT events (with EXI compression)
-
-### Performance Optimizations
-- Fountain code encoding for reliable large payload transfer over lossy networks
-- EXI compression for generic CoT events
-- Optimized protobuf for PLI and chat messages
-- Configurable hop limits for network reach control
-
-## Building from Source
-
-### Requirements
-- Android Studio Arctic Fox or later
-- Android SDK 33
-- Android NDK
-- ATAK SDK (CIV or MIL)
-
-### Build Steps
-```bash
-# Clone the repository
-git clone --recurse-submodules https://github.com/meshtastic/ATAK-Plugin.git
-cd ATAK-Plugin
-
-# Configure local.properties with SDK paths and signing keys
-cp local.properties.example local.properties
-# Edit local.properties with your configuration
-
-# Build the plugin
-./gradlew assembleCivDebug
-
-# Output APK will be in app/build/outputs/apk/
+```
+ATAK CoT event
+    │
+    ▼
+CotEventProcessor ─── encryption enabled? ──► AES-256-GCM encrypt
+    │                                              │
+    ▼                                              ▼
+Meshtastic protobuf ◄─────────────────────── encrypted payload
+    │
+    ▼
+IMeshService (Meshtastic Android app)
+    │
+    ▼
+LoRa radio ──► mesh relay ──► destination radio
+    │
+    ▼
+IMeshService ──► CotEventProcessor ──► AES-256-GCM decrypt ──► ATAK
 ```
 
-## Video Walkthrough
+### Core Services
 
-For a comprehensive demonstration of features and setup, watch our [video walkthrough](https://www.youtube.com/watch?v=7cn4ofiSd0A).
+| Class                  | Role                                                 |
+| ---------------------- | ---------------------------------------------------- |
+| `MeshServiceManager`   | Binds to Meshtastic Android app's `IMeshService`     |
+| `CotEventProcessor`    | Converts between CoT XML and Meshtastic protobuf     |
+| `FountainChunkManager` | Fountain code (LT code) encoding for large transfers |
+| `NotificationHelper`   | User notifications for file transfers                |
+
+### Message Types
+
+- Position Location Information (PLI)
+- GeoChat (All Chat and Direct Messages)
+- Sensor data from Meshtastic nodes
+- Generic CoT events (EXI-compressed)
 
 ## Troubleshooting
 
-### Common Issues
-
 **Plugin not connecting to Meshtastic:**
+
 - Ensure Meshtastic app is installed and running
 - Check that Meshtastic device is paired and connected
 - Verify plugin has necessary permissions
 
 **Messages not being received:**
+
 - Confirm channel settings match between devices
 - Check hop limit is sufficient for your network
 - Verify nodes are within radio range
 
-**GPS not working:**
-- Ensure Meshtastic device has GPS fix
-- Verify position packets are enabled in Meshtastic
-- Check ATAK GPS settings are configured for external GPS
+**Encryption not working:**
 
-## Contributing
+- Confirm all devices share the same PSK
+- If epoch rotation is enabled, ensure device clocks are synchronized
+- Check ATAK logcat for `CrypTAK` tag entries
 
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+## Upstream
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
-
-## Support
-
-- **Issues:** [GitHub Issues](https://github.com/meshtastic/ATAK-Plugin/issues)
-- **Discussions:** [Meshtastic Discord](https://discord.gg/meshtastic)
-- **Documentation:** [Meshtastic Docs](https://meshtastic.org)
+This plugin tracks the upstream
+[Meshtastic ATAK Plugin](https://github.com/meshtastic/ATAK-Plugin). Upstream
+features and bug fixes can be merged as needed. CrypTAK-specific changes live
+in the encryption, key distribution, and server relay modules.
 
 ## License
 
 See the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- ATAK development team at TAK.gov
-- Meshtastic community and contributors
-- Vosk speech recognition library
-- EXIficient compression library
-
-## Version History
-
-See [CHANGELOG.md](CHANGELOG.md) for version history and release notes.
