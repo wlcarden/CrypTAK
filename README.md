@@ -57,11 +57,13 @@ hold the shared key.
 
 ```
 CrypTAK/
-├── plugin/     ATAK plugin — AES-256-GCM encryption, Meshtastic ↔ TAK bridge
-├── server/     Self-hosted stack — FreeTAKServer, headscale VPN, Authelia, nginx
-├── firmware/   Meshtastic node configuration and firmware files
-├── docs/       Deployment runbook, hardware builds guide, network architecture
-└── scripts/    Build, install, SDK setup, and signing verification scripts
+├── plugin/                    ATAK plugin — AES-256-GCM encryption, Meshtastic ↔ TAK bridge
+├── server/                    Self-hosted stack — FreeTAKServer, headscale VPN, Authelia, nginx
+│   ├── incident-tracker/      Automated incident monitoring service (optional)
+│   └── nodered/               Node-RED flow export for TAK WebMap bridge
+├── firmware/                  Meshtastic node configuration and firmware files
+├── docs/                      Deployment runbook, hardware builds guide, network architecture
+└── scripts/                   Build, install, SDK setup, and signing verification scripts
 ```
 
 ---
@@ -124,6 +126,22 @@ cd plugin/
 ```
 
 See `docs/hardware-builds.md` for device setup and ATAK-CIV installation.
+
+### 4. Incident Tracker (optional)
+
+Polls configurable data sources (RSS, weather, traffic, seismic, open data APIs),
+filters by geographic area and keywords, and injects CoT markers into
+FreeTAKServer for display on ATAK clients and web maps.
+
+```bash
+cd server/incident-tracker/
+cp config.yaml config.local.yaml
+# Edit config.local.yaml — set geo_filter, enable sources, define categories
+docker compose --profile incident-tracker up -d
+```
+
+See `server/incident-tracker/README.md` for source configuration, category
+mapping, and AI analysis setup.
 
 ---
 

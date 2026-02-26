@@ -1,0 +1,415 @@
+[
+    {
+        "id": "tab1",
+        "type": "tab",
+        "label": "FreeTAK Webmap",
+        "disabled": false
+    },
+    {
+        "id": "inj_cot",
+        "type": "inject",
+        "z": "tab1",
+        "name": "Connect / Keep-alive (15s)",
+        "props": [],
+        "repeat": "15",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "2",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 170,
+        "y": 100,
+        "wires": [
+            [
+                "fn_cot"
+            ]
+        ]
+    },
+    {
+        "id": "fn_cot",
+        "type": "function",
+        "z": "tab1",
+        "name": "FTS CoT TCP Client",
+        "func": "var net     = global.get('net');\nvar socket  = context.get('socket');\nvar kaTimer = context.get('kaTimer');\n\nif (socket && !socket.destroyed) {\n    return null;\n}\n\nif (kaTimer) { clearInterval(kaTimer); context.set('kaTimer', null); }\n\nvar colorMap = {\n    'h': '#FF0000',   's': '#FFA500',   'n': '#00AA00',\n    'u': '#CCCC00',   'f': '#0066FF',\n    'a': '#6699CC',   'p': '#888888',\n    'j': '#FF0000',   'k': '#FF0000',   'o': 'white'\n};\n\nvar iconMap = {\n    'G-U-C-V': 'fa-exclamation-circle',\n    'G-I-i-l': 'fa-exclamation-triangle',\n    'G-O-E':   'fa-crosshairs',\n    'G-I-R':   'fa-eye',\n    'G-I-i-h': 'fa-plus-square',\n    'G-I-i-f': 'fa-fire',\n    'G-E-N':   'fa-bolt',\n    'G-I-i-d': 'fa-car',\n    'G-O-S':   'fa-search',\n    'G-I-i-c': 'fa-bullhorn',\n    'G-U-C':   'fa-question-circle',\n    'A':       'fa-plane',\n    'S':       'fa-ship'\n};\n\nfunction getIcon(parts) {\n    for (var len = parts.length - 2; len >= 1; len--) {\n        var key = parts.slice(2, 2 + len).join('-');\n        if (iconMap[key]) return iconMap[key];\n    }\n    return 'fa-question-circle';\n}\n\nfunction calcOpacity(startStr, staleStr) {\n    if (!startStr || !staleStr) return 1.0;\n    var startMs = new Date(startStr).getTime();\n    var staleMs = new Date(staleStr).getTime();\n    var nowMs   = Date.now();\n    if (isNaN(startMs) || isNaN(staleMs)) return 1.0;\n    if (nowMs < staleMs) return 1.0;\n    var fadeDuration = staleMs - startMs;\n    if (fadeDuration <= 0) return 0;\n    var fadeEnd = staleMs + fadeDuration;\n    if (nowMs >= fadeEnd) return 0;\n    return 1.0 - ((nowMs - staleMs) / fadeDuration);\n}\n\nfunction parseRemarks(raw) {\n    var parts = (raw || '').split(' | ');\n    return {\n        summary:  parts[0] || '',\n        location: parts[1] || '',\n        source:   parts[2] || '',\n        severity: parts[3] || '',\n        url:      parts[4] || ''\n    };\n}\n\nfunction buildTooltip(callsign, r) {\n    return callsign;\n}\n\nfunction buildPopup(callsign, r, color) {\n    var html = '<div style=\"font-family:sans-serif;font-size:13px;max-width:300px;\">';\n    if (r.location) html += '<b>' + r.location + '</b><br>';\n    if (r.summary)  html += r.summary + '<br>';\n    if (r.source || r.severity) {\n        html += '<span style=\"color:#888;font-size:11px;\">';\n        var meta = [];\n        if (r.source)   meta.push(r.source);\n        if (r.severity) meta.push(r.severity);\n        html += meta.join(' &middot; ');\n        html += '</span>';\n    }\n    if (r.url) {\n        html += '<br><a href=\"' + r.url + '\" target=\"_blank\" '\n             +  'style=\"color:#4A90D9;font-size:12px;\">View details &rarr;</a>';\n    }\n    html += '</div>';\n    return html;\n}\n\nfunction makeSA(uid) {\n    var now   = new Date().toISOString();\n    var stale = new Date(Date.now() + 300000).toISOString();\n    return '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>'\n        + '<event version=\"2.0\" uid=\"' + uid + '\" type=\"a-f-G-U-C\"'\n        + ' time=\"' + now + '\" start=\"' + now + '\" stale=\"' + stale + '\" how=\"m-g\">'\n        + '<point lat=\"0\" lon=\"0\" hae=\"0\" ce=\"9999999\" le=\"9999999\"/>'\n        + '<detail><contact endpoint=\"*:-1:stcp\" callsign=\"WebMap\"/></detail>'\n        + '</event>';\n}\n\nfunction connectToFTS() {\n    var existing = context.get('socket');\n    if (existing && !existing.destroyed) return;\n\n    // Unique UID per connection to avoid FTS zombie fd collision\n    var connId = context.get('connId') || 0;\n    connId++;\n    context.set('connId', connId);\n    var myUid = 'WebMap-NR-' + connId;\n\n    var s = new net.Socket();\n    var buf = '';\n\n    s.connect(8087, '192.168.50.120', function() {\n        node.log('FTS connected as ' + myUid);\n        context.set('retryCount', 0);\n        s.write(makeSA(myUid));\n        var timer = setInterval(function() {\n            if (s && !s.destroyed) {\n                s.write(makeSA(myUid));\n            } else {\n                clearInterval(timer);\n                context.set('kaTimer', null);\n            }\n        }, 30000);\n        context.set('kaTimer', timer);\n    });\n\n    s.on('data', function(data) {\n        buf += data.toString();\n        var endTag = '</event>';\n        var idx;\n        while ((idx = buf.indexOf(endTag)) !== -1) {\n            var xml = buf.substring(0, idx + endTag.length);\n            buf = buf.substring(idx + endTag.length);\n            try {\n                var typeM = xml.match(/\\btype=\"([^\"]+)\"/);\n                if (!typeM || !typeM[1].startsWith('a-')) continue;\n\n                var uidM = xml.match(/\\buid=\"([^\"]+)\"/);\n                if (!uidM || uidM[1].startsWith('WebMap-NR-')) continue;\n\n                var latM = xml.match(/\\blat=\"([^\"]+)\"/);\n                var lonM = xml.match(/\\blon=\"([^\"]+)\"/);\n                if (!latM || !lonM) continue;\n\n                var lat = parseFloat(latM[1]);\n                var lon = parseFloat(lonM[1]);\n                if (lat === 0 && lon === 0) continue;\n\n                var csM = xml.match(/callsign=\"([^\"]+)\"/);\n                var cs  = csM ? csM[1] : (uidM ? uidM[1] : 'Unknown');\n                if (cs === 'WebMap') continue;\n\n                var parts = typeM[1].split('-');\n                var color = colorMap[parts[1] || 'u'] || '#888888';\n                var icon  = getIcon(parts);\n\n                var remM = xml.match(/<remarks[^>]*>([^<]*)<\\/remarks>/);\n                var r = parseRemarks(remM ? remM[1] : '');\n\n                var startM = xml.match(/\\bstart=\"([^\"]+)\"/);\n                var staleM = xml.match(/\\bstale=\"([^\"]+)\"/);\n                var opacity = calcOpacity(\n                    startM ? startM[1] : null,\n                    staleM ? staleM[1] : null\n                );\n\n                if (opacity <= 0.05) {\n                    var cache = flow.get('takMarkers') || {};\n                    delete cache[cs];\n                    flow.set('takMarkers', cache);\n                    node.send({ payload: { name: cs, deleted: true } });\n                    continue;\n                }\n\n                var marker = {\n                    name:      cs,\n                    lat:       lat,\n                    lon:       lon,\n                    layer:     'TAK',\n                    icon:      icon,\n                    iconColor: color,\n                    tooltip:   buildTooltip(cs, r),\n                    popup:     buildPopup(cs, r, color),\n                    opacity:   Math.round(opacity * 100) / 100\n                };\n                var cache = flow.get('takMarkers') || {};\n                cache[cs] = marker;\n                flow.set('takMarkers', cache);\n                node.send({ payload: marker });\n            } catch(e) { node.warn('CoT parse error: ' + e.message); }\n        }\n    });\n\n    s.on('error', function(e) {\n        node.warn('FTS socket error: ' + e.message);\n        var t = context.get('kaTimer');\n        if (t) { clearInterval(t); context.set('kaTimer', null); }\n        s.destroy();\n        context.set('socket', null);\n    });\n\n    s.on('close', function() {\n        node.warn('FTS socket closed (' + myUid + ')');\n        var t = context.get('kaTimer');\n        if (t) { clearInterval(t); context.set('kaTimer', null); }\n        context.set('socket', null);\n        var retries = context.get('retryCount') || 0;\n        if (retries < 5) {\n            context.set('retryCount', retries + 1);\n            var delay = (retries + 1) * 2000;\n            node.warn('Retry ' + (retries + 1) + '/5 in ' + (delay/1000) + 's');\n            setTimeout(function() { connectToFTS(); }, delay);\n        } else {\n            node.warn('FTS: 5 retries exhausted, waiting for inject cycle');\n            context.set('retryCount', 0);\n        }\n    });\n\n    context.set('socket', s);\n}\n\nconnectToFTS();\nreturn null;",
+        "finalize": "\nvar s = context.get('socket');  if (s) s.destroy();\nvar t = context.get('kaTimer'); if (t) clearInterval(t);\n",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 420,
+        "y": 100,
+        "wires": [
+            [
+                "wmap1"
+            ]
+        ]
+    },
+    {
+        "id": "inj_states",
+        "type": "inject",
+        "z": "tab1",
+        "name": "Load US States (once)",
+        "props": [],
+        "repeat": "3000",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "3",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 160,
+        "y": 200,
+        "wires": [
+            [
+                "http_states"
+            ]
+        ]
+    },
+    {
+        "id": "http_states",
+        "type": "http request",
+        "z": "tab1",
+        "name": "Fetch States GeoJSON",
+        "method": "GET",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 380,
+        "y": 200,
+        "wires": [
+            [
+                "fmt_states"
+            ]
+        ]
+    },
+    {
+        "id": "fmt_states",
+        "type": "function",
+        "z": "tab1",
+        "name": "Format US States",
+        "func": "\nif (!msg.payload || !msg.payload.features) { node.warn('States GeoJSON failed'); return null; }\nmsg.payload = {\n    name: \"us_states\", layer: \"US States\",\n    geojson: msg.payload, color: \"#444444\", weight: 1.5, fill: false, fillOpacity: 0.0\n};\nreturn msg;\n",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 590,
+        "y": 200,
+        "wires": [
+            [
+                "wmap1"
+            ]
+        ]
+    },
+    {
+        "id": "inj_counties",
+        "type": "inject",
+        "z": "tab1",
+        "name": "Load US Counties (once)",
+        "props": [],
+        "repeat": "3000",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "6",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 160,
+        "y": 260,
+        "wires": [
+            [
+                "http_counties"
+            ]
+        ]
+    },
+    {
+        "id": "http_counties",
+        "type": "http request",
+        "z": "tab1",
+        "name": "Fetch Counties GeoJSON",
+        "method": "GET",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 385,
+        "y": 260,
+        "wires": [
+            [
+                "fmt_counties"
+            ]
+        ]
+    },
+    {
+        "id": "fmt_counties",
+        "type": "function",
+        "z": "tab1",
+        "name": "Format US Counties",
+        "func": "\nif (!msg.payload || !msg.payload.features) { node.warn('Counties GeoJSON failed'); return null; }\nmsg.payload = {\n    name: \"us_counties\", layer: \"US Counties\",\n    geojson: msg.payload, color: \"#888888\", weight: 0.7, fill: false, fillOpacity: 0.0\n};\nreturn msg;\n",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 595,
+        "y": 260,
+        "wires": [
+            [
+                "wmap1"
+            ]
+        ]
+    },
+    {
+        "id": "inj_noaa",
+        "type": "inject",
+        "z": "tab1",
+        "name": "Poll NOAA (5 min)",
+        "props": [],
+        "repeat": "300",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "9",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 150,
+        "y": 360,
+        "wires": [
+            [
+                "setup_noaa"
+            ]
+        ]
+    },
+    {
+        "id": "setup_noaa",
+        "type": "function",
+        "z": "tab1",
+        "name": "Set NOAA headers",
+        "func": "\nmsg.headers = {\n    \"User-Agent\": \"FreeTAK-Webmap/1.0 (meshtastic-atak-mesh)\",\n    \"Accept\": \"application/geo+json\"\n};\nreturn msg;\n",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 350,
+        "y": 360,
+        "wires": [
+            [
+                "http_noaa"
+            ]
+        ]
+    },
+    {
+        "id": "http_noaa",
+        "type": "http request",
+        "z": "tab1",
+        "name": "Fetch NOAA Alerts",
+        "method": "GET",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "https://api.weather.gov/alerts/active?status=actual&message_type=alert",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 560,
+        "y": 360,
+        "wires": [
+            [
+                "fmt_noaa"
+            ]
+        ]
+    },
+    {
+        "id": "fmt_noaa",
+        "type": "function",
+        "z": "tab1",
+        "name": "Format NOAA Alerts",
+        "func": "\nvar data = msg.payload;\nif (!data || !data.features) { node.warn('NOAA API failed: ' + JSON.stringify(msg.statusCode)); return null; }\n\nvar now = Date.now();\nvar sevStyle = {\n    \"Extreme\":  {\"stroke\": \"#CC0000\", \"fill-color\": \"#FF0000\", \"fill-opacity\": 0.40},\n    \"Severe\":   {\"stroke\": \"#CC4400\", \"fill-color\": \"#FF6600\", \"fill-opacity\": 0.30},\n    \"Moderate\": {\"stroke\": \"#AAAA00\", \"fill-color\": \"#FFEE00\", \"fill-opacity\": 0.22},\n    \"Minor\":    {\"stroke\": \"#0055AA\", \"fill-color\": \"#3399FF\", \"fill-opacity\": 0.15},\n    \"Unknown\":  {\"stroke\": \"#555555\", \"fill-color\": \"#999999\", \"fill-opacity\": 0.10}\n};\n\nvar features = [];\ndata.features.forEach(function(f) {\n    if (!f.geometry) return;\n    if (f.properties.expires && new Date(f.properties.expires).getTime() < now) return;\n    var sev = f.properties.severity || \"Unknown\";\n    var sp  = sevStyle[sev] || sevStyle[\"Unknown\"];\n    var feat = JSON.parse(JSON.stringify(f));\n    Object.assign(feat.properties, sp);\n    feat.properties.name = feat.properties.event || \"Alert\";\n    features.push(feat);\n});\n\nnode.log(\"NOAA: \" + features.length + \" active alerts\");\nmsg.payload = {\n    name: \"noaa_alerts\", layer: \"NOAA Alerts\",\n    geojson: {type: \"FeatureCollection\", features: features}, weight: 2\n};\nreturn msg;\n",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 760,
+        "y": 360,
+        "wires": [
+            [
+                "wmap1"
+            ]
+        ]
+    },
+    {
+        "id": "mqtt_broker1",
+        "type": "mqtt-broker",
+        "name": "Meshtastic MQTT",
+        "broker": "192.168.50.120",
+        "port": "1883",
+        "clientid": "nodered-mesh-map",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthRetain": "false",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closeRetain": "false",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willRetain": "false",
+        "willPayload": "",
+        "willMsg": {},
+        "sessionExpiry": ""
+    },
+    {
+        "id": "inj_owned",
+        "type": "inject",
+        "z": "tab1",
+        "name": "Load Owned Nodes (once)",
+        "props": [],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "1",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 170,
+        "y": 480,
+        "wires": [
+            [
+                "fn_owned"
+            ]
+        ]
+    },
+    {
+        "id": "fn_owned",
+        "type": "function",
+        "z": "tab1",
+        "name": "Mesh Node Whitelist",
+        "func": "\n// \u2500\u2500 Owned Meshtastic nodes whitelist \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n// Add your nodes as '!hexid': 'display name'\n// Node hex ID shown in Meshtastic app: Radio Config \u2192 User \u2192 Node ID\nvar ownedNodes = {\n    '!55c6ddbc': 'T-Beam',\n};\nflow.set('meshOwnedNodes', ownedNodes);\nnode.log('Mesh whitelist loaded: ' + Object.keys(ownedNodes).length + ' owned nodes');\nreturn null;\n",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 390,
+        "y": 480,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "mqtt_mesh",
+        "type": "mqtt in",
+        "z": "tab1",
+        "name": "Meshtastic JSON Topics",
+        "topic": "msh/+/2/json/#",
+        "qos": "0",
+        "datatype": "json",
+        "broker": "mqtt_broker1",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 170,
+        "y": 560,
+        "wires": [
+            [
+                "fn_mesh"
+            ]
+        ]
+    },
+    {
+        "id": "fn_mesh",
+        "type": "function",
+        "z": "tab1",
+        "name": "Parse Mesh Positions",
+        "func": "\nif (msg.topic.indexOf('/json/') === -1) return null;\n\nvar payload = msg.payload;\nif (!payload || !payload.from) return null;\n\nvar nodeId   = '!' + payload.from.toString(16).padStart(8, '0');\nvar msgType  = payload.type;\nvar registry = flow.get('meshRegistry') || {};\nregistry[nodeId] = registry[nodeId] || { id: nodeId };\n\nif (msgType === 'nodeinfo' && payload.payload) {\n    var info = payload.payload;\n    registry[nodeId].name = info.longname || info.shortname || nodeId;\n    flow.set('meshRegistry', registry);\n    return null;\n}\n\nif (msgType === 'position' && payload.payload) {\n    var pos = payload.payload;\n    var lat = (pos.latitude_i  || 0) / 1e7;\n    var lon = (pos.longitude_i || 0) / 1e7;\n    if (lat === 0 && lon === 0) return null;\n\n    registry[nodeId].lat = lat;\n    registry[nodeId].lon = lon;\n    flow.set('meshRegistry', registry);\n\n    var ownedNodes = flow.get('meshOwnedNodes') || {};\n    var isOwned    = ownedNodes.hasOwnProperty(nodeId);\n    var name       = ownedNodes[nodeId] || registry[nodeId].name || nodeId;\n\n    return { payload: {\n        name:      name,\n        lat:       lat,\n        lon:       lon,\n        layer:     'Meshtastic',\n        icon:      'fa-dot-circle-o',\n        iconColor: isOwned ? 'blue' : 'green',\n        tooltip:   name + ' (' + nodeId + ')'\n    }};\n}\n\nreturn null;\n",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 390,
+        "y": 560,
+        "wires": [
+            [
+                "wmap1"
+            ]
+        ]
+    },
+    {
+        "id": "wmap1",
+        "type": "worldmap",
+        "z": "tab1",
+        "name": "TAK Map",
+        "lat": "38.87",
+        "lon": "-77.30",
+        "zoom": "11",
+        "layer": "OSM",
+        "cluster": "",
+        "maxage": "",
+        "usermenu": "show",
+        "layers": "show",
+        "panit": "false",
+        "panlock": "false",
+        "zoomlock": "false",
+        "hiderightclick": "false",
+        "coords": "deg",
+        "showgrid": "false",
+        "allowFileDrop": "false",
+        "path": "/tak-map",
+        "overlist": "DR,DN,RA,MG,EX,PI,CH",
+        "maplist": "OSMC,EsriS,EsriT,OpTop",
+        "mapname": "",
+        "mapurl": "",
+        "mapopt": "",
+        "mapwms": false,
+        "x": 820,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "fn_replay",
+        "type": "function",
+        "z": "tab1",
+        "name": "Replay Cached Markers",
+        "func": "// Replay all cached TAK markers to the worldmap\nvar cache = flow.get('takMarkers') || {};\nvar keys = Object.keys(cache);\nif (keys.length === 0) return null;\n\nvar msgs = [];\nfor (var i = 0; i < keys.length; i++) {\n    msgs.push({ payload: cache[keys[i]] });\n}\nnode.log('Replaying ' + keys.length + ' cached markers');\nreturn [msgs];",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 590,
+        "y": 140,
+        "wires": [
+            [
+                "wmap1"
+            ]
+        ]
+    },
+    {
+        "id": "inj_replay",
+        "type": "inject",
+        "z": "tab1",
+        "name": "Replay on connect (15s)",
+        "props": [],
+        "repeat": "15",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "5",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 170,
+        "y": 140,
+        "wires": [
+            [
+                "fn_replay"
+            ]
+        ]
+    }
+]

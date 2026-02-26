@@ -1,0 +1,188 @@
+# CrypTAK Incident Tracker — Configuration
+#
+# This file controls what the incident tracker monitors, how it filters,
+# and how incidents appear on the TAK map.
+#
+# For local/dev testing, create config.local.yaml in this directory
+# (gitignored). It will be loaded automatically instead of this file.
+#
+# After editing, restart the service:
+#   docker compose --profile incident-tracker restart incident-tracker
+
+# ── Geographic Area of Interest ──────────────────────────────────────────────
+# Incidents outside this area are discarded. Required.
+geo_filter:
+  center_lat: 0.0               # ** SET YOUR LOCATION **
+  center_lon: 0.0
+  radius_km: 100
+  # Bounding box (overrides center+radius if set):
+  # bbox: [south_lat, west_lon, north_lat, east_lon]
+
+# ── Polling ──────────────────────────────────────────────────────────────────
+poll_interval_seconds: 300       # 5 minutes
+
+# ── Deduplication ────────────────────────────────────────────────────────────
+dedup_window_hours: 24
+
+# ── FTS Connection ───────────────────────────────────────────────────────────
+# Docker hostname within the taknet network. Change if running outside Docker.
+fts_host: freetakserver
+fts_port: 8087
+
+# ── Nominatim Geocoder ───────────────────────────────────────────────────────
+# User-Agent is required by Nominatim's usage policy.
+nominatim_user_agent: "CrypTAK-IncidentTracker/1.0"
+
+# ── Callsign Prefix ─────────────────────────────────────────────────────────
+# Prefix for marker callsigns on the TAK map (e.g. "IT violent_crime").
+callsign_prefix: "IT"
+
+# ── Display Timezone ───────────────────────────────────────────────────
+# IANA timezone for callsign timestamps on the map (e.g. "America/New_York").
+# Popup timestamps auto-convert to the viewer's browser timezone.
+display_timezone: "UTC"
+
+# ── Data Sources ─────────────────────────────────────────────────────────────
+sources:
+  # RSS/Atom feeds — add your local news sources here.
+  # Unstructured: require AI pipeline or keyword filter for location extraction.
+  rss:
+    # - name: "Local News"
+    #   url: "https://example.com/rss"
+
+  # NWS weather alerts — structured, no AI needed.
+  # Find zone codes at: https://www.weather.gov/gis/PublicZones
+  nws:
+    enabled: false
+    zone_codes: []
+
+  # USGS earthquake feed — structured, no AI needed.
+  usgs:
+    enabled: false
+    min_magnitude: 3.0
+    feed_window: "day"           # hour, day, week, month
+
+  # Waze police sightings — structured, no AI needed.
+  # Crowdsourced police presence reports from Waze LiveMap.
+  waze:
+    enabled: false
+    min_reliability: 3           # 0-10; filter low-quality reports
+    min_confidence: 0            # -1 to 5; based on thumbs up/down
+    category: police_sighting    # Must match a category name below
+
+  # Reddit — monitors subreddit posts (unstructured, needs AI).
+  # Two modes: full-feed for small high-signal subs, search for large noisy subs.
+  reddit:
+    enabled: false
+    subreddits: []            # Full-feed: all new posts from these subs
+    search_subreddits: {}     # Search-query: { subreddit: "search terms" }
+    lookback_minutes: 60
+
+  # StopICE.net — crowdsourced ICE sighting reports (structured, no AI needed).
+  # Public XML data feed compiled nightly. 500K+ subscribers nationally.
+  # Priority levels: "confirmed" (URGENT only), "sighting" (ICE Sighting+),
+  #                  "unconfirmed" (all including unverified reports)
+  stopice:
+    enabled: false
+    min_priority: "sighting"     # sighting = skip unconfirmed reports
+
+  # DC Open Data crime incidents — structured, no AI needed.
+  # Data: https://opendata.dc.gov/datasets/crime-incidents-in-last-30-days
+  dc_crime:
+    enabled: false
+    lookback_minutes: 60
+    offenses: []                 # Empty = all offenses; or filter to specific types:
+      # - "HOMICIDE"
+      # - "ASSAULT W/DANGEROUS WEAPON"
+      # - "ROBBERY"
+    offense_category_map: {}     # Map OFFENSE name → category name from below
+      # "HOMICIDE": "violent_crime"
+      # "ROBBERY": "violent_crime"
+
+# ── Keyword Filter (Tier 0 — no API cost) ───────────────────────────────────
+# RSS articles must match at least one keyword to proceed to AI analysis.
+# Case-insensitive. If empty, all RSS articles pass through.
+keywords:
+  - shooting
+  - fire
+  - accident
+  - collision
+  - robbery
+  - assault
+  - flood
+  - earthquake
+  - evacuation
+  - hazmat
+  - pursuit
+  - missing person
+  - amber alert
+  - standoff
+  - explosion
+
+# ── AI Analysis (optional) ──────────────────────────────────────────────────
+# Requires ANTHROPIC_API_KEY in server/.env
+# When disabled, structured sources (NWS, USGS, DC Crime) still work.
+# RSS sources need AI enabled to extract location and category.
+ai:
+  enabled: false
+  model: "claude-haiku-4-5-20251001"
+  max_calls_per_hour: 100
+  criteria_prompt: |
+    You are filtering news articles for a tactical situational awareness system.
+
+    Flag articles that describe ACTIVE or RECENT incidents.
+
+    Do NOT flag: political opinion, sports, business, court proceedings,
+    historical references, planned events.
+
+# ── Incident Categories ──────────────────────────────────────────────────────
+# Each category controls how incidents appear on the TAK map.
+#
+# affiliation — Controls marker shape AND color (MIL-STD-2525C IFF):
+#   hostile   → red diamond        (active threat)
+#   suspect   → yellow diamond     (potential threat)
+#   neutral   → green square       (non-threat / routine)
+#   unknown   → yellow quatrefoil  (unclassified)
+#   friendly  → blue rectangle     (own forces / support)
+#
+# icon_type — Controls the marker icon:
+#   raid             — fa-exclamation-circle (federal operations)
+#   law_enforcement  — fa-exclamation-triangle (LE tactical/enforcement)
+#   crime            — fa-crosshairs (active violent crime)
+#   surveillance     — fa-eye (observed presence)
+#   medical          — fa-plus-square (EMS/medical)
+#   fire             — fa-fire
+#   natural          — fa-bolt (weather/geological)
+#   traffic          — fa-car
+#   search           — fa-search (missing persons)
+#   civil            — fa-bullhorn (protest/demonstration)
+#   general          — fa-question-circle (default/unknown)
+#
+# cot_type_override — Set a raw MIL-STD-2525C type code directly,
+#   bypassing affiliation + icon_type composition. For power users.
+#
+# stale_minutes — How long before the marker fades on the map.
+categories:
+  - name: example_critical
+    description: "Example: critical/hostile incidents (red diamond)"
+    affiliation: hostile
+    icon_type: law_enforcement
+    stale_minutes: 240
+
+  - name: example_warning
+    description: "Example: warning-level incidents (yellow diamond)"
+    affiliation: suspect
+    icon_type: general
+    stale_minutes: 120
+
+  - name: example_routine
+    description: "Example: routine/neutral incidents (green square)"
+    affiliation: neutral
+    icon_type: medical
+    stale_minutes: 60
+
+  - name: natural_disaster
+    description: "Weather and geological events"
+    affiliation: neutral
+    icon_type: natural
+    stale_minutes: 720

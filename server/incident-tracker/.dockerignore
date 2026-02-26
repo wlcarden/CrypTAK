@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+config.local.yaml
+.git/
+.gitignore
+README.md

@@ -127,6 +127,9 @@ services:
     volumes:
       - /mnt/user/appdata/nodered/data:/data
     user: "1000:1000"
+    # Healthcheck disabled: same Unraid runc issue as FTS (see freetakserver comment).
+    healthcheck:
+      disable: true
 
   mosquitto:
     image: eclipse-mosquitto:latest
@@ -216,6 +219,33 @@ services:
     ports:
       - "8083:80"      # Admin web UI — LAN only at http://192.168.50.120:8083
                        # Configure with: URL=https://tak.thousand-pikes.com, API key from CLI
+
+  # ── Incident Tracker (optional) ──────────────────────────────────────────────
+  #
+  # Scrapes news feeds and structured alert sources (NWS weather, USGS earthquakes),
+  # filters for relevance using keywords + optional AI analysis, and plots incidents
+  # as markers on the TAK map via CoT injection to FTS.
+  #
+  # Not started by default. To enable:
+  #   1. Edit incident-tracker/config.yaml — set your area, feeds, and keywords
+  #   2. (Optional) Set ANTHROPIC_API_KEY in .env for AI-powered filtering
+  #   3. docker compose --profile incident-tracker up -d
+  incident-tracker:
+    build: ./incident-tracker
+    container_name: incident-tracker
+    profiles: ["incident-tracker"]
+    restart: unless-stopped
+    depends_on:
+      freetakserver:
+        condition: service_started
+    networks:
+      - taknet
+    volumes:
+      - ./incident-tracker/config.yaml:/app/config.yaml:ro
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    healthcheck:
+      disable: true
 
 networks:
   taknet:
