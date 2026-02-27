@@ -9,6 +9,7 @@ on:
 
 env:
   DEPLOY_DIR: /mnt/user/appdata/tak-server
+  NODERED_URL: http://localhost:1880
 
 jobs:
   deploy:
@@ -31,9 +32,38 @@ jobs:
           docker compose up -d --remove-orphans
           docker compose --profile incident-tracker up -d
 
-      - name: Restart Node-RED to pick up lib changes
+      - name: Wait for Node-RED to start
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf "$NODERED_URL/settings" > /dev/null 2>&1; then
+              echo "Node-RED ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::warning::Node-RED not responding after 30s"
+
+      - name: Deploy flows to Node-RED
+        run: |
+          # Node-RED reads flows from its /data volume, not the rsync'd repo copy.
+          # Push repo flows via the admin API so they take effect immediately.
+          HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+            -X POST "$NODERED_URL/flows" \
+            -H 'Content-Type: application/json' \
+            -H 'Node-RED-Deployment-Type: full' \
+            -d @"$DEPLOY_DIR/nodered/flows.json")
+          if [ "$HTTP_CODE" = "204" ]; then
+            echo "Flows deployed successfully"
+          else
+            echo "::error::Flow deploy returned HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Restart Node-RED to load module changes
         working-directory: /mnt/user/appdata/tak-server
         run: |
+          # Container restart needed for settings.js and cot-maps.js changes
+          # (functionGlobalContext is only read at startup)
           docker compose restart nodered
 
       - name: Verify core services running

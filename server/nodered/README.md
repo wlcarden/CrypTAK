@@ -14,57 +14,49 @@ NOAA weather alerts — with US state and county boundary overlays.
 - MGRS coordinate display
 - Event-driven replay — new browser clients receive all cached state on connect
 - Auto-expiring markers via TTL (TAK: from CoT stale time, Mesh: 10 minutes)
+- Color fading — marker colors fade toward gray as events age, indicating
+  staleness visually (worldmap doesn't support per-marker icon opacity)
 - WebMap drawing → ATAK: shapes drawn in the browser (polygon, rectangle,
   circle, polyline) are injected as CoT events to FTS, appearing on all
   connected ATAK clients
 
 ## Deployment
 
-### 1. Docker Compose
+Deployment is automated via GitHub Actions (`.github/workflows/deploy-server.yml`).
+Pushing to `server/**` on `main` triggers:
 
-The flow runs in the `nodered` service defined in `../docker-compose.yml`. Three
-volumes are mounted:
+1. rsync files to `/mnt/user/appdata/tak-server/`
+2. `docker compose up -d` (recreates containers if compose changed)
+3. Deploy `flows.json` to Node-RED via the admin API
+4. Restart Node-RED to reload `settings.js` and `cot-maps.js`
+
+### Docker Compose Volumes
 
 ```yaml
 volumes:
   - /mnt/user/appdata/nodered/data:/data
-  - ./nodered/lib:/opt/cot-maps:ro
-  - ./nodered/public:/data/public:ro
+  - ./nodered/settings.js:/data/settings.js:ro # functionGlobalContext
+  - ./nodered/lib:/opt/cot-maps:ro # cot-maps.js module
+  - ./nodered/public:/data/public:ro # favicon, logo
 ```
 
-The `lib/` mount uses `/opt/cot-maps` (not `/data/lib`) because Node-RED reserves
-`/data/lib/` for its internal function library.
+Key: `lib/` is mounted at `/opt/cot-maps` (not `/data/lib`) because Node-RED
+reserves `/data/lib/` for its internal function library.
 
-### 2. Settings.js
+### settings.js
 
-Add the following to Node-RED's settings file on the server
-(`/mnt/user/appdata/nodered/data/settings.js`):
+Mounted read-only from the repo. Configures:
 
-```javascript
-// Serve custom favicon and top bar logo from public/
-httpStatic: '/data/public',
+- `functionGlobalContext.net` — Node.js `net` module for TCP sockets
+- `functionGlobalContext.cotMaps` — `cot-maps.js` parsing library
+- `httpStatic` — serves `public/favicon.ico` and `cryptak-logo.png`
 
-functionGlobalContext: {
-    cotMaps: require('/opt/cot-maps/cot-maps')
-},
-```
+### flows.json
 
-- `httpStatic` serves `public/favicon.ico` and `public/cryptak-logo.png` as
-  static files at the Node-RED root (used by the browser tab and map title bar)
-- `functionGlobalContext` loads `lib/cot-maps.js` (color, icon, and affiliation
-  maps) into the global context, referenced by the FTS CoT TCP Client function
-  node
-
-### 3. Flow Import
-
-Copy `flows.json` to the Node-RED data directory, or import via the Node-RED
-editor (Menu > Import > select file).
-
-### 4. Restart
-
-```bash
-docker compose restart nodered
-```
+Deployed via the Node-RED admin API (`POST /flows`), NOT by filesystem copy.
+Node-RED reads flows from `/data/flows.json` (the persistent Docker volume),
+which is separate from the rsync'd repo copy. The CI/CD workflow pushes the
+repo version through the API to keep them in sync.
 
 ## Configuration
 
@@ -88,5 +80,7 @@ Edit `lib/cot-maps.js` directly — no need to touch `flows.json`:
 - `iconMap`: CoT type suffix to [Font Awesome](https://fontawesome.com/v4/icons/)
   icon class (matched longest-first)
 - `affiliationNames`: Affiliation code to worldmap layer name
+- `fadeColor()`: Blends marker color toward gray based on age factor
 
-After editing, restart Node-RED to reload the module.
+After editing, restart Node-RED to reload the module (CI/CD does this
+automatically).
