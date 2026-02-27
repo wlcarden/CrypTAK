@@ -20,7 +20,11 @@
     "payloadType": "date",
     "x": 170,
     "y": 100,
-    "wires": [["fn_cot"]]
+    "wires": [
+      [
+        "fn_cot"
+      ]
+    ]
   },
   {
     "id": "fn_cot",
@@ -33,7 +37,11 @@
     "noerr": 0,
     "x": 420,
     "y": 100,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "inj_states",
@@ -50,7 +58,11 @@
     "payloadType": "date",
     "x": 160,
     "y": 200,
-    "wires": [["http_states"]]
+    "wires": [
+      [
+        "http_states"
+      ]
+    ]
   },
   {
     "id": "http_states",
@@ -70,19 +82,27 @@
     "headers": [],
     "x": 380,
     "y": 200,
-    "wires": [["fmt_states"]]
+    "wires": [
+      [
+        "fmt_states"
+      ]
+    ]
   },
   {
     "id": "fmt_states",
     "type": "function",
     "z": "tab1",
     "name": "Format US States",
-    "func": "if (!msg.payload || !msg.payload.features) { node.warn('States GeoJSON failed'); return null; }\nflow.set('statesGeoJSON', msg.payload);\nnode.log('Cached ' + msg.payload.features.length + ' state features');\nmsg.payload = { command: { map: {\n    overlay: 'US States',\n    geojson: flow.get('statesGeoJSON'),\n    opt: { style: { color: '#444', weight: 1.5, fill: false } },\n    visible: false, fit: false, clickable: false\n}}};\nreturn msg;",
+    "func": "if (!msg.payload || !msg.payload.features) { node.warn('States GeoJSON failed'); return null; }\nflow.set('statesGeoJSON', msg.payload);\nnode.log('Cached ' + msg.payload.features.length + ' state features');\nmsg.payload = { command: { map: {\n    overlay: 'US States',\n    geojson: flow.get('statesGeoJSON'),\n    opt: { style: \"function() { return { color: '#444', weight: 1.5, fill: false } }\" },\n    visible: false, fit: false, clickable: false\n}}};\nreturn msg;",
     "outputs": 1,
     "noerr": 0,
     "x": 590,
     "y": 200,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "inj_counties",
@@ -99,7 +119,11 @@
     "payloadType": "date",
     "x": 160,
     "y": 260,
-    "wires": [["http_counties"]]
+    "wires": [
+      [
+        "http_counties"
+      ]
+    ]
   },
   {
     "id": "http_counties",
@@ -119,19 +143,27 @@
     "headers": [],
     "x": 385,
     "y": 260,
-    "wires": [["fmt_counties"]]
+    "wires": [
+      [
+        "fmt_counties"
+      ]
+    ]
   },
   {
     "id": "fmt_counties",
     "type": "function",
     "z": "tab1",
     "name": "Format US Counties",
-    "func": "if (!msg.payload || !msg.payload.features) { node.warn('Counties GeoJSON failed'); return null; }\nflow.set('countiesGeoJSON', msg.payload);\nnode.log('Cached ' + msg.payload.features.length + ' county features');\nmsg.payload = { command: { map: {\n    overlay: 'US Counties',\n    geojson: flow.get('countiesGeoJSON'),\n    opt: { style: { color: '#888', weight: 0.7, fill: false } },\n    visible: false, fit: false, clickable: false\n}}};\nreturn msg;",
+    "func": "if (!msg.payload || !msg.payload.features) { node.warn('Counties GeoJSON failed'); return null; }\nflow.set('countiesGeoJSON', msg.payload);\nnode.log('Cached ' + msg.payload.features.length + ' county features');\nmsg.payload = { command: { map: {\n    overlay: 'US Counties',\n    geojson: flow.get('countiesGeoJSON'),\n    opt: { style: \"function() { return { color: '#888', weight: 0.7, fill: false } }\" },\n    visible: false, fit: false, clickable: false\n}}};\nreturn msg;",
     "outputs": 1,
     "noerr": 0,
     "x": 595,
     "y": 260,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "inj_noaa",
@@ -148,7 +180,11 @@
     "payloadType": "date",
     "x": 150,
     "y": 360,
-    "wires": [["setup_noaa"]]
+    "wires": [
+      [
+        "setup_noaa"
+      ]
+    ]
   },
   {
     "id": "setup_noaa",
@@ -160,7 +196,11 @@
     "noerr": 0,
     "x": 350,
     "y": 360,
-    "wires": [["http_noaa"]]
+    "wires": [
+      [
+        "http_noaa"
+      ]
+    ]
   },
   {
     "id": "http_noaa",
@@ -180,19 +220,27 @@
     "headers": [],
     "x": 560,
     "y": 360,
-    "wires": [["fmt_noaa"]]
+    "wires": [
+      [
+        "fmt_noaa"
+      ]
+    ]
   },
   {
     "id": "fmt_noaa",
     "type": "function",
     "z": "tab1",
     "name": "Format NOAA Alerts",
-    "func": "var data = msg.payload;\nif (!data || !data.features) { node.warn('NOAA API failed: ' + JSON.stringify(msg.statusCode)); return null; }\n\nvar now = Date.now();\nvar sevStyle = {\n    'Extreme':  { stroke: '#CC0000', fillColor: '#FF0000', fillOpacity: 0.40 },\n    'Severe':   { stroke: '#CC4400', fillColor: '#FF6600', fillOpacity: 0.30 },\n    'Moderate': { stroke: '#AAAA00', fillColor: '#FFEE00', fillOpacity: 0.22 },\n    'Minor':    { stroke: '#0055AA', fillColor: '#3399FF', fillOpacity: 0.15 },\n    'Unknown':  { stroke: '#555555', fillColor: '#999999', fillOpacity: 0.10 }\n};\n\nvar features = [];\ndata.features.forEach(function(f) {\n    if (!f.geometry) return;\n    if (f.properties.expires && new Date(f.properties.expires).getTime() < now) return;\n    var sev = f.properties.severity || 'Unknown';\n    var sp  = sevStyle[sev] || sevStyle['Unknown'];\n    var feat = JSON.parse(JSON.stringify(f));\n    feat.properties.style = { color: sp.stroke, fillColor: sp.fillColor, fillOpacity: sp.fillOpacity, weight: 2 };\n    feat.properties.name = feat.properties.event || 'Alert';\n    features.push(feat);\n});\n\nnode.log('NOAA: ' + features.length + ' active alerts');\nvar fc = { type: 'FeatureCollection', features: features };\nflow.set('noaaGeoJSON', fc);\n\n// Clear old overlay then send fresh one\nnode.send({ payload: { command: { map: { overlay: 'NOAA Alerts', delete: true } } } });\nmsg.payload = { command: { map: {\n    overlay: 'NOAA Alerts',\n    geojson: fc,\n    opt: { style: { weight: 2 } },\n    visible: true, fit: false\n}}};\nreturn msg;",
+    "func": "var data = msg.payload;\nif (!data || !data.features) { node.warn('NOAA API failed: ' + JSON.stringify(msg.statusCode)); return null; }\n\nvar now = Date.now();\nvar sevStyle = {\n    'Extreme':  { stroke: '#CC0000', fillColor: '#FF0000', fillOpacity: 0.40 },\n    'Severe':   { stroke: '#CC4400', fillColor: '#FF6600', fillOpacity: 0.30 },\n    'Moderate': { stroke: '#AAAA00', fillColor: '#FFEE00', fillOpacity: 0.22 },\n    'Minor':    { stroke: '#0055AA', fillColor: '#3399FF', fillOpacity: 0.15 },\n    'Unknown':  { stroke: '#555555', fillColor: '#999999', fillOpacity: 0.10 }\n};\n\nvar features = [];\ndata.features.forEach(function(f) {\n    if (!f.geometry) return;\n    if (f.properties.expires && new Date(f.properties.expires).getTime() < now) return;\n    var sev = f.properties.severity || 'Unknown';\n    var sp  = sevStyle[sev] || sevStyle['Unknown'];\n    var feat = JSON.parse(JSON.stringify(f));\n    feat.properties.style = { color: sp.stroke, fillColor: sp.fillColor, fillOpacity: sp.fillOpacity, weight: 2 };\n    feat.properties.name = feat.properties.event || 'Alert';\n    features.push(feat);\n});\n\nnode.log('NOAA: ' + features.length + ' active alerts');\nvar fc = { type: 'FeatureCollection', features: features };\nflow.set('noaaGeoJSON', fc);\n\nmsg.payload = { command: { map: {\n    overlay: 'NOAA Alerts',\n    geojson: fc,\n    \n    visible: true, fit: false\n}}};\nreturn msg;",
     "outputs": 1,
     "noerr": 0,
     "x": 760,
     "y": 360,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "mqtt_broker1",
@@ -239,7 +287,11 @@
     "payloadType": "date",
     "x": 170,
     "y": 480,
-    "wires": [["fn_owned"]]
+    "wires": [
+      [
+        "fn_owned"
+      ]
+    ]
   },
   {
     "id": "fn_owned",
@@ -251,7 +303,9 @@
     "noerr": 0,
     "x": 390,
     "y": 480,
-    "wires": [[]]
+    "wires": [
+      []
+    ]
   },
   {
     "id": "mqtt_mesh",
@@ -268,7 +322,11 @@
     "inputs": 0,
     "x": 170,
     "y": 560,
-    "wires": [["fn_mesh"]]
+    "wires": [
+      [
+        "fn_mesh"
+      ]
+    ]
   },
   {
     "id": "fn_mesh",
@@ -280,7 +338,11 @@
     "noerr": 0,
     "x": 390,
     "y": 560,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "wmap1",
@@ -321,19 +383,27 @@
     "path": "/tak-map",
     "x": 170,
     "y": 640,
-    "wires": [["fn_on_connect"]]
+    "wires": [
+      [
+        "fn_on_connect"
+      ]
+    ]
   },
   {
     "id": "fn_on_connect",
     "type": "function",
     "z": "tab1",
     "name": "Replay on Connect",
-    "func": "if (!msg.payload || msg.payload.action !== 'connected') return null;\nvar sid = msg._sessionid;\nvar msgs = [];\n\n// Branding\nmsgs.push({ payload: { command: { toptitle: 'CrypTAK WebMap' } }, _sessionid: sid });\nmsgs.push({ payload: { command: { toplogo: '/cryptak-logo.png' } }, _sessionid: sid });\nmsgs.push({ payload: { command: { coords: 'mgrs' } }, _sessionid: sid });\nvar legend = flow.get('legendHtml');\nif (legend) msgs.push({ payload: { command: { legend: legend } }, _sessionid: sid });\n\n// GeoJSON overlays\nvar stGeo = flow.get('statesGeoJSON');\nif (stGeo) msgs.push({ payload: { command: { map: { overlay: 'US States', geojson: stGeo, opt: { style: { color: '#444', weight: 1.5, fill: false } }, visible: false, fit: false, clickable: false } } }, _sessionid: sid });\nvar coGeo = flow.get('countiesGeoJSON');\nif (coGeo) msgs.push({ payload: { command: { map: { overlay: 'US Counties', geojson: coGeo, opt: { style: { color: '#888', weight: 0.7, fill: false } }, visible: false, fit: false, clickable: false } } }, _sessionid: sid });\nvar noaaGeo = flow.get('noaaGeoJSON');\nif (noaaGeo && noaaGeo.features && noaaGeo.features.length > 0) msgs.push({ payload: { command: { map: { overlay: 'NOAA Alerts', geojson: noaaGeo, opt: { style: { weight: 2 } }, visible: true, fit: false } } }, _sessionid: sid });\n\n// TAK markers\nvar takCache = flow.get('takMarkers') || {};\nvar tKeys = Object.keys(takCache);\nfor (var i = 0; i < tKeys.length; i++) {\n    var m = Object.assign({}, takCache[tKeys[i]]);\n    msgs.push({ payload: m, _sessionid: sid });\n}\n\n// Mesh markers\nvar meshCache = flow.get('meshMarkers') || {};\nvar mKeys = Object.keys(meshCache);\nfor (var j = 0; j < mKeys.length; j++) {\n    msgs.push({ payload: meshCache[mKeys[j]], _sessionid: sid });\n}\n\nnode.log('Replaying ' + msgs.length + ' items to session ' + sid);\nreturn [msgs];",
+    "func": "if (!msg.payload || msg.payload.action !== 'connected') return null;\nvar sid = msg._sessionid;\nvar msgs = [];\n\n// Branding\nmsgs.push({ payload: { command: { toptitle: 'CrypTAK WebMap' } }, _sessionid: sid });\nmsgs.push({ payload: { command: { toplogo: '/cryptak-logo.png' } }, _sessionid: sid });\nmsgs.push({ payload: { command: { coords: 'mgrs' } }, _sessionid: sid });\nvar legend = flow.get('legendHtml');\nif (legend) msgs.push({ payload: { command: { legend: legend } }, _sessionid: sid });\n\n// GeoJSON overlays\nvar stGeo = flow.get('statesGeoJSON');\nif (stGeo) msgs.push({ payload: { command: { map: { overlay: 'US States', geojson: stGeo, opt: { style: \"function() { return { color: '#444', weight: 1.5, fill: false } }\" }, visible: false, fit: false, clickable: false } } }, _sessionid: sid });\nvar coGeo = flow.get('countiesGeoJSON');\nif (coGeo) msgs.push({ payload: { command: { map: { overlay: 'US Counties', geojson: coGeo, opt: { style: \"function() { return { color: '#888', weight: 0.7, fill: false } }\" }, visible: false, fit: false, clickable: false } } }, _sessionid: sid });\nvar noaaGeo = flow.get('noaaGeoJSON');\nif (noaaGeo && noaaGeo.features && noaaGeo.features.length > 0) msgs.push({ payload: { command: { map: { overlay: 'NOAA Alerts', geojson: noaaGeo,  visible: true, fit: false } } }, _sessionid: sid });\n\n// TAK markers\nvar takCache = flow.get('takMarkers') || {};\nvar tKeys = Object.keys(takCache);\nfor (var i = 0; i < tKeys.length; i++) {\n    var m = Object.assign({}, takCache[tKeys[i]]);\n    msgs.push({ payload: m, _sessionid: sid });\n}\n\n// Mesh markers\nvar meshCache = flow.get('meshMarkers') || {};\nvar mKeys = Object.keys(meshCache);\nfor (var j = 0; j < mKeys.length; j++) {\n    msgs.push({ payload: meshCache[mKeys[j]], _sessionid: sid });\n}\n\nnode.log('Replaying ' + msgs.length + ' items to session ' + sid);\nreturn [msgs];",
     "outputs": 1,
     "noerr": 0,
     "x": 390,
     "y": 640,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "inj_branding",
@@ -350,7 +420,11 @@
     "payloadType": "date",
     "x": 180,
     "y": 40,
-    "wires": [["fn_branding"]]
+    "wires": [
+      [
+        "fn_branding"
+      ]
+    ]
   },
   {
     "id": "fn_branding",
@@ -362,6 +436,10 @@
     "noerr": 0,
     "x": 430,
     "y": 40,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   }
 ]

@@ -126,7 +126,7 @@ services:
       - "1880:1880"          # Node-RED UI + worldmap at /tak-map
     volumes:
       - /mnt/user/appdata/nodered/data:/data
-      - ./nodered/lib:/data/lib:ro           # cot-maps.js (loaded via functionGlobalContext)
+      - ./nodered/lib:/opt/cot-maps:ro        # cot-maps.js (loaded via functionGlobalContext)
       - ./nodered/public:/data/public:ro     # favicon.ico, cryptak-logo.png (served via httpStatic)
     user: "1000:1000"
     # Healthcheck disabled: same Unraid runc issue as FTS (see freetakserver comment).

@@ -19,14 +19,18 @@ NOAA weather alerts — with US state and county boundary overlays.
 
 ### 1. Docker Compose
 
-The flow runs in the `nodered` service defined in `../docker-compose.yml`. Two
+The flow runs in the `nodered` service defined in `../docker-compose.yml`. Three
 volumes are mounted:
 
 ```yaml
 volumes:
   - /mnt/user/appdata/nodered/data:/data
-  - ./nodered/lib:/data/lib:ro
+  - ./nodered/lib:/opt/cot-maps:ro
+  - ./nodered/public:/data/public:ro
 ```
+
+The `lib/` mount uses `/opt/cot-maps` (not `/data/lib`) because Node-RED reserves
+`/data/lib/` for its internal function library.
 
 ### 2. Settings.js
 
@@ -38,7 +42,7 @@ Add the following to Node-RED's settings file on the server
 httpStatic: '/data/public',
 
 functionGlobalContext: {
-    cotMaps: require('/data/lib/cot-maps')
+    cotMaps: require('/opt/cot-maps/cot-maps')
 },
 ```
 
