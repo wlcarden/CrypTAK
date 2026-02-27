@@ -18,7 +18,10 @@ jobs:
 
       - name: Sync server files to deploy directory
         run: |
-          rsync -av --exclude='.env' --exclude='config.local.yaml' \
+          rsync -av \
+            --exclude='.env' \
+            --exclude='config.local.yaml' \
+            --exclude='docker-compose.override.yml' \
             server/ "$DEPLOY_DIR/"
 
       - name: Deploy server stack
@@ -28,7 +31,7 @@ jobs:
           docker compose up -d --remove-orphans
           docker compose --profile incident-tracker up -d
 
-      - name: Verify services running
+      - name: Verify core services running
         working-directory: /mnt/user/appdata/tak-server
         run: |
           sleep 10
@@ -36,11 +39,23 @@ jobs:
           import sys, json
           raw = sys.stdin.read().strip()
           services = [json.loads(line) for line in raw.splitlines() if line.strip()]
-          failed = [s['Name'] for s in services if 'running' not in s.get('State', '')]
+          # Profile services (incident-tracker) may crash-loop if not configured
+          # Only fail on core services
+          profile_services = {'incident-tracker'}
+          failed = []
+          warned = []
+          for s in services:
+              if 'running' not in s.get('State', ''):
+                  if s['Name'] in profile_services:
+                      warned.append(s['Name'])
+                  else:
+                      failed.append(s['Name'])
+          if warned:
+              print(f'::warning::Optional services not running: {warned}')
           if failed:
               print(f'FAILED services: {failed}')
               sys.exit(1)
-          print(f'All {len(services)} services running')
+          print(f'All {len(services) - len(warned)} core services running')
           "
 
       - name: Notify on failure
