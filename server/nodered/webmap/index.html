@@ -1,0 +1,571 @@
+<!DOCTYPE HTML>
+<!--
+  CrypTAK WebMap — custom index.html with tactical sidebar.
+  Mounted over the stock node-red-contrib-web-worldmap index.html.
+  All script/link tags preserved from stock so worldmap.js loads unchanged.
+
+  Original Copyright 2022, 2023 David Conway-Jones / 2015, 2021 IBM Corp.
+  Licensed under the Apache License, Version 2.0
+-->
+<html>
+<head>
+    <title>CrypTAK WebMap</title>
+    <meta charset="UTF-8">
+    <meta name="mobile-web-app-capable" content="yes"/>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0, user-scalable=no'/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+    <link rel="shortcut icon" type="image/ico" href="favicon.ico"/>
+
+    <!-- Stock worldmap dependencies — do not reorder -->
+    <link rel="stylesheet" type="text/css" href="leaflet/font-awesome/css/font-awesome.min.css"/>
+    <link rel="stylesheet" type="text/css" href="leaflet/weather-icons-lite/css/weather-icons-lite.min.css"/>
+    <link rel="stylesheet" type="text/css" href="leaflet/leaflet.css"/>
+    <link rel="stylesheet" type="text/css" href="leaflet/leaflet-vector-markers.css">
+    <link rel="stylesheet" type="text/css" href="leaflet/MarkerCluster.css">
+    <link rel="stylesheet" type="text/css" href="leaflet/MarkerCluster.Default.css">
+    <link rel="stylesheet" type="text/css" href="leaflet/leaflet-geoman.css">
+    <link rel="stylesheet" type="text/css" href="leaflet/leaflet-ruler.css">
+    <link rel="stylesheet" type="text/css" href="leaflet/easy-button.css">
+    <link rel="stylesheet" type="text/css" href="leaflet/leaflet.fullscreen.css">
+    <link rel="stylesheet" type="text/css" href="leaflet/Leaflet.Dialog.css">
+    <link rel="stylesheet" type="text/css" href="leaflet/Control.MiniMap.min.css">
+    <link rel="stylesheet" type="text/css" href="leaflet/leaflet-velocity.min.css">
+    <link rel="stylesheet" type="text/css" href="leaflet/leaflet.mousecoordinate.css">
+    <link rel="stylesheet" type="text/css" href="css/worldmap.css"/>
+
+    <script src="leaflet/sockjs.min.js"></script>
+    <script src="leaflet/leaflet.js"></script>
+    <script src="leaflet/leaflet-vector-markers.min.js"></script>
+    <script src="leaflet/leaflet.boatmarker.js"></script>
+    <script src="leaflet/leaflet.markercluster.js"></script>
+    <script src="leaflet/leaflet.markercluster.freezable.js"></script>
+    <script src="leaflet/leaflet.active-layers.min.js"></script>
+    <script src="leaflet/leaflet.select-layers.min.js"></script>
+    <script src="leaflet/leaflet-geoman.min.js"></script>
+    <script src="leaflet/leaflet-ruler.js"></script>
+    <script src="leaflet/easy-button.js"></script>
+    <script src="leaflet/Leaflet.fullscreen.min.js"></script>
+    <script src="leaflet/Leaflet.Dialog.js"></script>
+    <script src="leaflet/l.ellipse.min.js"></script>
+    <script src="leaflet/milsymbol.js"></script>
+    <script src="leaflet/nvg.js" async></script>
+    <script src="leaflet/leaflet-heat.js"></script>
+    <script src="leaflet/TileLayer.Grayscale.js"></script>
+    <script src="leaflet/TileLayer.GrayscaleWMS.js"></script>
+    <script src="leaflet/Control.MiniMap.min.js"></script>
+    <script src="leaflet/L.Terminator.js"></script>
+    <script src="leaflet/leaflet-velocity.min.js"></script>
+    <script src="leaflet/leaflet.rotatedMarker.js"></script>
+    <script src="leaflet/leaflet-side-by-side.js"></script>
+    <script src="leaflet/OSMBuildings-Leaflet.js"></script>
+    <script src="leaflet/leaflet-omnivore.min.js"></script>
+    <script src="leaflet/togeojson.umd.js"></script>
+    <script src="leaflet/leaflet-kmz.js"></script>
+    <script src="leaflet/leaflet-rotate.js"></script>
+    <script src="leaflet/leaflet.mousecoordinate.js"></script>
+    <script src="leaflet/leaflet.latlng-graticule.js"></script>
+    <script src="leaflet/VectorTileLayer.umd.min.js"></script>
+    <script src="leaflet/esri-leaflet.js"></script>
+    <script src="leaflet/protomaps-leaflet.min.js"></script>
+    <script src="leaflet/pmtiles.js"></script>
+    <script src="leaflet/Semicircle.js"></script>
+    <script src="leaflet/Leaflet.LimitZoom.js"></script>
+    <script src="leaflet/leaflet-arc.min.js"></script>
+    <script src="leaflet/leaflet.antimeridian-src.js"></script>
+    <script src="leaflet/L.TileLayer.PixelFilter.js"></script>
+    <script src="leaflet/jszip.min.js"></script>
+    <script src="images/emoji.js"></script>
+
+    <style>
+    /* ── Sidebar layout ─────────────────────────────────────── */
+    #map {
+      left: 0 !important;
+      right: 320px !important;
+      min-width: 0 !important;
+      width: auto !important;
+    }
+    #sidebar {
+      position: fixed;
+      top: 40px;
+      right: 0;
+      width: 320px;
+      bottom: 0;
+      background: #1a1a1a;
+      color: #ccc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      z-index: 1000;
+      border-left: 1px solid #333;
+      overflow: hidden;
+    }
+    #sidebar.collapsed {
+      width: 0;
+      border-left: none;
+    }
+    #sidebar.collapsed ~ #map {
+      right: 0 !important;
+    }
+
+    /* Toggle button */
+    #sidebar-toggle {
+      position: fixed;
+      top: 48px;
+      right: 324px;
+      z-index: 1001;
+      background: #1a1a1a;
+      color: #888;
+      border: 1px solid #333;
+      border-right: none;
+      border-radius: 4px 0 0 4px;
+      padding: 6px 5px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+    }
+    #sidebar-toggle:hover { color: #fff; }
+    #sidebar.collapsed ~ #sidebar-toggle {
+      right: 0;
+      border-right: 1px solid #333;
+      border-radius: 4px;
+    }
+
+    /* Search */
+    #sb-search-wrap {
+      padding: 8px 10px;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+    }
+    #sb-search {
+      width: 100%;
+      box-sizing: border-box;
+      background: #111;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #ddd;
+      padding: 6px 8px;
+      font-size: 13px;
+      outline: none;
+    }
+    #sb-search:focus { border-color: #0066FF; }
+    #sb-search::placeholder { color: #666; }
+
+    /* Sort toolbar */
+    #sb-toolbar {
+      display: flex;
+      align-items: center;
+      padding: 5px 10px;
+      border-bottom: 1px solid #333;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .sb-sort-btn {
+      background: #222;
+      border: 1px solid #444;
+      border-radius: 3px;
+      color: #888;
+      font-size: 11px;
+      padding: 3px 8px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .sb-sort-btn:hover { color: #ccc; border-color: #666; }
+    .sb-sort-btn.active { color: #fff; background: #0066FF; border-color: #0066FF; }
+    #sb-toolbar-spacer { flex: 1; }
+
+    /* Summary bar */
+    #sb-summary {
+      padding: 4px 10px;
+      border-bottom: 1px solid #333;
+      font-size: 11px;
+      color: #888;
+      flex-shrink: 0;
+    }
+
+    /* Scrollable marker list */
+    #sb-list {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    #sb-list::-webkit-scrollbar { width: 6px; }
+    #sb-list::-webkit-scrollbar-track { background: #111; }
+    #sb-list::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+
+    /* Layer group */
+    .sb-group { border-bottom: 1px solid #2a2a2a; }
+    .sb-group-header {
+      display: flex;
+      align-items: center;
+      padding: 7px 10px;
+      background: #222;
+      cursor: pointer;
+      user-select: none;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    .sb-group-header:hover { background: #2a2a2a; }
+    .sb-group-caret {
+      width: 16px;
+      font-size: 10px;
+      color: #666;
+      flex-shrink: 0;
+      transition: transform 0.15s;
+    }
+    .sb-group.collapsed .sb-group-caret { transform: rotate(-90deg); }
+    .sb-group-label {
+      flex: 1;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #999;
+    }
+    .sb-group-count {
+      background: #333;
+      color: #aaa;
+      font-size: 11px;
+      padding: 1px 7px;
+      border-radius: 8px;
+      min-width: 18px;
+      text-align: center;
+    }
+    .sb-group-items { }
+    .sb-group.collapsed .sb-group-items { display: none; }
+
+    /* Marker row */
+    .sb-marker {
+      display: flex;
+      align-items: center;
+      padding: 6px 10px 6px 26px;
+      cursor: pointer;
+      border-bottom: 1px solid #1f1f1f;
+    }
+    .sb-marker:hover { background: #252525; }
+    .sb-marker-icon {
+      width: 22px;
+      text-align: center;
+      flex-shrink: 0;
+      margin-right: 8px;
+      font-size: 15px;
+    }
+    .sb-marker-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .sb-marker-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #ddd;
+      font-size: 13px;
+    }
+    .sb-marker-meta {
+      font-size: 11px;
+      color: #666;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 1px;
+    }
+    .sb-marker-age {
+      flex-shrink: 0;
+      font-size: 11px;
+      color: #666;
+      margin-left: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Empty state */
+    .sb-empty {
+      padding: 40px 20px;
+      text-align: center;
+      color: #555;
+      font-size: 13px;
+    }
+
+    /* Mobile: hide sidebar below 768px */
+    @media (max-width: 768px) {
+      #sidebar { display: none; }
+      #sidebar-toggle { display: none; }
+      #map { right: 0 !important; }
+    }
+    </style>
+</head>
+
+<body>
+<div id="topbar">
+    <a href="https://nodered.org" id="toplink"><img id="toplogo" src="images/node-red.png" style="max-width:60px; height:24px; margin-top:-3px" alt="NRed"/></a>
+    <span class="topbar" id="topwords"> Node-RED - map all the things</span>
+</div>
+<div id="results">
+    <span id="searchResult"></span>
+    <span id="bars" onclick='toggleMenu()'><i class="fa fa-bars fa-2x fa-inverse"></i></span>
+</div>
+<div id="menu"></div>
+<div id="map"></div>
+<div id="footer"></div>
+
+<!-- Sidebar -->
+<button id="sidebar-toggle" title="Toggle sidebar"><i class="fa fa-chevron-right"></i></button>
+<div id="sidebar">
+    <div id="sb-search-wrap">
+        <input type="text" id="sb-search" placeholder="Filter markers..."/>
+    </div>
+    <div id="sb-toolbar">
+        <button class="sb-sort-btn active" data-sort="recent" title="Most recent first"><i class="fa fa-clock-o"></i> Recent</button>
+        <button class="sb-sort-btn" data-sort="alpha" title="Alphabetical"><i class="fa fa-sort-alpha-asc"></i> A-Z</button>
+        <span id="sb-toolbar-spacer"></span>
+        <button class="sb-sort-btn" data-sort="group" title="Group by layer" id="sb-group-toggle"><i class="fa fa-object-group"></i></button>
+    </div>
+    <div id="sb-summary">Waiting for data...</div>
+    <div id="sb-list">
+        <div class="sb-empty">No markers</div>
+    </div>
+</div>
+
+<!-- Stock worldmap.js — loads all map logic, creates global ws/markers/allData/map -->
+<script src="worldmap.js"></script>
+
+<!-- Sidebar controller — hooks into worldmap globals after they initialize -->
+<script>
+(function() {
+    var sidebar = document.getElementById('sidebar');
+    var sbList = document.getElementById('sb-list');
+    var sbSummary = document.getElementById('sb-summary');
+    var sbSearch = document.getElementById('sb-search');
+    var sbToggle = document.getElementById('sidebar-toggle');
+    var sbGroupToggle = document.getElementById('sb-group-toggle');
+    var filter = '';
+    var sortMode = 'recent';  // 'recent' or 'alpha'
+    var groupByLayer = true;
+    var collapsedGroups = {};
+
+    // Layer display order and color mapping
+    var layerOrder = [
+        'TAK Friendly', 'TAK Hostile', 'TAK Suspect',
+        'TAK Neutral', 'TAK Unknown', 'TAK Other',
+        'Meshtastic',
+    ];
+    var layerColors = {
+        'TAK Friendly': '#0066FF',
+        'TAK Hostile': '#FF0000',
+        'TAK Suspect': '#FFA500',
+        'TAK Neutral': '#00AA00',
+        'TAK Unknown': '#CCCC00',
+        'TAK Other': '#888888',
+        'Meshtastic': '#00CCFF',
+    };
+
+    // ── Toolbar handlers ──────────────────────────────────────
+    document.getElementById('sb-toolbar').addEventListener('click', function(e) {
+        var btn = e.target.closest('.sb-sort-btn');
+        if (!btn) return;
+        var mode = btn.dataset.sort;
+        if (mode === 'group') {
+            // Toggle grouping
+            groupByLayer = !groupByLayer;
+            btn.classList.toggle('active', groupByLayer);
+        } else {
+            // Switch sort mode
+            sortMode = mode;
+            document.querySelectorAll('.sb-sort-btn[data-sort="recent"],.sb-sort-btn[data-sort="alpha"]')
+                .forEach(function(b) { b.classList.toggle('active', b.dataset.sort === mode); });
+        }
+        renderSidebar();
+    });
+
+    // Toggle sidebar
+    sbToggle.addEventListener('click', function() {
+        sidebar.classList.toggle('collapsed');
+        var icon = sbToggle.querySelector('i');
+        if (sidebar.classList.contains('collapsed')) {
+            icon.className = 'fa fa-chevron-left';
+        } else {
+            icon.className = 'fa fa-chevron-right';
+        }
+        setTimeout(function() {
+            if (typeof map !== 'undefined') map.invalidateSize();
+        }, 50);
+    });
+
+    // Filter input
+    sbSearch.addEventListener('input', function() {
+        filter = this.value.toLowerCase();
+        renderSidebar();
+    });
+
+    // Click handler for group headers and marker rows
+    sbList.addEventListener('click', function(e) {
+        var header = e.target.closest('.sb-group-header');
+        if (header) {
+            var group = header.parentElement;
+            var layerName = group.dataset.layer;
+            group.classList.toggle('collapsed');
+            collapsedGroups[layerName] = group.classList.contains('collapsed');
+            return;
+        }
+        var row = e.target.closest('.sb-marker');
+        if (row && typeof map !== 'undefined') {
+            var lat = parseFloat(row.dataset.lat);
+            var lon = parseFloat(row.dataset.lon);
+            if (!isNaN(lat) && !isNaN(lon)) {
+                map.flyTo([lat, lon], Math.max(map.getZoom(), 14), { duration: 0.8 });
+                var name = row.dataset.name;
+                if (typeof markers !== 'undefined' && markers[name]) {
+                    setTimeout(function() { markers[name].openPopup(); }, 900);
+                }
+            }
+        }
+    });
+
+    // ── Helpers ────────────────────────────────────────────────
+    function formatAge(ms) {
+        if (ms < 0) return '';
+        var sec = Math.floor(ms / 1000);
+        if (sec < 60) return sec + 's';
+        var min = Math.floor(sec / 60);
+        if (min < 60) return min + 'm';
+        var hr = Math.floor(min / 60);
+        if (hr < 24) return hr + 'h ' + (min % 60) + 'm';
+        return Math.floor(hr / 24) + 'd';
+    }
+
+    function collectMarkers() {
+        if (typeof allData === 'undefined') return [];
+        var items = [];
+        var keys = Object.keys(allData);
+        for (var i = 0; i < keys.length; i++) {
+            var d = allData[keys[i]];
+            if (!d || !d.lat || !d.lon) continue;
+            if (keys[i].indexOf('_seed_') === 0) continue;
+            if (d.name === 'CrypTAK-WebMap') continue;
+
+            var name = d.name || keys[i];
+            var nameLC = name.toLowerCase();
+            var layer = d.layer || 'Other';
+
+            if (filter && nameLC.indexOf(filter) === -1 &&
+                layer.toLowerCase().indexOf(filter) === -1) continue;
+
+            items.push({
+                name: name,
+                lat: d.lat,
+                lon: d.lon,
+                layer: layer,
+                icon: d.icon || 'fa-question-circle',
+                color: d.iconColor || layerColors[layer] || '#888',
+                startMs: d._startMs || 0,
+                staleMs: d._staleMs || 0,
+            });
+        }
+        return items;
+    }
+
+    function sortItems(items) {
+        if (sortMode === 'recent') {
+            items.sort(function(a, b) { return b.startMs - a.startMs; });
+        } else {
+            items.sort(function(a, b) { return a.name.localeCompare(b.name); });
+        }
+    }
+
+    function renderMarkerRow(m, now) {
+        var age = m.startMs > 0 ? formatAge(now - m.startMs) : '';
+        var iconClass = m.icon.indexOf('fa-') === 0 ? 'fa ' + m.icon : m.icon;
+
+        var html = '<div class="sb-marker" data-name="' + m.name.replace(/"/g, '&quot;') +
+            '" data-lat="' + m.lat + '" data-lon="' + m.lon + '">';
+        html += '<div class="sb-marker-icon" style="color:' + m.color + '">' +
+            '<i class="fa ' + m.icon + '"></i></div>';
+        html += '<div class="sb-marker-info">';
+        html += '<div class="sb-marker-name">' + m.name + '</div>';
+        html += '<div class="sb-marker-meta">' +
+            m.lat.toFixed(4) + ', ' + m.lon.toFixed(4) + '</div>';
+        html += '</div>';
+        if (age) html += '<span class="sb-marker-age">' + age + '</span>';
+        html += '</div>';
+        return html;
+    }
+
+    // ── Main render ───────────────────────────────────────────
+    function renderSidebar() {
+        var items = collectMarkers();
+        var now = Date.now();
+
+        if (items.length === 0) {
+            sbList.innerHTML = '<div class="sb-empty">' +
+                (filter ? 'No matches for "' + filter + '"' : 'No markers') + '</div>';
+            sbSummary.textContent = filter ? '0 matching' : 'No markers';
+            return;
+        }
+
+        var html = '';
+
+        if (groupByLayer) {
+            // Group items by layer
+            var groups = {};
+            for (var i = 0; i < items.length; i++) {
+                var layer = items[i].layer;
+                if (!groups[layer]) groups[layer] = [];
+                groups[layer].push(items[i]);
+            }
+            // Sort layer groups
+            var sortedLayers = Object.keys(groups).sort(function(a, b) {
+                var ia = layerOrder.indexOf(a); if (ia === -1) ia = 999;
+                var ib = layerOrder.indexOf(b); if (ib === -1) ib = 999;
+                return ia - ib;
+            });
+            var layerCount = sortedLayers.length;
+            for (var li = 0; li < sortedLayers.length; li++) {
+                var layerName = sortedLayers[li];
+                var groupItems = groups[layerName];
+                sortItems(groupItems);
+                var isCollapsed = collapsedGroups[layerName] || false;
+
+                html += '<div class="sb-group' + (isCollapsed ? ' collapsed' : '') +
+                    '" data-layer="' + layerName + '">';
+                html += '<div class="sb-group-header">';
+                html += '<span class="sb-group-caret"><i class="fa fa-caret-down"></i></span>';
+                html += '<span class="sb-group-label">' + layerName + '</span>';
+                html += '<span class="sb-group-count">' + groupItems.length + '</span>';
+                html += '</div><div class="sb-group-items">';
+                for (var mi = 0; mi < groupItems.length; mi++) {
+                    html += renderMarkerRow(groupItems[mi], now);
+                }
+                html += '</div></div>';
+            }
+            sbSummary.textContent = items.length + ' marker' + (items.length !== 1 ? 's' : '') +
+                (filter ? ' matching' : '') + ' across ' +
+                layerCount + ' layer' + (layerCount !== 1 ? 's' : '');
+        } else {
+            // Flat list — no grouping
+            sortItems(items);
+            for (var fi = 0; fi < items.length; fi++) {
+                html += renderMarkerRow(items[fi], now);
+            }
+            sbSummary.textContent = items.length + ' marker' + (items.length !== 1 ? 's' : '') +
+                (filter ? ' matching' : '');
+        }
+
+        sbList.innerHTML = html;
+    }
+
+    // ── Init ──────────────────────────────────────────────────
+    // Set initial group toggle state
+    sbGroupToggle.classList.add('active');
+
+    var initInterval = setInterval(function() {
+        if (typeof allData !== 'undefined' && typeof map !== 'undefined') {
+            clearInterval(initInterval);
+            map.invalidateSize();
+            renderSidebar();
+            setInterval(renderSidebar, 2000);
+        }
+    }, 500);
+})();
+</script>
+</body>
+</html>
