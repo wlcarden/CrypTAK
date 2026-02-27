@@ -245,6 +245,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /mnt/user/appdata/github-runner:/tmp/runner
+      - /mnt/user/appdata/tak-server/.env:/mnt/user/appdata/tak-server/.env:ro
     healthcheck:
       disable: true
 
