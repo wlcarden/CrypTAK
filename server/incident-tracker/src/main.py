@@ -103,13 +103,13 @@ async def poll_cycle(
     ai_analyzer: AiAnalyzer,
     geocoder: Geocoder,
     fts: FtsClient,
-    replay_buffer: dict[str, tuple[str, datetime]] | None = None,
+    replay_buffer: dict[str, tuple[AnalyzedIncident, datetime]] | None = None,
 ) -> None:
     """Execute one full poll-analyze-inject cycle.
 
-    replay_buffer: uid → (cot_xml, expiry_utc). Incidents are resent each
-    cycle until they expire, keeping markers alive across browser refreshes.
-    Node-RED handles opacity fading based on CoT stale timestamps.
+    replay_buffer: uid → (AnalyzedIncident, expiry_utc). CoT XML is rebuilt
+    each cycle with fresh timestamps so Node-RED can calculate correct
+    opacity fading relative to the incident's original creation time.
     """
     if replay_buffer is None:
         replay_buffer = {}
@@ -174,20 +174,20 @@ async def poll_cycle(
         inc.lat, inc.lon = coords
         analyzed.append(inc)
 
-    # 5. Build CoT for new incidents and add to replay buffer.
+    # 5. Add new incidents to replay buffer (store the incident, not XML).
     #    Expiry = stale + fade period (fade period equals stale duration).
     new_count = 0
     for inc in analyzed:
-        cot_xml = build_cot(inc, config.callsign_prefix, config.display_timezone)
         expiry = now + timedelta(minutes=inc.stale_minutes * 2)
-        replay_buffer[inc.uid] = (cot_xml, expiry)
+        replay_buffer[inc.uid] = (inc, expiry)
         new_count += 1
 
-    # 6. Send entire replay buffer to FTS (new + previously buffered).
-    #    This keeps markers alive across browser refreshes and Node-RED
-    #    restarts. Node-RED calculates opacity from CoT timestamps.
+    # 6. Rebuild CoT XML and send entire replay buffer to FTS.
+    #    XML is rebuilt each cycle with fresh timestamps so Node-RED
+    #    calculates correct opacity/TTL from the stale window.
     sent = 0
-    for uid, (cot_xml, _) in replay_buffer.items():
+    for uid, (inc, _) in replay_buffer.items():
+        cot_xml = build_cot(inc, config.callsign_prefix, config.display_timezone)
         if await fts.send(cot_xml):
             sent += 1
         await asyncio.sleep(0.05)
@@ -241,9 +241,9 @@ async def main() -> None:
     logger.info("Connecting to FTS at %s:%d", config.fts_host, config.fts_port)
     await fts.connect()
 
-    # Shared replay buffer — resends active incidents each cycle so markers
-    # survive browser refreshes and Node-RED restarts.
-    replay_buffer: dict[str, tuple[str, datetime]] = {}
+    # Shared replay buffer — stores AnalyzedIncident objects so CoT XML
+    # is rebuilt each cycle with fresh timestamps for correct opacity fading.
+    replay_buffer: dict[str, tuple[AnalyzedIncident, datetime]] = {}
 
     # Scheduler
     scheduler = AsyncIOScheduler()

@@ -19,7 +19,7 @@ def _sanitize(text: str, max_len: int = 200) -> str:
 
 def build_cot(
     incident: AnalyzedIncident,
-    callsign_prefix: str = "IT",
+    callsign_prefix: str = "INCIDENT",
     display_tz: str = "UTC",
 ) -> str:
     """Build a CoT XML event string for an analyzed incident.

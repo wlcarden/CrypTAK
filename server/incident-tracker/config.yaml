@@ -35,7 +35,7 @@ nominatim_user_agent: "CrypTAK-IncidentTracker/1.0"
 
 # ── Callsign Prefix ─────────────────────────────────────────────────────────
 # Prefix for marker callsigns on the TAK map (e.g. "IT violent_crime").
-callsign_prefix: "IT"
+callsign_prefix: "INCIDENT"
 
 # ── Display Timezone ───────────────────────────────────────────────────
 # IANA timezone for callsign timestamps on the map (e.g. "America/New_York").

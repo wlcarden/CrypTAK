@@ -176,7 +176,7 @@ class TrackerConfig(BaseModel):
     fts_host: str = "freetakserver"
     fts_port: int = 8087
     nominatim_user_agent: str = "CrypTAK-IncidentTracker/1.0"
-    callsign_prefix: str = "IT"
+    callsign_prefix: str = "INCIDENT"
     # IANA timezone for callsign timestamps (e.g. "America/New_York")
     display_timezone: str = "UTC"
 

@@ -476,10 +476,23 @@ class TestPollCycle:
     @pytest.mark.asyncio
     async def test_replay_buffer_resends_active_entries(self):
         cfg = _config()
-        # Pre-populate buffer with a still-active entry
-        active_uid = "incident-tracker-active"
+        # Pre-populate buffer with a still-active AnalyzedIncident
+        active_inc = AnalyzedIncident(
+            source_name="Waze",
+            title="Police: I-66 EB",
+            summary="Police sighting",
+            url="https://example.com",
+            published=datetime.now(timezone.utc),
+            lat=38.88,
+            lon=-77.17,
+            category="police_sighting",
+            severity="low",
+            cot_type="a-n-G",
+            stale_minutes=30,
+            uid="incident-tracker-active",
+        )
         replay_buffer = {
-            active_uid: ("<event/>", datetime.now(timezone.utc) + timedelta(hours=1)),
+            active_inc.uid: (active_inc, datetime.now(timezone.utc) + timedelta(hours=1)),
         }
 
         mock_source = AsyncMock()
@@ -500,8 +513,11 @@ class TestPollCycle:
             replay_buffer=replay_buffer,
         )
 
-        # Active entry should have been sent
-        fts.send.assert_awaited_once_with("<event/>")
+        # Active entry should have been rebuilt and sent
+        fts.send.assert_awaited_once()
+        sent_xml = fts.send.call_args[0][0]
+        assert "incident-tracker-active" in sent_xml
+        assert "<event" in sent_xml
 
     @pytest.mark.asyncio
     async def test_dedup_filters_duplicates(self):
