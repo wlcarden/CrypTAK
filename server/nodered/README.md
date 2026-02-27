@@ -14,6 +14,9 @@ NOAA weather alerts — with US state and county boundary overlays.
 - MGRS coordinate display
 - Event-driven replay — new browser clients receive all cached state on connect
 - Auto-expiring markers via TTL (TAK: from CoT stale time, Mesh: 10 minutes)
+- WebMap drawing → ATAK: shapes drawn in the browser (polygon, rectangle,
+  circle, polyline) are injected as CoT events to FTS, appearing on all
+  connected ATAK clients
 
 ## Deployment
 
