@@ -226,6 +226,8 @@ function parseCotToMarker(xml) {
       ttlSec = Math.max(60, Math.round((stMs - Date.now()) / 1000));
   }
 
+  var ageBased = !!r.published;
+
   return {
     name: cs,
     lat: lat,
@@ -239,6 +241,8 @@ function parseCotToMarker(xml) {
     ttl: ttlSec,
     _staleMs: staleM ? new Date(staleM[1]).getTime() : 0,
     _startMs: effectiveStart ? new Date(effectiveStart).getTime() : 0,
+    _baseColor: color,
+    _ageBased: ageBased,
   };
 }
 
@@ -267,6 +271,41 @@ function makeSA(uid) {
   );
 }
 
+/**
+ * Recalculate fade colors for all cached markers.
+ * Returns an array of updated marker objects (only those whose color changed).
+ * Markers that have fully expired are returned with {deleted: true}.
+ *
+ * @param {object} cache - the takMarkers cache (name → marker)
+ * @returns {{ updated: object[], expired: string[] }}
+ */
+function refreshMarkerColors(cache) {
+  var updated = [];
+  var expired = [];
+  var keys = Object.keys(cache);
+  for (var i = 0; i < keys.length; i++) {
+    var m = cache[keys[i]];
+    if (!m._staleMs || !m._startMs || !m._baseColor) continue;
+
+    var startStr = new Date(m._startMs).toISOString();
+    var staleStr = new Date(m._staleMs).toISOString();
+    var opacity = calcOpacity(startStr, staleStr, m._ageBased);
+
+    if (opacity <= 0.05) {
+      expired.push(keys[i]);
+      continue;
+    }
+
+    var newColor = fadeColor(m._baseColor, opacity);
+    if (newColor !== m.iconColor) {
+      m.iconColor = newColor;
+      m.opacity = Math.round(opacity * 100) / 100;
+      updated.push(m);
+    }
+  }
+  return { updated: updated, expired: expired };
+}
+
 module.exports = {
   colorMap: colorMap,
   iconMap: iconMap,
@@ -278,5 +317,6 @@ module.exports = {
   buildTooltip: buildTooltip,
   buildPopup: buildPopup,
   parseCotToMarker: parseCotToMarker,
+  refreshMarkerColors: refreshMarkerColors,
   makeSA: makeSA,
 };
