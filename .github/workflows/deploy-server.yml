@@ -8,7 +8,7 @@ on:
       - '.github/workflows/deploy-server.yml'
 
 env:
-  DEPLOY_ENV: /mnt/user/appdata/tak-server/.env
+  DEPLOY_DIR: /mnt/user/appdata/tak-server
 
 jobs:
   deploy:
@@ -16,23 +16,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Link server .env
+      - name: Sync server files to deploy directory
         run: |
-          if [ ! -f "$DEPLOY_ENV" ]; then
-            echo "::error::No .env found at $DEPLOY_ENV"
-            exit 1
-          fi
-          ln -sf "$DEPLOY_ENV" server/.env
+          rsync -av --exclude='.env' --exclude='config.local.yaml' \
+            server/ "$DEPLOY_DIR/"
 
       - name: Deploy server stack
-        working-directory: server
+        working-directory: /mnt/user/appdata/tak-server
         run: |
           docker compose pull
           docker compose up -d --remove-orphans
           docker compose --profile incident-tracker up -d
 
       - name: Verify services running
-        working-directory: server
+        working-directory: /mnt/user/appdata/tak-server
         run: |
           sleep 10
           docker compose ps --format json | python3 -c "
