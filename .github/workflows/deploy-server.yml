@@ -9,7 +9,7 @@ on:
 
 env:
   DEPLOY_DIR: /mnt/user/appdata/tak-server
-  NODERED_URL: http://localhost:1880
+  NODERED_URL: http://host.docker.internal:1880
 
 jobs:
   deploy:

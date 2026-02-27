@@ -243,6 +243,8 @@ services:
       RUNNER_WORKDIR: /tmp/runner
       LABELS: unraid,self-hosted
       DISABLE_AUTO_UPDATE: "true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /mnt/user/appdata/github-runner:/tmp/runner
