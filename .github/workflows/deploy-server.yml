@@ -1,0 +1,52 @@
+name: Deploy Server Stack
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - '.github/workflows/deploy-server.yml'
+
+env:
+  DEPLOY_ENV: /mnt/user/appdata/tak-server/.env
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, unraid]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Link server .env
+        run: |
+          if [ ! -f "$DEPLOY_ENV" ]; then
+            echo "::error::No .env found at $DEPLOY_ENV"
+            exit 1
+          fi
+          ln -sf "$DEPLOY_ENV" server/.env
+
+      - name: Deploy server stack
+        working-directory: server
+        run: |
+          docker compose pull
+          docker compose up -d --remove-orphans
+          docker compose --profile incident-tracker up -d
+
+      - name: Verify services running
+        working-directory: server
+        run: |
+          sleep 10
+          docker compose ps --format json | python3 -c "
+          import sys, json
+          raw = sys.stdin.read().strip()
+          services = [json.loads(line) for line in raw.splitlines() if line.strip()]
+          failed = [s['Name'] for s in services if 'running' not in s.get('State', '')]
+          if failed:
+              print(f'FAILED services: {failed}')
+              sys.exit(1)
+          print(f'All {len(services)} services running')
+          "
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Deployment failed on Unraid. Check docker compose logs on the server."

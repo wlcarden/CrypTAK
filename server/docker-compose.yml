@@ -222,6 +222,32 @@ services:
       - "8083:80"      # Admin web UI — LAN only at http://192.168.50.120:8083
                        # Configure with: URL=https://tak.thousand-pikes.com, API key from CLI
 
+  # ── GitHub Actions Self-Hosted Runner ────────────────────────────────────────
+  #
+  # Registers with GitHub as a self-hosted runner so pushes to server/**
+  # automatically deploy to this Unraid box. Requires GITHUB_RUNNER_TOKEN
+  # (fine-grained PAT with Administration read/write) in .env.
+  #
+  # Docker socket mount lets the runner execute docker compose commands.
+  # The runner auto-registers on start and deregisters on graceful stop.
+  github-runner:
+    image: myoung34/github-runner:latest
+    container_name: github-runner
+    restart: unless-stopped
+    environment:
+      RUNNER_SCOPE: repo
+      REPO_URL: https://github.com/wlcarden/CrypTAK
+      ACCESS_TOKEN: ${GITHUB_RUNNER_TOKEN}
+      RUNNER_NAME: unraid-cryptak
+      RUNNER_WORKDIR: /tmp/runner
+      LABELS: unraid,self-hosted
+      DISABLE_AUTO_UPDATE: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /mnt/user/appdata/github-runner:/tmp/runner
+    healthcheck:
+      disable: true
+
   # ── Incident Tracker (optional) ──────────────────────────────────────────────
   #
   # Scrapes news feeds and structured alert sources (NWS weather, USGS earthquakes),
