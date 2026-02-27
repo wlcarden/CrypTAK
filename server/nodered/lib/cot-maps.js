@@ -49,6 +49,26 @@ var affiliationNames = {
 };
 
 /**
+ * Linearly interpolate a hex color toward gray based on a 0-1 factor.
+ * factor=1 returns the original color, factor=0 returns #888888.
+ * @param {string} hex - CSS hex color (e.g. "#FF0000")
+ * @param {number} factor - 0 (fully gray) to 1 (fully saturated)
+ * @returns {string} blended hex color
+ */
+function fadeColor(hex, factor) {
+  if (factor >= 1) return hex;
+  if (factor <= 0) return "#888888";
+  var r = parseInt(hex.slice(1, 3), 16);
+  var g = parseInt(hex.slice(3, 5), 16);
+  var b = parseInt(hex.slice(5, 7), 16);
+  var gr = 0x88; // gray target
+  r = Math.round(r * factor + gr * (1 - factor));
+  g = Math.round(g * factor + gr * (1 - factor));
+  b = Math.round(b * factor + gr * (1 - factor));
+  return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+/**
  * Look up a Font Awesome icon for a CoT type string.
  * Tries longest suffix match first, falls back to fa-question-circle.
  * @param {string[]} parts - CoT type split by '-' (e.g. ['a','h','G','I','R'])
@@ -210,7 +230,7 @@ function parseCotToMarker(xml) {
     lon: lon,
     layer: layerName,
     icon: icon,
-    iconColor: color,
+    iconColor: fadeColor(color, opacity),
     tooltip: buildTooltip(cs, r),
     popup: buildPopup(cs, r, color),
     opacity: Math.round(opacity * 100) / 100,
@@ -249,6 +269,7 @@ module.exports = {
   colorMap: colorMap,
   iconMap: iconMap,
   affiliationNames: affiliationNames,
+  fadeColor: fadeColor,
   getIcon: getIcon,
   calcOpacity: calcOpacity,
   parseRemarks: parseRemarks,
