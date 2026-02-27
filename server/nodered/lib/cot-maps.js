@@ -37,7 +37,7 @@ var iconMap = {
 // MIL-STD-2525 affiliation code → worldmap layer name
 var affiliationNames = {
   h: "TAK Hostile",
-  s: "TAK Hostile",
+  s: "TAK Suspect",
   n: "TAK Neutral",
   u: "TAK Unknown",
   f: "TAK Friendly",

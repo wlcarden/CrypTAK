@@ -60,7 +60,7 @@ def build_cot(
     except (KeyError, Exception):
         tz = timezone.utc
     local_published = incident.published.astimezone(tz)
-    ts = local_published.strftime("%m/%d %H:%M")
+    ts = local_published.strftime("%-m/%-d %-I:%M%p").lower()
     label = _sanitize(incident.title.split(":")[0].strip(), 40)
     callsign = f"{callsign_prefix} {label} - {ts}"
     ET.SubElement(detail, "contact", {"callsign": callsign})

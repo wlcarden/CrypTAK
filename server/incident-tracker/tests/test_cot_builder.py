@@ -125,14 +125,14 @@ class TestBuildCot:
         inc = _make_analyzed(published=pub, title="TEST: Location")
         root = ET.fromstring(build_cot(inc, display_tz="America/New_York"))
         cs = root.find("detail/contact").get("callsign")
-        assert "15:00" in cs  # Eastern time, not 20:00 UTC
+        assert "3:00pm" in cs  # Eastern time, not 8:00pm UTC
 
     def test_callsign_defaults_to_utc(self):
         pub = datetime(2026, 2, 26, 20, 0, 0, tzinfo=timezone.utc)
         inc = _make_analyzed(published=pub, title="TEST: Location")
         root = ET.fromstring(build_cot(inc))
         cs = root.find("detail/contact").get("callsign")
-        assert "20:00" in cs  # UTC
+        assert "8:00pm" in cs  # UTC
 
     def test_remarks_published_utc_field(self):
         pub = datetime(2026, 2, 26, 20, 30, 0, tzinfo=timezone.utc)
@@ -184,4 +184,4 @@ class TestBuildCot:
         root = ET.fromstring(build_cot(inc, display_tz="Invalid/Timezone"))
         cs = root.find("detail/contact").get("callsign")
         # Should fall back to UTC
-        assert "20:00" in cs
+        assert "8:00pm" in cs
