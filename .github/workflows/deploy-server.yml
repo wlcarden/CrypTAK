@@ -34,14 +34,15 @@ jobs:
 
       - name: Wait for Node-RED to start
         run: |
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             if curl -sf "$NODERED_URL/settings" > /dev/null 2>&1; then
               echo "Node-RED ready after ${i}s"
               exit 0
             fi
             sleep 1
           done
-          echo "::warning::Node-RED not responding after 30s"
+          echo "::error::Node-RED not responding after 60s"
+          exit 1
 
       - name: Deploy flows to Node-RED
         run: |
