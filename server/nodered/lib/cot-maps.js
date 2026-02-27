@@ -49,22 +49,24 @@ var affiliationNames = {
 };
 
 /**
- * Linearly interpolate a hex color toward gray based on a 0-1 factor.
- * factor=1 returns the original color, factor=0 returns #888888.
+ * Interpolate a hex color toward dark gray using a power curve.
+ * Markers stay vivid for most of their lifespan, then drop off sharply.
+ * factor=1 returns the original color, factor=0 returns #444444.
  * @param {string} hex - CSS hex color (e.g. "#FF0000")
- * @param {number} factor - 0 (fully gray) to 1 (fully saturated)
+ * @param {number} factor - 0 (fully faded) to 1 (fully saturated)
  * @returns {string} blended hex color
  */
 function fadeColor(hex, factor) {
   if (factor >= 1) return hex;
-  if (factor <= 0) return "#888888";
+  if (factor <= 0) return "#444444";
+  var f = factor * factor; // power curve: stays vivid longer, drops sharply
   var r = parseInt(hex.slice(1, 3), 16);
   var g = parseInt(hex.slice(3, 5), 16);
   var b = parseInt(hex.slice(5, 7), 16);
-  var gr = 0x88; // gray target
-  r = Math.round(r * factor + gr * (1 - factor));
-  g = Math.round(g * factor + gr * (1 - factor));
-  b = Math.round(b * factor + gr * (1 - factor));
+  var gr = 0x44; // dark gray target
+  r = Math.round(r * f + gr * (1 - f));
+  g = Math.round(g * f + gr * (1 - f));
+  b = Math.round(b * f + gr * (1 - f));
   return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
 }
 
@@ -85,8 +87,9 @@ function getIcon(parts) {
  * Calculate marker opacity based on age.
  *
  * Two modes controlled by `ageBased`:
- * - ageBased=true (incident markers): linear fade from 1.0→0 over 2x lifespan
- *   starting from the actual published time. Reflects real incident age.
+ * - ageBased=true (incident markers): fade from 1.0→0 over 1x lifespan
+ *   starting from the actual published time. Combined with the power curve
+ *   in fadeColor(), markers stay vivid early and darken sharply near expiry.
  * - ageBased=false (PLI/SA markers): full opacity until stale, then fade over
  *   the same duration as the lifespan. Standard CoT behavior.
  *
@@ -106,9 +109,8 @@ function calcOpacity(startStr, staleStr, ageBased) {
     if (lifespan <= 0) return 1.0;
     var age = nowMs - startMs;
     if (age <= 0) return 1.0;
-    var totalDuration = lifespan * 2;
-    if (age >= totalDuration) return 0;
-    return Math.max(0, 1.0 - age / totalDuration);
+    if (age >= lifespan) return 0;
+    return Math.max(0, 1.0 - age / lifespan);
   }
   if (nowMs < staleMs) return 1.0;
   var fadeDuration = staleMs - startMs;
