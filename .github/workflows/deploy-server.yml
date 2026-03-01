@@ -28,8 +28,12 @@ jobs:
       - name: Deploy server stack
         working-directory: /mnt/user/appdata/tak-server
         run: |
-          docker compose pull
-          docker compose up -d --remove-orphans
+          # Exclude github-runner from deploy — recreating the runner's own
+          # container mid-job kills the Actions process and cancels the run.
+          # Update the runner manually on the server if its config changes.
+          SERVICES=$(docker compose config --services | grep -v github-runner)
+          docker compose pull $SERVICES
+          docker compose up -d --remove-orphans $SERVICES
           docker compose --profile incident-tracker up -d
 
       - name: Wait for Node-RED to start
