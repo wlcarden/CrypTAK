@@ -20,20 +20,28 @@
     "payloadType": "date",
     "x": 170,
     "y": 100,
-    "wires": [["fn_cot"]]
+    "wires": [
+      [
+        "fn_cot"
+      ]
+    ]
   },
   {
     "id": "fn_cot",
     "type": "function",
     "z": "tab1",
     "name": "FTS CoT TCP Client",
-    "func": "var net  = global.get('net');\nvar maps = global.get('cotMaps');\n\n// Pre-built CoT XML passthrough (drawing \u2192 ATAK)\nif (msg.payload && typeof msg.payload === 'string' && msg.payload.startsWith('<?xml')) {\n    var s = context.get('socket');\n    if (s && !s.destroyed) {\n        s.write(msg.payload);\n        node.log('Drawing CoT sent (' + msg.payload.length + ' bytes)');\n    } else {\n        node.warn('FTS socket not ready, drawing CoT dropped');\n    }\n    return null;\n}\n\nvar socket  = context.get('socket');\nvar kaTimer = context.get('kaTimer');\n\nif (socket && !socket.destroyed) {\n    return null;\n}\n\nif (kaTimer) { clearInterval(kaTimer); context.set('kaTimer', null); }\n\nfunction connectToFTS() {\n    var existing = context.get('socket');\n    if (existing && !existing.destroyed) return;\n\n    var myUid = 'CrypTAK-NR-WebMap';\n\n    var s = new net.Socket();\n    var buf = '';\n\n    s.connect(8087, '192.168.50.120', function() {\n        node.log('FTS connected as ' + myUid);\n        context.set('retryCount', 0);\n        s.write(maps.makeSA(myUid));\n        var timer = setInterval(function() {\n            if (s && !s.destroyed) {\n                s.write(maps.makeSA(myUid));\n            } else {\n                clearInterval(timer);\n                context.set('kaTimer', null);\n            }\n        }, 30000);\n        context.set('kaTimer', timer);\n    });\n\n    s.on('data', function(data) {\n        buf += data.toString();\n        var endTag = '</event>';\n        var idx;\n        while ((idx = buf.indexOf(endTag)) !== -1) {\n            var xml = buf.substring(0, idx + endTag.length);\n            buf = buf.substring(idx + endTag.length);\n            try {\n                var marker = maps.parseCotToMarker(xml);\n                if (!marker) continue;\n\n                var cache = flow.get('takMarkers') || {};\n                if (marker.deleted) {\n                    delete cache[marker.name];\n                    flow.set('takMarkers', cache);\n                    node.send({ payload: marker });\n                    continue;\n                }\n\n                cache[marker.name] = marker;\n                flow.set('takMarkers', cache);\n                node.send({ payload: marker });\n            } catch(e) { node.warn('CoT parse error: ' + e.message); }\n        }\n    });\n\n    s.on('error', function(e) {\n        node.warn('FTS socket error: ' + e.message);\n        var t = context.get('kaTimer');\n        if (t) { clearInterval(t); context.set('kaTimer', null); }\n        s.destroy();\n        context.set('socket', null);\n    });\n\n    s.on('close', function() {\n        node.warn('FTS socket closed (' + myUid + ')');\n        var t = context.get('kaTimer');\n        if (t) { clearInterval(t); context.set('kaTimer', null); }\n        context.set('socket', null);\n        if (context.get('closing')) return;\n        var retries = context.get('retryCount') || 0;\n        if (retries < 5) {\n            context.set('retryCount', retries + 1);\n            var delay = (retries + 1) * 2000;\n            node.warn('Retry ' + (retries + 1) + '/5 in ' + (delay/1000) + 's');\n            setTimeout(function() { connectToFTS(); }, delay);\n        } else {\n            node.warn('FTS: 5 retries exhausted, waiting for inject cycle');\n            context.set('retryCount', 0);\n        }\n    });\n\n    context.set('socket', s);\n}\n\nconnectToFTS();\n\n// Periodic color refresh \u2014 recalculate fade colors every 30s and remove expired markers.\nif (!context.get('refreshTimer')) {\n    var refreshTimer = setInterval(function() {\n        var cache = flow.get('takMarkers') || {};\n        var result = maps.refreshMarkerColors(cache);\n\n        // Send updated colors to worldmap\n        for (var i = 0; i < result.updated.length; i++) {\n            node.send({ payload: result.updated[i] });\n        }\n\n        // Remove fully expired markers\n        for (var j = 0; j < result.expired.length; j++) {\n            node.send({ payload: { name: result.expired[j], deleted: true } });\n            delete cache[result.expired[j]];\n        }\n\n        if (result.updated.length > 0 || result.expired.length > 0) {\n            flow.set('takMarkers', cache);\n        }\n        if (result.expired.length > 0) {\n            node.log('Refresh: updated ' + result.updated.length + ' colors, removed ' + result.expired.length + ' expired');\n        }\n    }, 30000);\n    context.set('refreshTimer', refreshTimer);\n}\n\nreturn null;",
+    "func": "var net  = global.get('net');\nvar maps = global.get('cotMaps');\n\n// Pre-built CoT XML passthrough (drawing \u2192 ATAK)\nif (msg.payload && typeof msg.payload === 'string' && msg.payload.startsWith('<?xml')) {\n    var s = context.get('socket');\n    if (s && !s.destroyed) {\n        s.write(msg.payload);\n        node.log('Drawing CoT sent (' + msg.payload.length + ' bytes)');\n    } else {\n        node.warn('FTS socket not ready, drawing CoT dropped');\n    }\n    return null;\n}\n\nvar socket  = context.get('socket');\nvar kaTimer = context.get('kaTimer');\n\nif (socket && !socket.destroyed) {\n    return null;\n}\n\nif (kaTimer) { clearInterval(kaTimer); context.set('kaTimer', null); }\n\nfunction connectToFTS() {\n    var existing = context.get('socket');\n    if (existing && !existing.destroyed) return;\n\n    var myUid = 'CrypTAK-NR-WebMap';\n\n    var s = new net.Socket();\n    var buf = '';\n\n    s.connect(8087, '192.168.50.120', function() {\n        node.log('FTS connected as ' + myUid);\n        s.write(maps.makeSA(myUid));\n        var timer = setInterval(function() {\n            if (s && !s.destroyed) {\n                s.write(maps.makeSA(myUid));\n            } else {\n                clearInterval(timer);\n                context.set('kaTimer', null);\n            }\n        }, 30000);\n        context.set('kaTimer', timer);\n    });\n\n    s.on('data', function(data) {\n        context.set('retryCount', 0);\n        buf += data.toString();\n        var endTag = '</event>';\n        var idx;\n        while ((idx = buf.indexOf(endTag)) !== -1) {\n            var xml = buf.substring(0, idx + endTag.length);\n            buf = buf.substring(idx + endTag.length);\n            try {\n                var marker = maps.parseCotToMarker(xml);\n                if (!marker) continue;\n\n                var cache = flow.get('takMarkers') || {};\n                if (marker.deleted) {\n                    delete cache[marker.name];\n                    flow.set('takMarkers', cache);\n                    node.send({ payload: marker });\n                    continue;\n                }\n\n                cache[marker.name] = marker;\n                flow.set('takMarkers', cache);\n                node.send({ payload: marker });\n            } catch(e) { node.warn('CoT parse error: ' + e.message); }\n        }\n    });\n\n    s.on('error', function(e) {\n        node.warn('FTS socket error: ' + e.message);\n        var t = context.get('kaTimer');\n        if (t) { clearInterval(t); context.set('kaTimer', null); }\n        s.destroy();\n        context.set('socket', null);\n    });\n\n    s.on('close', function() {\n        node.warn('FTS socket closed (' + myUid + ')');\n        var t = context.get('kaTimer');\n        if (t) { clearInterval(t); context.set('kaTimer', null); }\n        context.set('socket', null);\n        if (context.get('closing')) return;\n        var retries = context.get('retryCount') || 0;\n        if (retries < 5) {\n            context.set('retryCount', retries + 1);\n            var delay = (retries + 1) * 2000;\n            node.warn('Retry ' + (retries + 1) + '/5 in ' + (delay/1000) + 's');\n            setTimeout(function() { connectToFTS(); }, delay);\n        } else {\n            node.warn('FTS: 5 retries exhausted, waiting for inject cycle');\n            context.set('retryCount', 0);\n        }\n    });\n\n    context.set('socket', s);\n}\n\nconnectToFTS();\n\n// Periodic color refresh \u2014 recalculate fade colors every 30s and remove expired markers.\nif (!context.get('refreshTimer')) {\n    var refreshTimer = setInterval(function() {\n        var cache = flow.get('takMarkers') || {};\n        var result = maps.refreshMarkerColors(cache);\n\n        // Send updated colors to worldmap\n        for (var i = 0; i < result.updated.length; i++) {\n            node.send({ payload: result.updated[i] });\n        }\n\n        // Remove fully expired markers\n        for (var j = 0; j < result.expired.length; j++) {\n            node.send({ payload: { name: result.expired[j], deleted: true } });\n            delete cache[result.expired[j]];\n        }\n\n        if (result.updated.length > 0 || result.expired.length > 0) {\n            flow.set('takMarkers', cache);\n        }\n        if (result.expired.length > 0) {\n            node.log('Refresh: updated ' + result.updated.length + ' colors, removed ' + result.expired.length + ' expired');\n        }\n    }, 30000);\n    context.set('refreshTimer', refreshTimer);\n}\n\nreturn null;",
     "finalize": "\ncontext.set('closing', true);\nvar s = context.get('socket');  if (s) s.destroy();\nvar t = context.get('kaTimer'); if (t) clearInterval(t);\nvar sw = context.get('sweepTimer'); if (sw) clearInterval(sw);\nvar rt = context.get('refreshTimer'); if (rt) clearInterval(rt);\n",
     "outputs": 1,
     "noerr": 0,
     "x": 420,
     "y": 100,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "inj_states",
@@ -50,7 +58,11 @@
     "payloadType": "date",
     "x": 160,
     "y": 200,
-    "wires": [["http_states"]]
+    "wires": [
+      [
+        "http_states"
+      ]
+    ]
   },
   {
     "id": "http_states",
@@ -70,7 +82,11 @@
     "headers": [],
     "x": 380,
     "y": 200,
-    "wires": [["fmt_states"]]
+    "wires": [
+      [
+        "fmt_states"
+      ]
+    ]
   },
   {
     "id": "fmt_states",
@@ -82,7 +98,11 @@
     "noerr": 0,
     "x": 590,
     "y": 200,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "inj_counties",
@@ -99,7 +119,11 @@
     "payloadType": "date",
     "x": 160,
     "y": 260,
-    "wires": [["http_counties"]]
+    "wires": [
+      [
+        "http_counties"
+      ]
+    ]
   },
   {
     "id": "http_counties",
@@ -119,7 +143,11 @@
     "headers": [],
     "x": 385,
     "y": 260,
-    "wires": [["fmt_counties"]]
+    "wires": [
+      [
+        "fmt_counties"
+      ]
+    ]
   },
   {
     "id": "fmt_counties",
@@ -131,7 +159,11 @@
     "noerr": 0,
     "x": 595,
     "y": 260,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "inj_noaa",
@@ -148,7 +180,11 @@
     "payloadType": "date",
     "x": 150,
     "y": 360,
-    "wires": [["setup_noaa"]]
+    "wires": [
+      [
+        "setup_noaa"
+      ]
+    ]
   },
   {
     "id": "setup_noaa",
@@ -160,7 +196,11 @@
     "noerr": 0,
     "x": 350,
     "y": 360,
-    "wires": [["http_noaa"]]
+    "wires": [
+      [
+        "http_noaa"
+      ]
+    ]
   },
   {
     "id": "http_noaa",
@@ -180,7 +220,11 @@
     "headers": [],
     "x": 560,
     "y": 360,
-    "wires": [["fmt_noaa"]]
+    "wires": [
+      [
+        "fmt_noaa"
+      ]
+    ]
   },
   {
     "id": "fmt_noaa",
@@ -192,7 +236,11 @@
     "noerr": 0,
     "x": 760,
     "y": 360,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "mqtt_broker1",
@@ -239,7 +287,11 @@
     "payloadType": "date",
     "x": 170,
     "y": 480,
-    "wires": [["fn_owned"]]
+    "wires": [
+      [
+        "fn_owned"
+      ]
+    ]
   },
   {
     "id": "fn_owned",
@@ -251,7 +303,9 @@
     "noerr": 0,
     "x": 390,
     "y": 480,
-    "wires": [[]]
+    "wires": [
+      []
+    ]
   },
   {
     "id": "mqtt_mesh",
@@ -268,7 +322,11 @@
     "inputs": 0,
     "x": 170,
     "y": 560,
-    "wires": [["fn_mesh"]]
+    "wires": [
+      [
+        "fn_mesh"
+      ]
+    ]
   },
   {
     "id": "fn_mesh",
@@ -280,7 +338,11 @@
     "noerr": 0,
     "x": 390,
     "y": 560,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "wmap1",
@@ -321,7 +383,12 @@
     "path": "/tak-map",
     "x": 170,
     "y": 640,
-    "wires": [["fn_on_connect", "fn_draw_to_cot"]]
+    "wires": [
+      [
+        "fn_on_connect",
+        "fn_draw_to_cot"
+      ]
+    ]
   },
   {
     "id": "fn_on_connect",
@@ -333,7 +400,11 @@
     "noerr": 0,
     "x": 390,
     "y": 640,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "inj_branding",
@@ -350,7 +421,11 @@
     "payloadType": "date",
     "x": 180,
     "y": 40,
-    "wires": [["fn_branding"]]
+    "wires": [
+      [
+        "fn_branding"
+      ]
+    ]
   },
   {
     "id": "fn_branding",
@@ -362,7 +437,11 @@
     "noerr": 0,
     "x": 430,
     "y": 40,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "fn_draw_to_cot",
@@ -374,58 +453,11 @@
     "noerr": 0,
     "x": 390,
     "y": 720,
-    "wires": [["fn_cot"]]
-  },
-  {
-    "id": "inj_clients",
-    "type": "inject",
-    "z": "tab1",
-    "name": "Poll FTS Clients (disabled)",
-    "props": [],
-    "repeat": "30",
-    "crontab": "",
-    "once": false,
-    "onceDelay": "10",
-    "topic": "",
-    "payload": "",
-    "payloadType": "date",
-    "x": 160,
-    "y": 810,
-    "wires": [[]]
-  },
-  {
-    "id": "http_clients",
-    "type": "http request",
-    "z": "tab1",
-    "name": "GET /Clients",
-    "method": "GET",
-    "ret": "obj",
-    "paytoqs": "ignore",
-    "url": "http://192.168.50.120:19023/Clients",
-    "tls": "",
-    "persist": false,
-    "proxy": "",
-    "insecureHTTPParser": false,
-    "authType": "",
-    "senderr": false,
-    "headers": [
-      {"keyType": "other", "keyValue": "Authorization", "valueType": "other", "valueValue": "Bearer token"}
-    ],
-    "x": 370,
-    "y": 810,
-    "wires": [["fn_store_clients"]]
-  },
-  {
-    "id": "fn_store_clients",
-    "type": "function",
-    "z": "tab1",
-    "name": "Store FTS Clients",
-    "func": "var clients = [];\nif (msg.payload && Array.isArray(msg.payload.json_list)) {\n    clients = msg.payload.json_list.map(function(c) {\n        return {\n            callsign: c.callsign || 'Unknown',\n            uid: c.uid || '',\n            ip: c.IP || '',\n            team: c.team || ''\n        };\n    });\n}\nflow.set('ftsClients', clients);\nflow.set('ftsClientsUpdated', Date.now());\nreturn null;",
-    "outputs": 1,
-    "noerr": 0,
-    "x": 570,
-    "y": 810,
-    "wires": [[]]
+    "wires": [
+      [
+        "fn_cot"
+      ]
+    ]
   },
   {
     "id": "http_in_clients",
@@ -438,7 +470,11 @@
     "swaggerDoc": "",
     "x": 170,
     "y": 880,
-    "wires": [["fn_serve_clients"]]
+    "wires": [
+      [
+        "fn_serve_clients"
+      ]
+    ]
   },
   {
     "id": "fn_serve_clients",
@@ -450,7 +486,11 @@
     "noerr": 0,
     "x": 390,
     "y": 880,
-    "wires": [["http_out_clients"]]
+    "wires": [
+      [
+        "http_out_clients"
+      ]
+    ]
   },
   {
     "id": "http_out_clients",
