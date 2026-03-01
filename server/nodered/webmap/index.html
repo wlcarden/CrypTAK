@@ -278,6 +278,65 @@
       font-variant-numeric: tabular-nums;
     }
 
+    /* Connected clients section */
+    #sb-clients {
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+    }
+    #sb-clients-header {
+      display: flex;
+      align-items: center;
+      padding: 7px 10px;
+      background: #222;
+      cursor: pointer;
+      user-select: none;
+    }
+    #sb-clients-header:hover { background: #2a2a2a; }
+    .sb-client-count {
+      background: #1a6b35;
+      color: #7fff7f;
+      font-size: 11px;
+      padding: 1px 7px;
+      border-radius: 8px;
+      min-width: 18px;
+      text-align: center;
+      margin-left: auto;
+    }
+    .sb-client-count.zero { background: #333; color: #666; }
+    #sb-clients-list { }
+    #sb-clients.collapsed #sb-clients-list { display: none; }
+    .sb-client-row {
+      display: flex;
+      align-items: center;
+      padding: 5px 10px 5px 26px;
+      border-bottom: 1px solid #1f1f1f;
+      font-size: 12px;
+    }
+    .sb-client-row.has-loc { cursor: pointer; }
+    .sb-client-row.has-loc:hover { background: #252525; }
+    .sb-client-icon {
+      width: 18px;
+      text-align: center;
+      flex-shrink: 0;
+      margin-right: 8px;
+      font-size: 12px;
+    }
+    .sb-client-online { color: #4CAF50; }
+    .sb-client-name {
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: #ccc;
+    }
+    .sb-client-loc-badge {
+      font-size: 10px;
+      color: #555;
+      margin-left: 6px;
+      flex-shrink: 0;
+    }
+
     /* Empty state */
     .sb-empty {
       padding: 40px 20px;
@@ -320,6 +379,14 @@
         <span id="sb-toolbar-spacer"></span>
         <button class="sb-sort-btn" data-sort="group" title="Group by layer" id="sb-group-toggle"><i class="fa fa-object-group"></i></button>
     </div>
+    <div id="sb-clients">
+        <div id="sb-clients-header">
+            <span class="sb-group-caret"><i class="fa fa-caret-down"></i></span>
+            <span class="sb-group-label">Connected</span>
+            <span class="sb-client-count zero" id="sb-client-count">0</span>
+        </div>
+        <div id="sb-clients-list"></div>
+    </div>
     <div id="sb-summary">Waiting for data...</div>
     <div id="sb-list">
         <div class="sb-empty">No markers</div>
@@ -338,10 +405,14 @@
     var sbSearch = document.getElementById('sb-search');
     var sbToggle = document.getElementById('sidebar-toggle');
     var sbGroupToggle = document.getElementById('sb-group-toggle');
+    var sbClientsSection = document.getElementById('sb-clients');
+    var sbClientsList = document.getElementById('sb-clients-list');
+    var sbClientCount = document.getElementById('sb-client-count');
     var filter = '';
     var sortMode = 'recent';  // 'recent' or 'alpha'
     var groupByLayer = true;
     var collapsedGroups = {};
+    var clientsCollapsed = false;
 
     // Layer display order and color mapping
     var layerOrder = [
@@ -375,6 +446,12 @@
                 .forEach(function(b) { b.classList.toggle('active', b.dataset.sort === mode); });
         }
         renderSidebar();
+    });
+
+    // Toggle connected clients section
+    document.getElementById('sb-clients-header').addEventListener('click', function() {
+        clientsCollapsed = !clientsCollapsed;
+        sbClientsSection.classList.toggle('collapsed', clientsCollapsed);
     });
 
     // Toggle sidebar
@@ -490,6 +567,62 @@
         return html;
     }
 
+    // ── Connected clients ─────────────────────────────────────
+    function fetchClients() {
+        fetch('api/clients')
+            .then(function(r) { return r.ok ? r.json() : { clients: [] }; })
+            .then(function(data) { renderClients(data.clients || []); })
+            .catch(function() { renderClients([]); });
+    }
+
+    function renderClients(clients) {
+        var count = clients.length;
+        sbClientCount.textContent = count;
+        sbClientCount.classList.toggle('zero', count === 0);
+
+        if (count === 0) {
+            sbClientsList.innerHTML = '<div style="padding:6px 26px;color:#555;font-size:12px;">No ATAK clients connected</div>';
+            return;
+        }
+
+        var html = '';
+        for (var i = 0; i < clients.length; i++) {
+            var c = clients[i];
+            var hasLoc = c.lat !== null && c.lon !== null;
+            html += '<div class="sb-client-row' + (hasLoc ? ' has-loc' : '') + '"';
+            if (hasLoc) {
+                html += ' data-lat="' + c.lat + '" data-lon="' + c.lon + '"';
+                html += ' data-name="' + (c.callsign || '').replace(/"/g, '&quot;') + '"';
+            }
+            html += '>';
+            html += '<span class="sb-client-icon sb-client-online"><i class="fa fa-circle"></i></span>';
+            html += '<span class="sb-client-name">' + (c.callsign || 'Unknown') + '</span>';
+            if (!hasLoc) {
+                html += '<span class="sb-client-loc-badge">no loc</span>';
+            } else {
+                html += '<span class="sb-client-loc-badge"><i class="fa fa-crosshairs"></i></span>';
+            }
+            html += '</div>';
+        }
+        sbClientsList.innerHTML = html;
+    }
+
+    // Click-to-fly for client rows with position
+    sbClientsList.addEventListener('click', function(e) {
+        var row = e.target.closest('.sb-client-row.has-loc');
+        if (row && typeof map !== 'undefined') {
+            var lat = parseFloat(row.dataset.lat);
+            var lon = parseFloat(row.dataset.lon);
+            if (!isNaN(lat) && !isNaN(lon)) {
+                map.flyTo([lat, lon], Math.max(map.getZoom(), 14), { duration: 0.8 });
+                var name = row.dataset.name;
+                if (typeof markers !== 'undefined' && markers[name]) {
+                    setTimeout(function() { markers[name].openPopup(); }, 900);
+                }
+            }
+        }
+    });
+
     // ── Main render ───────────────────────────────────────────
     function renderSidebar() {
         var items = collectMarkers();
@@ -563,6 +696,8 @@
             map.invalidateSize();
             renderSidebar();
             setInterval(renderSidebar, 2000);
+            fetchClients();
+            setInterval(fetchClients, 10000);
         }
     }, 500);
 })();
