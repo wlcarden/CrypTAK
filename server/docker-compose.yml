@@ -15,7 +15,7 @@ services:
     image: ghcr.io/freetakteam/freetakserver:latest
     container_name: freetakserver
     hostname: freetakserver
-    restart: unless-stopped
+    restart: always
     networks:
       - taknet
     ports:
@@ -23,8 +23,12 @@ services:
       - "8089:8089"      # CoT SSL  — encrypted client connections
       - "8080:8080"      # Data Package HTTP
       - "8443:8443"      # Data Package HTTPS
-      - "19023:19023"    # REST API — used by FTS-UI; do not expose to internet
+      - "127.0.0.1:19023:19023"  # REST API — localhost only; FTS-UI reaches via taknet
       - "9000:9000"      # Federation — server-to-server linking
+    deploy:
+      resources:
+        limits:
+          memory: 1g
     volumes:
       - /mnt/user/appdata/fts/data:/opt/fts
       # FTS 2.2.1 patch: use session.merge() (UPSERT) instead of session.add() (INSERT-only)
@@ -33,6 +37,13 @@ services:
       # FTS 2.2.1 patch: EventTableController.create() overrides base class with its own session.add(row).
       # Must also patch this file; the table_controllers.py patch alone is insufficient.
       - /mnt/user/appdata/fts/event_table_controller_patched.py:/home/freetak/FreeTAKServer/core/persistence/EventTableController.py:ro
+      # FTS 2.2.1 patch: relay code never removes dead connections from self.connections dict.
+      # Disconnection handler only cleans client_information_queue, not connections.
+      # This patch auto-removes dead sockets on relay failure instead of spamming Bad fd errors.
+      - /mnt/user/appdata/fts/send_component_data_controller_patched.py:/home/freetak/FreeTAKServer/services/tcp_cot_service/controllers/send_component_data_controller.py:ro
+      # FTS 2.2.1 patch: AllowedCLIIPs config setting removed from schema but REST API still
+      # references it. Without this patch, /Clients and other endpoints return 500.
+      - /mnt/user/appdata/fts/MainConfig_patched.py:/home/freetak/FreeTAKServer/core/configuration/MainConfig.py:ro
     environment:
       # Ports
       FTS_COT_PORT: 8087
@@ -88,7 +99,7 @@ services:
     image: ghcr.io/freetakteam/ui:latest
     container_name: freetakserver-ui
     hostname: freetakserver-ui
-    restart: unless-stopped
+    restart: always
     depends_on:
       freetakserver:
         condition: service_started    # service_healthy unavailable — healthcheck disabled on Unraid
@@ -115,11 +126,15 @@ services:
       FTS_MAP_EXPOSED_IP: ${UNRAID_IP}   # Browser-facing IP for the iframe src
       FTS_MAP_PORT: 1880
       FTS_MAP_PROTO: "http"
+    deploy:
+      resources:
+        limits:
+          memory: 512m
 
   nodered:
     image: nodered/node-red:latest
     container_name: nodered
-    restart: unless-stopped
+    restart: always
     depends_on:
       - mosquitto
     ports:
@@ -134,17 +149,25 @@ services:
     # Healthcheck disabled: same Unraid runc issue as FTS (see freetakserver comment).
     healthcheck:
       disable: true
+    deploy:
+      resources:
+        limits:
+          memory: 512m
 
   mosquitto:
     image: eclipse-mosquitto:latest
     container_name: mosquitto
-    restart: unless-stopped
+    restart: always
     ports:
-      - "1883:1883"          # MQTT — Meshtastic node telemetry
+      - "127.0.0.1:1883:1883"  # MQTT — localhost only; Node-RED reaches via Docker DNS
     volumes:
       - /mnt/user/appdata/mosquitto/config:/mosquitto/config
       - /mnt/user/appdata/mosquitto/data:/mosquitto/data
       - /mnt/user/appdata/mosquitto/log:/mosquitto/log
+    deploy:
+      resources:
+        limits:
+          memory: 256m
 
   # ── Headscale VPN stack ──────────────────────────────────────────────────────
   #
@@ -169,7 +192,7 @@ services:
   authelia:
     image: ghcr.io/authelia/authelia:latest
     container_name: authelia
-    restart: unless-stopped
+    restart: always
     networks:
       - taknet
     volumes:
@@ -183,11 +206,15 @@ services:
       AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE: /secrets/oidc_hmac_secret
       # client_secret is delivered via !secret directive in configuration.yml
     # No exposed ports — nginx proxies /auth/* internally
+    deploy:
+      resources:
+        limits:
+          memory: 512m
 
   headscale-nginx:
     image: ghcr.io/nginxinc/nginx-unprivileged:alpine
     container_name: headscale-nginx
-    restart: unless-stopped
+    restart: always
     depends_on:
       - headscale
       - authelia
@@ -197,11 +224,15 @@ services:
       - "8082:8080"    # Control plane — cloudflared routes tak.thousand-pikes.com → :8082
     volumes:
       - ./headscale/nginx.conf:/etc/nginx/nginx.conf:ro
+    deploy:
+      resources:
+        limits:
+          memory: 256m
 
   headscale:
     image: ghcr.io/juanfont/headscale:latest
     container_name: headscale
-    restart: unless-stopped
+    restart: always
     networks:
       - taknet
     ports:
@@ -211,11 +242,15 @@ services:
       - /mnt/user/appdata/headscale:/var/lib/headscale  # keys, DB, node state — persists
     command: serve
     # No healthcheck — headscale image is distroless (no wget/curl/sh available)
+    deploy:
+      resources:
+        limits:
+          memory: 512m
 
   headscale-ui:
     image: ghcr.io/gurucomputing/headscale-ui:latest
     container_name: headscale-ui
-    restart: unless-stopped
+    restart: always
     depends_on:
       - headscale
     networks:
@@ -223,6 +258,10 @@ services:
     ports:
       - "8083:80"      # Admin web UI — LAN only at http://192.168.50.120:8083
                        # Configure with: URL=https://tak.thousand-pikes.com, API key from CLI
+    deploy:
+      resources:
+        limits:
+          memory: 256m
 
   # ── GitHub Actions Self-Hosted Runner ────────────────────────────────────────
   #
@@ -235,7 +274,7 @@ services:
   github-runner:
     image: myoung34/github-runner:latest
     container_name: github-runner
-    restart: unless-stopped
+    restart: always
     environment:
       RUNNER_SCOPE: repo
       REPO_URL: https://github.com/wlcarden/CrypTAK
@@ -252,6 +291,10 @@ services:
       - /mnt/user/appdata/tak-server:/mnt/user/appdata/tak-server
     healthcheck:
       disable: true
+    deploy:
+      resources:
+        limits:
+          memory: 1g
 
   # ── Incident Tracker (optional) ──────────────────────────────────────────────
   #
@@ -267,7 +310,7 @@ services:
     build: ./incident-tracker
     container_name: incident-tracker
     profiles: ["incident-tracker"]
-    restart: unless-stopped
+    restart: always
     depends_on:
       freetakserver:
         condition: service_started
@@ -279,6 +322,10 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     healthcheck:
       disable: true
+    deploy:
+      resources:
+        limits:
+          memory: 512m
 
 networks:
   taknet:
