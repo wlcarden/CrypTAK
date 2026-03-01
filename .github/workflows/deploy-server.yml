@@ -6,6 +6,7 @@ on:
     paths:
       - 'server/**'
       - '.github/workflows/deploy-server.yml'
+  workflow_dispatch:
 
 env:
   DEPLOY_DIR: /mnt/user/appdata/tak-server
