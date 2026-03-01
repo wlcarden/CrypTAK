@@ -35,7 +35,9 @@ jobs:
           SERVICES=$(docker compose config --services | grep -v github-runner)
           docker compose pull $SERVICES
           docker compose up -d --remove-orphans $SERVICES
-          docker compose --profile incident-tracker up -d
+          # Target incident-tracker explicitly — bare '--profile up -d' would
+          # recreate all changed services including github-runner.
+          docker compose --profile incident-tracker up -d incident-tracker
 
       - name: Wait for Node-RED to start
         run: |
