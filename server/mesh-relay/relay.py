@@ -205,6 +205,10 @@ class FtsClient:
         if self._writer is None:
             await self.connect()
         await self.refresh_sa()
+        if self._writer is None:
+            # refresh_sa() discovered a broken connection and closed it.
+            # Reconnect before attempting the write.
+            await self.connect()
         try:
             self._writer.write((cot_xml + "\n").encode("utf-8"))
             await self._writer.drain()
