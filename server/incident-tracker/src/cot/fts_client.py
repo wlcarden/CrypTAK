@@ -124,6 +124,7 @@ class FtsClient:
                 pass
             self._writer = None
             self._reader = None
+            self._last_sa = None
 
     async def close(self) -> None:
         """Shut down the TCP connection."""

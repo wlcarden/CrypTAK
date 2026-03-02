@@ -148,23 +148,31 @@ function buildTooltip(callsign, r) {
 /**
  * Build HTML popup for a marker (shown on click).
  */
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function buildPopup(callsign, r, color) {
   var html =
     '<div style="font-family:sans-serif;font-size:13px;max-width:300px;">';
-  if (r.location) html += "<b>" + r.location + "</b><br>";
-  if (r.summary) html += r.summary + "<br>";
+  if (r.location) html += "<b>" + escHtml(r.location) + "</b><br>";
+  if (r.summary) html += escHtml(r.summary) + "<br>";
   if (r.source || r.severity) {
     html += '<span style="color:#888;font-size:11px;">';
     var meta = [];
-    if (r.source) meta.push(r.source);
-    if (r.severity) meta.push(r.severity);
+    if (r.source) meta.push(escHtml(r.source));
+    if (r.severity) meta.push(escHtml(r.severity));
     html += meta.join(" &middot; ");
     html += "</span>";
   }
-  if (r.url) {
+  if (r.url && /^https?:\/\//i.test(r.url)) {
     html +=
       '<br><a href="' +
-      r.url +
+      r.url.replace(/"/g, "%22") +
       '" target="_blank" ' +
       'style="color:#4A90D9;font-size:12px;">View details &rarr;</a>';
   }
@@ -315,6 +323,7 @@ module.exports = {
   getIcon: getIcon,
   calcOpacity: calcOpacity,
   parseRemarks: parseRemarks,
+  escHtml: escHtml,
   buildTooltip: buildTooltip,
   buildPopup: buildPopup,
   parseCotToMarker: parseCotToMarker,

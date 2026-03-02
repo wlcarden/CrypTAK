@@ -23,6 +23,12 @@ USERNAME="$1"
 DISPLAY_NAME="$2"
 EMAIL="$3"
 
+# Validate username — alphanumeric + hyphens/underscores only
+if [[ ! "$USERNAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "ERROR: Username must contain only letters, numbers, hyphens, and underscores"
+    exit 1
+fi
+
 # Check for duplicates
 if grep -q "^  ${USERNAME}:" "$AUTHELIA_USERS" 2>/dev/null; then
     echo "ERROR: User '${USERNAME}' already exists in Authelia"
@@ -39,9 +45,9 @@ if [[ "$PASSWORD" != "$PASSWORD2" ]]; then
     exit 1
 fi
 
-# Hash password with Authelia's container
-HASH=$(docker run --rm ghcr.io/authelia/authelia:latest \
-    authelia crypto hash generate argon2 --password "$PASSWORD" 2>/dev/null \
+# Hash password with Authelia's container (piped via stdin to avoid /proc exposure)
+HASH=$(printf '%s' "$PASSWORD" | docker run --rm -i ghcr.io/authelia/authelia:latest \
+    authelia crypto hash generate argon2 --stdin 2>/dev/null \
     | grep 'Digest:' | awk '{print $2}')
 
 if [[ -z "$HASH" ]]; then

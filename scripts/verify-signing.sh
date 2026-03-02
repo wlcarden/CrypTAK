@@ -5,7 +5,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ATAK_APK="$REPO_ROOT/apks/atak-civ/atak-civ-5.6.0-debug.apk"
+ATAK_APK=$(ls "$REPO_ROOT/apks/atak-civ/"*.apk 2>/dev/null | sort -V | tail -1)
 PLUGIN_APK=$(ls "$REPO_ROOT/apks/releases/"*.apk 2>/dev/null | sort -V | tail -1)
 
 fingerprint() {
@@ -17,7 +17,7 @@ fingerprint() {
 echo "=== APK Signing Verification ==="
 echo ""
 
-if [ -f "$ATAK_APK" ]; then
+if [ -n "$ATAK_APK" ] && [ -f "$ATAK_APK" ]; then
     ATAK_FP=$(fingerprint "$ATAK_APK")
     echo "ATAK-CIV:  $ATAK_FP"
 else
@@ -39,6 +39,6 @@ if [ "$ATAK_FP" = "$PLUGIN_FP" ]; then
 else
     echo "MISMATCH — plugin will be rejected by ATAK"
     echo ""
-    echo "Use the debug ATAK-CIV APK from the same SDK release (5.6.0),"
+    echo "Use the debug ATAK-CIV APK from the same SDK release,"
     echo "not the Play Store or production version."
 fi

@@ -24,7 +24,7 @@ services:
       - "8080:8080"      # Data Package HTTP
       - "8443:8443"      # Data Package HTTPS
       - "127.0.0.1:19023:19023"  # REST API — localhost only; FTS-UI reaches via taknet
-      - "9000:9000"      # Federation — server-to-server linking
+      - "127.0.0.1:9000:9000"  # Federation — server-to-server linking; localhost-only until needed
     deploy:
       resources:
         limits:

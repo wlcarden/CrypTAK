@@ -20,11 +20,7 @@
     "payloadType": "date",
     "x": 170,
     "y": 100,
-    "wires": [
-      [
-        "fn_cot"
-      ]
-    ]
+    "wires": [["fn_cot"]]
   },
   {
     "id": "fn_cot",
@@ -37,11 +33,7 @@
     "noerr": 0,
     "x": 420,
     "y": 100,
-    "wires": [
-      [
-        "wmap1"
-      ]
-    ]
+    "wires": [["wmap1"]]
   },
   {
     "id": "inj_states",
@@ -58,11 +50,7 @@
     "payloadType": "date",
     "x": 160,
     "y": 200,
-    "wires": [
-      [
-        "http_states"
-      ]
-    ]
+    "wires": [["http_states"]]
   },
   {
     "id": "http_states",
@@ -82,11 +70,7 @@
     "headers": [],
     "x": 380,
     "y": 200,
-    "wires": [
-      [
-        "fmt_states"
-      ]
-    ]
+    "wires": [["fmt_states"]]
   },
   {
     "id": "fmt_states",
@@ -98,11 +82,7 @@
     "noerr": 0,
     "x": 590,
     "y": 200,
-    "wires": [
-      [
-        "wmap1"
-      ]
-    ]
+    "wires": [["wmap1"]]
   },
   {
     "id": "inj_counties",
@@ -119,11 +99,7 @@
     "payloadType": "date",
     "x": 160,
     "y": 260,
-    "wires": [
-      [
-        "http_counties"
-      ]
-    ]
+    "wires": [["http_counties"]]
   },
   {
     "id": "http_counties",
@@ -143,11 +119,7 @@
     "headers": [],
     "x": 385,
     "y": 260,
-    "wires": [
-      [
-        "fmt_counties"
-      ]
-    ]
+    "wires": [["fmt_counties"]]
   },
   {
     "id": "fmt_counties",
@@ -159,11 +131,7 @@
     "noerr": 0,
     "x": 595,
     "y": 260,
-    "wires": [
-      [
-        "wmap1"
-      ]
-    ]
+    "wires": [["wmap1"]]
   },
   {
     "id": "inj_noaa",
@@ -180,11 +148,7 @@
     "payloadType": "date",
     "x": 150,
     "y": 360,
-    "wires": [
-      [
-        "setup_noaa"
-      ]
-    ]
+    "wires": [["setup_noaa"]]
   },
   {
     "id": "setup_noaa",
@@ -196,11 +160,7 @@
     "noerr": 0,
     "x": 350,
     "y": 360,
-    "wires": [
-      [
-        "http_noaa"
-      ]
-    ]
+    "wires": [["http_noaa"]]
   },
   {
     "id": "http_noaa",
@@ -220,11 +180,7 @@
     "headers": [],
     "x": 560,
     "y": 360,
-    "wires": [
-      [
-        "fmt_noaa"
-      ]
-    ]
+    "wires": [["fmt_noaa"]]
   },
   {
     "id": "fmt_noaa",
@@ -236,11 +192,7 @@
     "noerr": 0,
     "x": 760,
     "y": 360,
-    "wires": [
-      [
-        "wmap1"
-      ]
-    ]
+    "wires": [["wmap1"]]
   },
   {
     "id": "mqtt_broker1",
@@ -287,11 +239,7 @@
     "payloadType": "date",
     "x": 170,
     "y": 480,
-    "wires": [
-      [
-        "fn_owned"
-      ]
-    ]
+    "wires": [["fn_owned"]]
   },
   {
     "id": "fn_owned",
@@ -303,9 +251,7 @@
     "noerr": 0,
     "x": 390,
     "y": 480,
-    "wires": [
-      []
-    ]
+    "wires": [[]]
   },
   {
     "id": "mqtt_mesh",
@@ -322,11 +268,7 @@
     "inputs": 0,
     "x": 170,
     "y": 560,
-    "wires": [
-      [
-        "fn_mesh"
-      ]
-    ]
+    "wires": [["fn_mesh"]]
   },
   {
     "id": "fn_mesh",
@@ -338,11 +280,7 @@
     "noerr": 0,
     "x": 390,
     "y": 560,
-    "wires": [
-      [
-        "wmap1"
-      ]
-    ]
+    "wires": [["wmap1"]]
   },
   {
     "id": "wmap1",
@@ -383,12 +321,7 @@
     "path": "/tak-map",
     "x": 170,
     "y": 640,
-    "wires": [
-      [
-        "fn_on_connect",
-        "fn_draw_to_cot"
-      ]
-    ]
+    "wires": [["fn_on_connect", "fn_draw_to_cot"]]
   },
   {
     "id": "fn_on_connect",
@@ -400,11 +333,7 @@
     "noerr": 0,
     "x": 390,
     "y": 640,
-    "wires": [
-      [
-        "wmap1"
-      ]
-    ]
+    "wires": [["wmap1"]]
   },
   {
     "id": "inj_branding",
@@ -421,11 +350,7 @@
     "payloadType": "date",
     "x": 180,
     "y": 40,
-    "wires": [
-      [
-        "fn_branding"
-      ]
-    ]
+    "wires": [["fn_branding"]]
   },
   {
     "id": "fn_branding",
@@ -437,27 +362,19 @@
     "noerr": 0,
     "x": 430,
     "y": 40,
-    "wires": [
-      [
-        "wmap1"
-      ]
-    ]
+    "wires": [["wmap1"]]
   },
   {
     "id": "fn_draw_to_cot",
     "type": "function",
     "z": "tab1",
     "name": "Draw \u2192 CoT XML",
-    "func": "var p = msg.payload;\nif (!p || p.action !== 'draw') return null;\n\nvar now   = new Date().toISOString();\nvar stale = new Date(Date.now() + 24 * 3600000).toISOString();\n\nvar uid  = 'NR-DRAW-' + p.name.replace(/\\s+/g, '-');\nvar name = p.name || 'Drawing';\n\n// CSS hex \u2192 signed 32-bit ARGB integer (TAK color format)\nfunction cssToArgb(css, alpha) {\n    alpha = (alpha !== undefined) ? alpha : 0xFF;\n    var hex = (css || '#FFFFFF').replace('#', '');\n    if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];\n    var r = parseInt(hex.substring(0, 2), 16) || 0;\n    var g = parseInt(hex.substring(2, 4), 16) || 0;\n    var b = parseInt(hex.substring(4, 6), 16) || 0;\n    return ((alpha << 24) | (r << 16) | (g << 8) | b) | 0;\n}\n\nvar opts = p.options || {};\nvar strokeColor = cssToArgb(opts.color || '#FFFF00');\nvar fillAlpha   = Math.round((opts.fillOpacity !== undefined ? opts.fillOpacity : 0.2) * 255);\nvar fillColor   = cssToArgb(opts.fillColor || opts.color || '#FFFF00', fillAlpha);\nvar weight      = opts.weight || 3.0;\n\nfunction latlngsToLinks(arr) {\n    return arr.map(function(pt) {\n        return \"<link point='\" + pt.lat + \",\" + pt.lng + \"'/>\";\n    }).join('');\n}\n\nfunction centroid(arr) {\n    var lat = 0, lon = 0;\n    arr.forEach(function(pt) { lat += pt.lat; lon += pt.lng; });\n    return { lat: lat / arr.length, lon: lon / arr.length };\n}\n\nfunction eventWrap(type, centerLat, centerLon, detail) {\n    return \"<?xml version='1.0' encoding='UTF-8' standalone='yes'?>\"\n        + \"<event version='2.0' uid='\" + uid + \"' type='\" + type + \"'\"\n        + \" time='\" + now + \"' start='\" + now + \"' stale='\" + stale + \"' how='h-e'>\"\n        + \"<point lat='\" + centerLat + \"' lon='\" + centerLon + \"'\"\n        + \" hae='9999999.0' ce='9999999.0' le='9999999.0'/>\"\n        + \"<detail>\" + detail\n        + \"<strokeColor value='\" + strokeColor + \"'/>\"\n        + \"<strokeWeight value='\" + weight + \"'/>\"\n        + \"<fillColor value='\" + fillColor + \"'/>\"\n        + \"<contact callsign='\" + name + \"'/>\"\n        + \"<remarks>Drawn on CrypTAK WebMap</remarks>\"\n        + \"<archive/><labels_on value='true'/>\"\n        + \"</detail></event>\";\n}\n\nvar xml;\n\nif (p.type === 'circlemarker' && p.lat && p.lon && p.radius) {\n    xml = eventWrap('u-d-c-c', p.lat, p.lon,\n        \"<shape><ellipse major='\" + p.radius + \"' minor='\" + p.radius + \"' angle='360'/></shape>\");\n\n} else if (p.type === 'rectangle' && p.area) {\n    var c = centroid(p.area);\n    xml = eventWrap('u-d-r', c.lat, c.lon, latlngsToLinks(p.area));\n\n} else if (p.type === 'polygon' && p.area) {\n    var c = centroid(p.area);\n    var links = latlngsToLinks(p.area);\n    links += \"<link point='\" + p.area[0].lat + \",\" + p.area[0].lng + \"'/>\";\n    xml = eventWrap('u-d-f', c.lat, c.lon, links);\n\n} else if ((p.type === 'polyline' || p.type === 'route') && p.line) {\n    var arr = p.line;\n    if (Array.isArray(arr[0]) && arr[0].lat === undefined) arr = arr[0];\n    var c = centroid(arr);\n    xml = eventWrap('u-d-f', c.lat, c.lon, latlngsToLinks(arr));\n\n} else {\n    return null;\n}\n\nnode.log('Draw\u2192CoT: ' + p.type + ' \"' + name + '\" (' + xml.length + ' bytes)');\nmsg.payload = xml;\nreturn msg;",
+    "func": "var p = msg.payload;\nif (!p || p.action !== 'draw') return null;\n\nvar now   = new Date().toISOString();\nvar stale = new Date(Date.now() + 24 * 3600000).toISOString();\n\nfunction xmlEsc(s) {\n    return String(s).replace(/&/g,'&amp;').replace(/'/g,'&apos;')\n        .replace(/\"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\n}\nvar rawName = p.name || 'Drawing';\nvar uid  = 'NR-DRAW-' + rawName.replace(/[^a-zA-Z0-9_-]/g, '-');\nvar name = xmlEsc(rawName);\n\n// CSS hex \u2192 signed 32-bit ARGB integer (TAK color format)\nfunction cssToArgb(css, alpha) {\n    alpha = (alpha !== undefined) ? alpha : 0xFF;\n    var hex = (css || '#FFFFFF').replace('#', '');\n    if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];\n    var r = parseInt(hex.substring(0, 2), 16) || 0;\n    var g = parseInt(hex.substring(2, 4), 16) || 0;\n    var b = parseInt(hex.substring(4, 6), 16) || 0;\n    return ((alpha << 24) | (r << 16) | (g << 8) | b) | 0;\n}\n\nvar opts = p.options || {};\nvar strokeColor = cssToArgb(opts.color || '#FFFF00');\nvar fillAlpha   = Math.round((opts.fillOpacity !== undefined ? opts.fillOpacity : 0.2) * 255);\nvar fillColor   = cssToArgb(opts.fillColor || opts.color || '#FFFF00', fillAlpha);\nvar weight      = opts.weight || 3.0;\n\nfunction latlngsToLinks(arr) {\n    return arr.map(function(pt) {\n        return \"<link point='\" + pt.lat + \",\" + pt.lng + \"'/>\";\n    }).join('');\n}\n\nfunction centroid(arr) {\n    var lat = 0, lon = 0;\n    arr.forEach(function(pt) { lat += pt.lat; lon += pt.lng; });\n    return { lat: lat / arr.length, lon: lon / arr.length };\n}\n\nfunction eventWrap(type, centerLat, centerLon, detail) {\n    return \"<?xml version='1.0' encoding='UTF-8' standalone='yes'?>\"\n        + \"<event version='2.0' uid='\" + uid + \"' type='\" + type + \"'\"\n        + \" time='\" + now + \"' start='\" + now + \"' stale='\" + stale + \"' how='h-e'>\"\n        + \"<point lat='\" + centerLat + \"' lon='\" + centerLon + \"'\"\n        + \" hae='9999999.0' ce='9999999.0' le='9999999.0'/>\"\n        + \"<detail>\" + detail\n        + \"<strokeColor value='\" + strokeColor + \"'/>\"\n        + \"<strokeWeight value='\" + weight + \"'/>\"\n        + \"<fillColor value='\" + fillColor + \"'/>\"\n        + \"<contact callsign='\" + name + \"'/>\"\n        + \"<remarks>Drawn on CrypTAK WebMap</remarks>\"\n        + \"<archive/><labels_on value='true'/>\"\n        + \"</detail></event>\";\n}\n\nvar xml;\n\nif (p.type === 'circlemarker' && p.lat && p.lon && p.radius) {\n    xml = eventWrap('u-d-c-c', p.lat, p.lon,\n        \"<shape><ellipse major='\" + p.radius + \"' minor='\" + p.radius + \"' angle='360'/></shape>\");\n\n} else if (p.type === 'rectangle' && p.area) {\n    var c = centroid(p.area);\n    xml = eventWrap('u-d-r', c.lat, c.lon, latlngsToLinks(p.area));\n\n} else if (p.type === 'polygon' && p.area) {\n    var c = centroid(p.area);\n    var links = latlngsToLinks(p.area);\n    links += \"<link point='\" + p.area[0].lat + \",\" + p.area[0].lng + \"'/>\";\n    xml = eventWrap('u-d-f', c.lat, c.lon, links);\n\n} else if ((p.type === 'polyline' || p.type === 'route') && p.line) {\n    var arr = p.line;\n    if (Array.isArray(arr[0]) && arr[0].lat === undefined) arr = arr[0];\n    var c = centroid(arr);\n    xml = eventWrap('u-d-f', c.lat, c.lon, latlngsToLinks(arr));\n\n} else {\n    return null;\n}\n\nnode.log('Draw\u2192CoT: ' + p.type + ' \"' + name + '\" (' + xml.length + ' bytes)');\nmsg.payload = xml;\nreturn msg;",
     "outputs": 1,
     "noerr": 0,
     "x": 390,
     "y": 720,
-    "wires": [
-      [
-        "fn_cot"
-      ]
-    ]
+    "wires": [["fn_cot"]]
   },
   {
     "id": "http_in_clients",
@@ -470,11 +387,7 @@
     "swaggerDoc": "",
     "x": 170,
     "y": 880,
-    "wires": [
-      [
-        "fn_serve_clients"
-      ]
-    ]
+    "wires": [["fn_serve_clients"]]
   },
   {
     "id": "fn_serve_clients",
@@ -486,11 +399,7 @@
     "noerr": 0,
     "x": 390,
     "y": 880,
-    "wires": [
-      [
-        "http_out_clients"
-      ]
-    ]
+    "wires": [["http_out_clients"]]
   },
   {
     "id": "http_out_clients",

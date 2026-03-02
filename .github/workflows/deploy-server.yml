@@ -8,6 +8,10 @@ on:
       - '.github/workflows/deploy-server.yml'
   workflow_dispatch:
 
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
 env:
   DEPLOY_DIR: /mnt/user/appdata/tak-server
   NODERED_URL: http://host.docker.internal:1880
@@ -85,7 +89,7 @@ jobs:
           services = [json.loads(line) for line in raw.splitlines() if line.strip()]
           # Profile services (incident-tracker) may crash-loop if not configured
           # Only fail on core services
-          profile_services = {'incident-tracker', 'mesh-relay'}
+          profile_services = {'incident-tracker', 'mesh-relay', 'github-runner'}
           failed = []
           warned = []
           for s in services:

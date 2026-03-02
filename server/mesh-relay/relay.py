@@ -242,6 +242,21 @@ class FtsClient:
 
 # --- Meshtastic listener ---
 
+def _enqueue(queue, loop, data):
+    """Thread-safe enqueue with backpressure — drops oldest if full."""
+    def _put():
+        try:
+            queue.put_nowait(data)
+        except asyncio.QueueFull:
+            logger.warning("Queue full, dropping oldest position")
+            try:
+                queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            queue.put_nowait(data)
+    loop.call_soon_threadsafe(_put)
+
+
 def _seed_from_nodedb(iface, queue, loop, max_age_secs: int = 0):
     """Push cached positions from the T-Beam's nodedb into the queue.
 
@@ -304,7 +319,7 @@ def _seed_from_nodedb(iface, queue, loop, max_age_secs: int = 0):
             "battery": battery,
             "hw_model": user.get("hwModel", ""),
         }
-        loop.call_soon_threadsafe(queue.put_nowait, data)
+        _enqueue(queue, loop, data)
         seeded += 1
         logger.debug(
             "Seeded from nodedb: %s at %.6f, %.6f", callsign, lat, lon,
@@ -368,7 +383,7 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
                 "battery": battery,
                 "hw_model": hw_model,
             }
-            loop.call_soon_threadsafe(queue.put_nowait, data)
+            _enqueue(queue, loop, data)
             logger.info(
                 "Position from %s: %.6f, %.6f alt=%dm",
                 callsign, lat, lon, int(data["alt"]),
@@ -438,47 +453,52 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
             _seed_from_nodedb(iface, queue, loop)
 
             pub.subscribe(on_disconnect, "meshtastic.connection.lost")
+            try:
+                last_poll = time.monotonic()
+                my_node_num = getattr(
+                    getattr(iface, "myInfo", None), "my_node_num", None,
+                )
 
-            last_poll = time.monotonic()
-            my_node_num = getattr(
-                getattr(iface, "myInfo", None), "my_node_num", None,
-            )
+                while not disconnected.wait(timeout=MESH_HEARTBEAT_SECS):
+                    try:
+                        iface.sendHeartbeat()
+                    except Exception:
+                        logger.warning("Heartbeat failed, connection likely dead")
+                        break
 
-            while not disconnected.wait(timeout=MESH_HEARTBEAT_SECS):
+                    # Refresh PLI from nodedb and poll remote nodes.
+                    # Meshtastic firmware suppresses position packets to the
+                    # API when the data hasn't changed, so fixed-position nodes
+                    # never generate pubsub events after boot. We re-read the
+                    # nodedb and only include nodes heard within STALE_MINUTES,
+                    # so offline nodes' markers expire naturally.
+                    now = time.monotonic()
+                    if now - last_poll >= POSITION_POLL_SECS:
+                        last_poll = now
+                        _seed_from_nodedb(
+                            iface, queue, loop,
+                            max_age_secs=STALE_MINUTES * 60,
+                        )
+                        for nid in list(iface.nodes):
+                            node = iface.nodes.get(nid)
+                            if node is None:
+                                continue
+                            if node.get("num") == my_node_num:
+                                continue
+                            try:
+                                iface.sendData(
+                                    mesh_pb2.Position(),
+                                    destinationId=nid,
+                                    portNum=portnums_pb2.PortNum.POSITION_APP,
+                                    wantResponse=True,
+                                )
+                            except Exception as exc:
+                                logger.debug("Position poll to %s failed: %s", nid, exc)
+            finally:
                 try:
-                    iface.sendHeartbeat()
+                    pub.unsubscribe(on_disconnect, "meshtastic.connection.lost")
                 except Exception:
-                    logger.warning("Heartbeat failed, connection likely dead")
-                    break
-
-                # Refresh PLI from nodedb and poll remote nodes.
-                # Meshtastic firmware suppresses position packets to the
-                # API when the data hasn't changed, so fixed-position nodes
-                # never generate pubsub events after boot. We re-read the
-                # nodedb and only include nodes heard within STALE_MINUTES,
-                # so offline nodes' markers expire naturally.
-                now = time.monotonic()
-                if now - last_poll >= POSITION_POLL_SECS:
-                    last_poll = now
-                    _seed_from_nodedb(
-                        iface, queue, loop,
-                        max_age_secs=STALE_MINUTES * 60,
-                    )
-                    for nid in list(iface.nodes):
-                        node = iface.nodes[nid]
-                        if node.get("num") == my_node_num:
-                            continue
-                        try:
-                            iface.sendData(
-                                mesh_pb2.Position(),
-                                destinationId=nid,
-                                portNum=portnums_pb2.PortNum.POSITION_APP,
-                                wantResponse=True,
-                            )
-                        except Exception as exc:
-                            logger.debug("Position poll to %s failed: %s", nid, exc)
-
-            pub.unsubscribe(on_disconnect, "meshtastic.connection.lost")
+                    pass
             logger.warning(
                 "Mesh connection lost, reconnecting in %ds", RECONNECT_DELAY,
             )
@@ -500,7 +520,7 @@ async def main() -> None:
     fts = FtsClient(FTS_HOST, FTS_PORT)
     await fts.connect()
 
-    queue: asyncio.Queue = asyncio.Queue()
+    queue: asyncio.Queue = asyncio.Queue(maxsize=100)
     loop = asyncio.get_running_loop()
 
     # Daemon thread auto-reconnects to mesh node independently

@@ -549,6 +549,11 @@
         }
     }
 
+    function esc(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
     function renderMarkerRow(m, now) {
         var age = m.startMs > 0 ? formatAge(now - m.startMs) : '';
         var iconClass = m.icon.indexOf('fa-') === 0 ? 'fa ' + m.icon : m.icon;
@@ -558,7 +563,7 @@
         html += '<div class="sb-marker-icon" style="color:' + m.color + '">' +
             '<i class="fa ' + m.icon + '"></i></div>';
         html += '<div class="sb-marker-info">';
-        html += '<div class="sb-marker-name">' + m.name + '</div>';
+        html += '<div class="sb-marker-name">' + esc(m.name) + '</div>';
         html += '<div class="sb-marker-meta">' +
             m.lat.toFixed(4) + ', ' + m.lon.toFixed(4) + '</div>';
         html += '</div>';
@@ -596,7 +601,7 @@
             }
             html += '>';
             html += '<span class="sb-client-icon sb-client-online"><i class="fa fa-circle"></i></span>';
-            html += '<span class="sb-client-name">' + (c.callsign || 'Unknown') + '</span>';
+            html += '<span class="sb-client-name">' + esc(c.callsign || 'Unknown') + '</span>';
             if (!hasLoc) {
                 html += '<span class="sb-client-loc-badge">no loc</span>';
             } else {
