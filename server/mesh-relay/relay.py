@@ -239,21 +239,37 @@ class FtsClient:
 
 # --- Meshtastic listener ---
 
-def _seed_from_nodedb(iface, queue, loop):
+def _seed_from_nodedb(iface, queue, loop, max_age_secs: int = 0):
     """Push cached positions from the T-Beam's nodedb into the queue.
 
-    The meshtastic library populates iface.nodes from the device's
-    stored nodedb on connect.  This gives us immediate PLI for nodes
-    that broadcast their position at boot but won't re-broadcast on
-    a timer (firmware 2.7.x fixed-position bug).
+    The meshtastic firmware doesn't forward received position packets
+    to the serial/TCP API if the position data hasn't changed (it
+    updates lastHeard internally but suppresses duplicate content).
+    This means fixed-position nodes never generate pubsub events after
+    the initial boot broadcast.
+
+    We compensate by periodically re-reading the nodedb and pushing
+    PLI for nodes that are still alive.  The lastHeard timestamp tells
+    us when the T-Beam's radio last received ANY packet from a node.
+    If max_age_secs > 0, only nodes heard within that window are
+    included — nodes that go offline will be skipped and their TAK
+    markers will naturally expire via the CoT stale timeout.
     """
     my_node_num = getattr(
         getattr(iface, "myInfo", None), "my_node_num", None,
     )
+    now_epoch = int(time.time())
     seeded = 0
     for nid, node in list(iface.nodes.items()):
         if node.get("num") == my_node_num:
             continue
+
+        # Skip nodes not heard recently (they're offline)
+        if max_age_secs > 0:
+            last_heard = node.get("lastHeard", 0) or 0
+            if last_heard and (now_epoch - last_heard) > max_age_secs:
+                continue
+
         pos = node.get("position", {})
         lat = pos.get("latitude", 0.0) or 0.0
         lon = pos.get("longitude", 0.0) or 0.0
@@ -289,7 +305,7 @@ def _seed_from_nodedb(iface, queue, loop):
             "Seeded from nodedb: %s at %.6f, %.6f", callsign, lat, lon,
         )
     if seeded:
-        logger.info("Seeded %d positions from nodedb", seeded)
+        logger.info("Refreshed %d positions from nodedb", seeded)
 
 
 def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
@@ -402,9 +418,9 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
                 MESH_HEARTBEAT_SECS, POSITION_POLL_SECS,
             )
 
-            # Seed initial PLI from T-Beam's cached nodedb.
-            # Meshtastic firmware doesn't reliably re-broadcast fixed
-            # positions on a timer, so boot-time cache may be all we get.
+            # Seed initial PLI from T-Beam's cached nodedb so markers
+            # appear immediately without waiting for the first broadcast.
+            # No age filter on initial seed — show all known nodes.
             _seed_from_nodedb(iface, queue, loop)
 
             pub.subscribe(on_disconnect, "meshtastic.connection.lost")
@@ -421,15 +437,19 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
                     logger.warning("Heartbeat failed, connection likely dead")
                     break
 
-                # On each poll interval:
-                # 1. Re-seed PLI from nodedb so markers don't go stale
-                #    (firmware doesn't reliably re-broadcast fixed positions)
-                # 2. Send position requests over LoRa in case nodes respond
-                #    with updated data
+                # Refresh PLI from nodedb and poll remote nodes.
+                # Meshtastic firmware suppresses position packets to the
+                # API when the data hasn't changed, so fixed-position nodes
+                # never generate pubsub events after boot. We re-read the
+                # nodedb and only include nodes heard within STALE_MINUTES,
+                # so offline nodes' markers expire naturally.
                 now = time.monotonic()
                 if now - last_poll >= POSITION_POLL_SECS:
                     last_poll = now
-                    _seed_from_nodedb(iface, queue, loop)
+                    _seed_from_nodedb(
+                        iface, queue, loop,
+                        max_age_secs=STALE_MINUTES * 60,
+                    )
                     for nid in list(iface.nodes):
                         node = iface.nodes[nid]
                         if node.get("num") == my_node_num:
