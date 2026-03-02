@@ -285,10 +285,11 @@ def _seed_from_nodedb(iface, queue, loop):
         }
         loop.call_soon_threadsafe(queue.put_nowait, data)
         seeded += 1
-        logger.info(
+        logger.debug(
             "Seeded from nodedb: %s at %.6f, %.6f", callsign, lat, lon,
         )
-    logger.info("Seeded %d positions from nodedb", seeded)
+    if seeded:
+        logger.info("Seeded %d positions from nodedb", seeded)
 
 
 def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
@@ -408,7 +409,7 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
 
             pub.subscribe(on_disconnect, "meshtastic.connection.lost")
 
-            last_poll = 0.0
+            last_poll = time.monotonic()
             my_node_num = getattr(
                 getattr(iface, "myInfo", None), "my_node_num", None,
             )
@@ -420,21 +421,20 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
                     logger.warning("Heartbeat failed, connection likely dead")
                     break
 
-                # Request positions from remote mesh nodes on a longer interval.
-                # Meshtastic firmware doesn't reliably broadcast fixed positions
-                # on a timer, so we poll instead.
+                # On each poll interval:
+                # 1. Re-seed PLI from nodedb so markers don't go stale
+                #    (firmware doesn't reliably re-broadcast fixed positions)
+                # 2. Send position requests over LoRa in case nodes respond
+                #    with updated data
                 now = time.monotonic()
                 if now - last_poll >= POSITION_POLL_SECS:
                     last_poll = now
+                    _seed_from_nodedb(iface, queue, loop)
                     for nid in list(iface.nodes):
                         node = iface.nodes[nid]
                         if node.get("num") == my_node_num:
                             continue
                         try:
-                            # Send position request via sendData (non-blocking).
-                            # sendPosition(wantResponse=True) blocks on
-                            # waitForPosition() which hangs if the remote node
-                            # doesn't respond over LoRa.
                             iface.sendData(
                                 mesh_pb2.Position(),
                                 destinationId=nid,
