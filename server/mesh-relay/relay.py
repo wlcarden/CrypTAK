@@ -264,10 +264,12 @@ def _seed_from_nodedb(iface, queue, loop, max_age_secs: int = 0):
         if node.get("num") == my_node_num:
             continue
 
-        # Skip nodes not heard recently (they're offline)
+        # Skip nodes not heard recently (they're offline).
+        # Also skip nodes with lastHeard=0 (learned via gossip, never
+        # directly heard by this radio).
         if max_age_secs > 0:
             last_heard = node.get("lastHeard", 0) or 0
-            if last_heard and (now_epoch - last_heard) > max_age_secs:
+            if not last_heard or (now_epoch - last_heard) > max_age_secs:
                 continue
 
         pos = node.get("position", {})
@@ -461,8 +463,8 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
                                 portNum=portnums_pb2.PortNum.POSITION_APP,
                                 wantResponse=True,
                             )
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.debug("Position poll to %s failed: %s", nid, exc)
 
             pub.unsubscribe(on_disconnect, "meshtastic.connection.lost")
             logger.warning(
