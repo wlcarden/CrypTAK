@@ -243,7 +243,7 @@ function parseCotToMarker(xml) {
     lon: lon,
     layer: layerName,
     icon: icon,
-    iconColor: fadeColor(color, opacity),
+    iconColor: color,
     tooltip: buildTooltip(cs, r),
     popup: buildPopup(cs, r, color),
     opacity: Math.round(opacity * 100) / 100,
@@ -281,9 +281,9 @@ function makeSA(uid) {
 }
 
 /**
- * Recalculate fade colors for all cached markers.
- * Returns an array of updated marker objects (only those whose color changed).
- * Markers that have fully expired are returned with {deleted: true}.
+ * Recalculate opacity for all cached markers.
+ * Returns markers whose opacity changed (so worldmap re-renders them)
+ * and markers that have fully expired (for deletion).
  *
  * @param {object} cache - the takMarkers cache (name → marker)
  * @returns {{ updated: object[], expired: string[] }}
@@ -294,7 +294,7 @@ function refreshMarkerColors(cache) {
   var keys = Object.keys(cache);
   for (var i = 0; i < keys.length; i++) {
     var m = cache[keys[i]];
-    if (!m._staleMs || !m._startMs || !m._baseColor) continue;
+    if (!m._staleMs || !m._startMs) continue;
 
     var startStr = new Date(m._startMs).toISOString();
     var staleStr = new Date(m._staleMs).toISOString();
@@ -305,10 +305,9 @@ function refreshMarkerColors(cache) {
       continue;
     }
 
-    var newColor = fadeColor(m._baseColor, opacity);
-    if (newColor !== m.iconColor) {
-      m.iconColor = newColor;
-      m.opacity = Math.round(opacity * 100) / 100;
+    var newOpacity = Math.round(opacity * 100) / 100;
+    if (newOpacity !== m.opacity) {
+      m.opacity = newOpacity;
       updated.push(m);
     }
   }

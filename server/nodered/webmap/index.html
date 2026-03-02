@@ -691,6 +691,22 @@
         sbList.innerHTML = html;
     }
 
+    // ── Marker opacity sync ─────────────────────────────────
+    // worldmap.js ignores data.opacity when creating L.marker instances.
+    // We apply it here via Leaflet's setOpacity() API every 2 seconds.
+    function syncMarkerOpacity() {
+        if (typeof markers === 'undefined' || typeof allData === 'undefined') return;
+        var keys = Object.keys(allData);
+        for (var i = 0; i < keys.length; i++) {
+            var d = allData[keys[i]];
+            if (!d || d.opacity === undefined) continue;
+            var m = markers[d.name || keys[i]];
+            if (m && typeof m.setOpacity === 'function') {
+                m.setOpacity(d.opacity);
+            }
+        }
+    }
+
     // ── Init ──────────────────────────────────────────────────
     // Set initial group toggle state
     sbGroupToggle.classList.add('active');
@@ -700,7 +716,7 @@
             clearInterval(initInterval);
             map.invalidateSize();
             renderSidebar();
-            setInterval(renderSidebar, 2000);
+            setInterval(function() { renderSidebar(); syncMarkerOpacity(); }, 2000);
             fetchClients();
             setInterval(fetchClients, 10000);
         }
