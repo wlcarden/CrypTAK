@@ -37,8 +37,8 @@ jobs:
           docker compose up -d --remove-orphans $SERVICES
           # Target incident-tracker explicitly — bare '--profile up -d' would
           # recreate all changed services including github-runner.
-          docker compose --profile incident-tracker up -d incident-tracker
-          docker compose --profile mesh-relay up -d mesh-relay
+          docker compose --profile incident-tracker up -d --no-deps incident-tracker
+          docker compose --profile mesh-relay up -d --no-deps mesh-relay
 
       - name: Wait for Node-RED to start
         run: |

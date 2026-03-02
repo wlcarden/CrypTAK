@@ -197,9 +197,8 @@ class FtsClient:
             try:
                 await self._send_sa()
             except (ConnectionResetError, BrokenPipeError, OSError) as exc:
-                logger.warning("SA refresh failed (%s), reconnecting", exc)
+                logger.warning("SA refresh failed (%s), will reconnect on next send", exc)
                 await self._close()
-                await self.connect()
 
     async def send(self, cot_xml: str) -> bool:
         """Send a CoT event to FTS. Returns True on success."""
