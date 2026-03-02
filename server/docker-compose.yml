@@ -190,8 +190,8 @@ services:
     devices:
       - /dev/ttyACM0:/dev/ttyACM0    # T-Beam USB serial (more reliable than WiFi TCP)
     environment:
-      MESH_SERIAL: /dev/ttyACM0       # Serial mode — bypasses T-Beam's TCP idle timeout
-      # MESH_HOST: ${MESH_HOST:-192.168.50.198}  # TCP fallback if serial unavailable
+      MESH_SERIAL: /dev/ttyACM0       # Preferred — no WiFi dependency, no idle timeout
+      MESH_HOST: ${MESH_HOST:-192.168.50.198}  # TCP fallback if serial device unavailable
       FTS_HOST: freetakserver
       FTS_PORT: "8087"
       FRIENDLY_NODES: "55c6ddbc,3db00f2c,a51e2838,01f94ec0"  # Our mesh nodes → friendly (blue)

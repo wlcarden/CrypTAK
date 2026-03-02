@@ -389,11 +389,20 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
 
         iface = None
         try:
+            # Try serial first (more reliable — no WiFi dependency, no
+            # firmware idle timeout). Fall back to TCP if serial device
+            # is unavailable (e.g. USB path changed on re-enumeration).
             if MESH_SERIAL:
-                from meshtastic.serial_interface import SerialInterface
-                logger.info("Connecting to Meshtastic via serial: %s", MESH_SERIAL)
-                iface = SerialInterface(MESH_SERIAL)
-            else:
+                try:
+                    from meshtastic.serial_interface import SerialInterface
+                    logger.info("Connecting to Meshtastic via serial: %s", MESH_SERIAL)
+                    iface = SerialInterface(MESH_SERIAL)
+                except Exception as serial_exc:
+                    logger.warning(
+                        "Serial connect failed (%s), falling back to TCP: %s",
+                        serial_exc, MESH_HOST,
+                    )
+            if iface is None:
                 from meshtastic.tcp_interface import TCPInterface
                 logger.info("Connecting to Meshtastic via TCP: %s", MESH_HOST)
                 iface = TCPInterface(hostname=MESH_HOST)
