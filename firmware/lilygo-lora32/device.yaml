@@ -2,7 +2,8 @@
 # Apply with: meshtastic --configure firmware/lilygo-lora32/device.yaml
 #
 # NOTE: This device has no GPS module. Position is disabled.
-# TODO: Set channel PSK to match ATAK plugin passphrase before deployment.
+# Channel: default public LongFast (PSK AQ==). TAK payloads are
+# encrypted at the app layer by the ATAK plugin (AES-256-GCM).
 
 config:
   lora:
@@ -26,11 +27,3 @@ config:
 
   display:
     auto_screen_carousel_secs: 0
-
-channel_config:
-  settings:
-    - index: 0
-      name: "ATAK"
-      psk: "AQ=="                # Meshtastic default LongFast channel key — matches all nodes in this mesh
-      downlink_enabled: false
-      uplink_enabled: false

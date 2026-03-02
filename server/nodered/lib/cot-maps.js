@@ -25,6 +25,7 @@ var iconMap = {
   "G-I-R": "fa-eye",
   "G-I-i-h": "fa-plus-square",
   "G-I-i-f": "fa-fire",
+  "G-E-S": "fa-rss", // ground equipment sensor (mesh nodes) — FA 4.7
   "G-E-N": "fa-bolt",
   "G-I-i-d": "fa-car",
   "G-O-S": "fa-search",

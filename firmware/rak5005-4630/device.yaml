@@ -2,7 +2,12 @@
 # Apply with: meshtastic --configure firmware/rak5005-4630/device.yaml
 #
 # NOTE: This device has the RAK 4631 GPS module. GPS is enabled.
-# TODO: Set channel PSK to match lilygo-lora32 channel PSK before deployment.
+# Channel: default public LongFast (PSK AQ==). TAK payloads are
+# encrypted at the app layer by the ATAK plugin (AES-256-GCM).
+#
+# IMPORTANT: After applying, set full position precision on channel 0:
+#   meshtastic --ch-set module_settings.position_precision 32 --ch-index 0
+# Without this, Meshtastic truncates coords to ~5km blocks (privacy feature).
 
 config:
   lora:
@@ -27,11 +32,3 @@ config:
 
   display:
     auto_screen_carousel_secs: 0
-
-channel_config:
-  settings:
-    - index: 0
-      name: "ATAK"
-      psk: "AQ=="                # Meshtastic default LongFast channel key
-      downlink_enabled: false
-      uplink_enabled: false

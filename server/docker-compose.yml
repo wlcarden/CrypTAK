@@ -169,6 +169,39 @@ services:
         limits:
           memory: 256m
 
+  # ── Meshtastic → TAK Relay ───────────────────────────────────────────────────
+  #
+  # Connects to the T-Beam bridge node (via WiFi TCP or USB serial), subscribes
+  # to mesh position packets, converts them to CoT XML, and injects into FTS.
+  # Mesh nodes appear as friendly PLI markers on the TAK map.
+  #
+  # Set MESH_HOST in .env to the T-Beam's IP (default: 192.168.50.198).
+  # For USB serial: set MESH_SERIAL=/dev/ttyUSB0 and add devices mapping.
+  mesh-relay:
+    build: ./mesh-relay
+    container_name: mesh-relay
+    profiles: ["mesh-relay"]
+    restart: always
+    depends_on:
+      freetakserver:
+        condition: service_started
+    networks:
+      - taknet
+    devices:
+      - /dev/ttyACM0:/dev/ttyACM0    # T-Beam USB serial (more reliable than WiFi TCP)
+    environment:
+      MESH_SERIAL: /dev/ttyACM0       # Serial mode — bypasses T-Beam's TCP idle timeout
+      # MESH_HOST: ${MESH_HOST:-192.168.50.198}  # TCP fallback if serial unavailable
+      FTS_HOST: freetakserver
+      FTS_PORT: "8087"
+      FRIENDLY_NODES: "55c6ddbc,3db00f2c,a51e2838,01f94ec0"  # Our mesh nodes → friendly (blue)
+    healthcheck:
+      disable: true
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
   # ── Headscale VPN stack ──────────────────────────────────────────────────────
   #
   # Headscale is a self-hosted replacement for Tailscale's coordination server.

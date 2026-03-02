@@ -38,6 +38,7 @@ jobs:
           # Target incident-tracker explicitly — bare '--profile up -d' would
           # recreate all changed services including github-runner.
           docker compose --profile incident-tracker up -d incident-tracker
+          docker compose --profile mesh-relay up -d mesh-relay
 
       - name: Wait for Node-RED to start
         run: |
@@ -84,7 +85,7 @@ jobs:
           services = [json.loads(line) for line in raw.splitlines() if line.strip()]
           # Profile services (incident-tracker) may crash-loop if not configured
           # Only fail on core services
-          profile_services = {'incident-tracker'}
+          profile_services = {'incident-tracker', 'mesh-relay'}
           failed = []
           warned = []
           for s in services:

@@ -12,25 +12,32 @@ Alternatively, use the [Meshtastic Android app](https://play.google.com/store/ap
 
 ## Hardware in This Project
 
-| Device                 | Firmware File                                  | Config File                 |
-| ---------------------- | ---------------------------------------------- | --------------------------- |
-| Lilygo 868/915 LORA32  | ESP32 — use Web Flasher (no local file needed) | `lilygo-lora32/device.yaml` |
-| RAK WisBlock 5005/4630 | `firmware-rak4631-2.7.15.567b8ea.uf2`          | `rak5005-4630/device.yaml`  |
+| Device                   | Role         | Firmware                              | Config                      |
+| ------------------------ | ------------ | ------------------------------------- | --------------------------- |
+| RAK19007 + RAK4631       | Base station | `firmware-rak4631-2.7.15.567b8ea.uf2` | `rak19007-base/device.yaml` |
+| RAK WisBlock 5005 + 4630 | Field node   | `firmware-rak4631-2.7.15.567b8ea.uf2` | `rak5005-4630/device.yaml`  |
+| LilyGo T-Beam            | TAK bridge   | ESP32 — use Web Flasher               | `tbeam-bridge/device.yaml`  |
+| Lilygo 868/915 LORA32    | Field node   | ESP32 — use Web Flasher               | `lilygo-lora32/device.yaml` |
+
+## Device Roles
+
+- **Base station** (`ROUTER`) — Fixed solar-powered relay on the roof. Rebroadcasts all mesh traffic for the community. No GPS (uses fixed position).
+- **TAK bridge** (`CLIENT`) — T-Beam connected to TAK server. Receives mesh packets and forwards to the relay service for injection into FTS. Serial enabled for USB bridge mode.
+- **Field node** (`CLIENT`) — Mobile nodes carried in the field. GPS-enabled, battery-powered.
+
+## Channel Strategy
+
+All devices operate on the **default public LongFast channel** (PSK `AQ==`). This means:
+
+- Our ROUTER base station relays traffic for the broader Meshtastic community
+- We benefit from other users' relay infrastructure
+- Any Meshtastic user in range can see our nodes' position broadcasts
+
+TAK-specific payloads (chat, markers, routes) are protected by the **ATAK plugin's AES-256-GCM app-layer encryption**, not by the mesh channel. This provides end-to-end encryption for sensitive data while keeping the mesh open for community use.
 
 ## Flashing Firmware
 
-### Lilygo LORA32 (ESP32)
-
-Use the Meshtastic Web Flasher:
-
-1. Connect the Lilygo via USB.
-2. Open https://flasher.meshtastic.org in Chrome (requires Web Serial API).
-3. Select the board (TLORA_V2_1_16 or T-LORA32_V2 depending on revision). The Web Flasher downloads and applies the correct ESP32 firmware automatically — no local firmware file is needed.
-4. Follow the on-screen prompts to flash.
-
-Alternative: use `esptool` from the command line.
-
-### RAK WisBlock (nRF52840)
+### RAK WisBlock (nRF52840) — RAK19007, RAK5005
 
 The RAK bootloader exposes a USB mass storage drive:
 
@@ -39,27 +46,43 @@ The RAK bootloader exposes a USB mass storage drive:
 3. Drag and drop `firmware-rak4631-2.7.15.567b8ea.uf2` onto the drive.
 4. The device reboots automatically when the copy completes.
 
-## Generating Channel Keys
+### LilyGo T-Beam / LORA32 (ESP32)
 
-All Meshtastic nodes in the mesh must share the same channel PSK (pre-shared key). Generate one with:
+Use the Meshtastic Web Flasher:
 
-```bash
-meshtastic --generate-key
-```
+1. Connect the device via USB.
+2. Open https://flasher.meshtastic.org in Chrome (requires Web Serial API).
+3. Select the correct board variant:
+   - T-Beam: `TBEAM` (or `TBEAM_V1.1` depending on revision)
+   - LORA32: `TLORA_V2_1_16` or `T-LORA32_V2`
+4. Follow the on-screen prompts to flash.
 
-This outputs a 32-byte base64-encoded key. Copy this value into the `psk` field in both `lilygo-lora32/device.yaml` and `rak5005-4630/device.yaml`, replacing the TODO placeholder. Every node must have the identical PSK to communicate.
+Alternative: use `esptool` from the command line.
 
 ## Applying Configuration
 
 Connect the device via USB and run:
 
 ```bash
-meshtastic --configure firmware/lilygo-lora32/device.yaml
-# or
+# RAK19007 base station
+meshtastic --configure firmware/rak19007-base/device.yaml
+
+# RAK5005 field node
 meshtastic --configure firmware/rak5005-4630/device.yaml
+
+# T-Beam bridge (over WiFi if already configured)
+meshtastic --host 192.168.50.198 --configure firmware/tbeam-bridge/device.yaml
+
+# Lilygo LORA32
+meshtastic --configure firmware/lilygo-lora32/device.yaml
 ```
 
-The CLI writes each config section to the device and reboots it.
+**Important:** `--configure` applies radio/device/position settings but does NOT reliably set channel config. Verify the channel after applying:
+
+```bash
+meshtastic --info | grep -A2 "Channels:"
+# Should show: psk=default (AQ==), no channel name
+```
 
 ## Verifying
 
@@ -67,20 +90,22 @@ After applying configuration, confirm the settings:
 
 ```bash
 meshtastic --info
+# or over WiFi:
+meshtastic --host 192.168.50.198 --info
 ```
 
 Check that:
 
-- Channel name shows `ATAK`
-- Device role shows `CLIENT` (or `ROUTER` if changed)
+- Channel PSK shows `default` (`AQ==`) — public LongFast
+- Device role matches config (`ROUTER` for base station, `CLIENT` for others)
 - LoRa region shows `US` with modem preset `LONG_FAST`
-- GPS status matches the device (enabled for RAK, disabled for Lilygo)
+- GPS status matches the device (enabled for T-Beam and RAK5005, disabled for base station and LORA32)
 
-## Channel PSK vs ATAK Plugin PSK
+## Encryption Layers
 
-These are two separate encryption keys serving different layers:
+| Layer                     | Key                | Protects                                   | Scope             |
+| ------------------------- | ------------------ | ------------------------------------------ | ----------------- |
+| LoRa channel (Meshtastic) | Default PSK `AQ==` | Link-layer — public, shared with community | All mesh traffic  |
+| App-layer (ATAK plugin)   | AES-256-GCM key    | TAK payloads — chat, markers, routes       | Team devices only |
 
-- **Meshtastic Channel PSK** — Encrypts the LoRa link layer. Set in `device.yaml` and applied via the Meshtastic CLI. All Meshtastic nodes must share this key to form a mesh.
-- **ATAK Plugin PSK** — Provides application-layer AES-256-GCM encryption on top of the LoRa link. Configured in the ATAK plugin settings on each Android device. Encrypts CoT (Cursor on Target) messages before they reach Meshtastic.
-
-Both keys must be generated and distributed to all team members. Compromise of the channel PSK exposes LoRa traffic; compromise of the plugin PSK exposes CoT message content. Using both provides defense in depth.
+The ATAK plugin key is configured in the plugin settings on each Android device and distributed via QR code or Data Package. Mesh position broadcasts (PLI) are intentionally unencrypted at the app layer so the relay service can read and forward them to FTS.

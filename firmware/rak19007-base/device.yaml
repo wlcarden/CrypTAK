@@ -1,0 +1,42 @@
+# RAK19007 WisBlock Base Board 2nd Gen + RAK4631 — Base Station
+# Apply with: meshtastic --configure firmware/rak19007-base/device.yaml
+#
+# Role: Fixed base station (solar + 5dB antenna, roof-mounted)
+# No GPS module — uses fixed position.
+# Fixed position set to house coordinates.
+#
+# Channel: default public LongFast (PSK AQ==). TAK payloads are
+# encrypted at the app layer by the ATAK plugin (AES-256-GCM).
+# The mesh stays public so our ROUTER relays community traffic.
+#
+# IMPORTANT: After applying, set full position precision on channel 0:
+#   meshtastic --ch-set module_settings.position_precision 32 --ch-index 0
+# Without this, Meshtastic truncates coords to ~5km blocks (privacy feature).
+
+config:
+  lora:
+    modem_preset: LONG_FAST
+    region: US
+    tx_power: 30
+    hop_limit: 3
+    channel_num: 0
+
+  device:
+    role: ROUTER                   # Fixed relay — rebroadcasts but no user interaction
+    serial_enabled: false
+
+  position:
+    position_broadcast_smart_enabled: false
+    gps_enabled: false
+    fixed_position: true
+    fixed_latitude: 38.84191827120099
+    fixed_longitude: -77.29344941776387
+    position_broadcast_secs: 120   # relay polls every 120s; firmware doesn't reliably
+                                   # broadcast fixed positions on a timer, but boot
+                                   # announcements use this interval as the stale time
+
+  power:
+    is_power_saving: false         # Solar-powered — no need to conserve
+
+  display:
+    auto_screen_carousel_secs: 0
