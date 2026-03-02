@@ -534,6 +534,7 @@
                 layer: layer,
                 icon: d.icon || 'fa-question-circle',
                 color: d.iconColor || layerColors[layer] || '#888',
+                opacity: d.opacity !== undefined ? d.opacity : 1,
                 startMs: d._startMs || 0,
                 staleMs: d._staleMs || 0,
             });
@@ -558,8 +559,10 @@
         var age = m.startMs > 0 ? formatAge(now - m.startMs) : '';
         var iconClass = m.icon.indexOf('fa-') === 0 ? 'fa ' + m.icon : m.icon;
 
+        var opStyle = m.opacity < 1 ? 'opacity:' + m.opacity + ';' : '';
         var html = '<div class="sb-marker" data-name="' + m.name.replace(/"/g, '&quot;') +
-            '" data-lat="' + m.lat + '" data-lon="' + m.lon + '">';
+            '" data-lat="' + m.lat + '" data-lon="' + m.lon + '"' +
+            (opStyle ? ' style="' + opStyle + '"' : '') + '>';
         html += '<div class="sb-marker-icon" style="color:' + m.color + '">' +
             '<i class="fa ' + m.icon + '"></i></div>';
         html += '<div class="sb-marker-info">';
