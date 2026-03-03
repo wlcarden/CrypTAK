@@ -467,18 +467,17 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
                         break
 
                     # Refresh PLI from nodedb and poll remote nodes.
-                    # Meshtastic firmware suppresses position packets to the
-                    # API when the data hasn't changed, so fixed-position nodes
-                    # never generate pubsub events after boot. We re-read the
-                    # nodedb and only include nodes heard within STALE_MINUTES,
-                    # so offline nodes' markers expire naturally.
+                    # No age filter on seed — the CoT stale timeout handles
+                    # marker expiry on the TAK map side.  Nodes that are truly
+                    # offline won't respond to position polls, so their nodedb
+                    # position data goes stale and markers expire via TTL.
+                    # Filtering here created a chicken-and-egg problem: stale
+                    # lastHeard blocked seeding, but the position poll responses
+                    # that would refresh lastHeard arrived AFTER the seed check.
                     now = time.monotonic()
                     if now - last_poll >= POSITION_POLL_SECS:
                         last_poll = now
-                        _seed_from_nodedb(
-                            iface, queue, loop,
-                            max_age_secs=STALE_MINUTES * 60,
-                        )
+                        _seed_from_nodedb(iface, queue, loop)
                         for nid in list(iface.nodes):
                             node = iface.nodes.get(nid)
                             if node is None:
