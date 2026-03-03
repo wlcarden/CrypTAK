@@ -215,9 +215,13 @@ services:
   # Tailscale accounts or fees. Team phones use the official Tailscale app
   # pointed at https://tak.thousand-pikes.com instead of Tailscale's cloud.
   #
-  # Internet access path (zero port forwarding on router):
-  #   Phones ──HTTPS──► tak.thousand-pikes.com (Cloudflare) ──► nginx:8082 ──► headscale:8080
-  #   Phones ──WireGuard P2P──► Tailscale on Unraid host ──► FTS ports
+  # Internet access paths:
+  #   Direct TLS (preferred — preserves X-Tailscale-Handshake header):
+  #     Phones ──TLS──► vpn.thousand-pikes.com:443 ──► router NAT ──► nginx:9443 ──► headscale:8080
+  #   Cloudflare fallback (cannot complete ts2021 noise handshake):
+  #     Phones ──HTTPS──► tak.thousand-pikes.com (Cloudflare) ──► nginx:8082 ──► headscale:8080
+  #   After enrollment:
+  #     Phones ──WireGuard P2P──► Tailscale on Unraid host ──► FTS ports
   #
   # OIDC enrollment path (browser-based, recommended for onboarding):
   #   Phone Tailscale app → "Log In" → nginx:8082/auth → Authelia login page
@@ -255,14 +259,19 @@ services:
     container_name: headscale-nginx
     restart: always
     depends_on:
-      - headscale
       - authelia
+    cap_add:
+      - NET_BIND_SERVICE
     networks:
-      - taknet
+      taknet:
+        aliases:
+          - vpn.thousand-pikes.com    # Headscale resolves OIDC issuer via Docker DNS
     ports:
       - "8082:8080"    # Control plane — cloudflared routes tak.thousand-pikes.com → :8082
+      - "9443:443"     # Direct TLS — router port-forwards public :443 → :9443
     volumes:
       - ./headscale/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /mnt/user/appdata/letsencrypt:/etc/letsencrypt:ro
     deploy:
       resources:
         limits:
@@ -272,6 +281,8 @@ services:
     image: ghcr.io/juanfont/headscale:0.28
     container_name: headscale
     restart: always
+    depends_on:
+      - headscale-nginx
     networks:
       - taknet
     ports:
