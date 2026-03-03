@@ -30,6 +30,14 @@ jobs:
             --exclude='docker-compose.override.yml' \
             server/ "$DEPLOY_DIR/"
 
+      - name: Build local images
+        working-directory: /mnt/user/appdata/tak-server
+        run: |
+          # Services with build: directives need explicit rebuild —
+          # docker compose pull skips them (no remote image) and up -d
+          # reuses the stale local image if the digest hasn't changed.
+          docker compose --profile incident-tracker --profile mesh-relay build
+
       - name: Deploy server stack
         working-directory: /mnt/user/appdata/tak-server
         run: |
@@ -39,8 +47,8 @@ jobs:
           SERVICES=$(docker compose config --services | grep -v github-runner)
           docker compose pull $SERVICES
           docker compose up -d --remove-orphans $SERVICES
-          # Target incident-tracker explicitly — bare '--profile up -d' would
-          # recreate all changed services including github-runner.
+          # Profile services need explicit targeting — bare 'up -d' doesn't
+          # start services in non-default profiles.
           docker compose --profile incident-tracker up -d --no-deps incident-tracker
           docker compose --profile mesh-relay up -d --no-deps mesh-relay
 
