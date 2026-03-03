@@ -132,7 +132,7 @@ services:
           memory: 512m
 
   nodered:
-    image: nodered/node-red:4
+    image: nodered/node-red:4.1
     container_name: nodered
     restart: always
     depends_on:
