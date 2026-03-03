@@ -106,7 +106,7 @@ services:
     networks:
       - taknet
     ports:
-      - "5000:5000"      # Admin web panel — user mgmt, config, DataPackages
+      - "127.0.0.1:5000:5000"  # Admin web panel — localhost only; SSH tunnel to access
     volumes:
       - /mnt/user/appdata/fts-ui/data:/home/freetak/data
       # socket.io v3 shim — FTS-UI ships v1.4.5 (EIO=3) which is incompatible with FTS core 2.x Flask-SocketIO 5.x (EIO=4).
@@ -132,11 +132,13 @@ services:
           memory: 512m
 
   nodered:
-    image: nodered/node-red:latest
+    image: nodered/node-red:4
     container_name: nodered
     restart: always
     depends_on:
       - mosquitto
+    networks:
+      - taknet
     ports:
       - "1880:1880"          # Node-RED UI + worldmap at /tak-map
     volumes:
@@ -145,6 +147,8 @@ services:
       - ./nodered/lib:/opt/cot-maps:ro               # cot-maps.js module
       - ./nodered/public:/data/public:ro              # favicon.ico, cryptak-logo.png
       - ./nodered/webmap/index.html:/data/node_modules/node-red-contrib-web-worldmap/worldmap/index.html:ro
+    environment:
+      NR_ADMIN_PASS: ${NR_ADMIN_PASS:-}    # Set in .env to enable admin auth; blank = no auth
     user: "1000:1000"
     # Healthcheck disabled: same Unraid runc issue as FTS (see freetakserver comment).
     healthcheck:
@@ -155,9 +159,11 @@ services:
           memory: 512m
 
   mosquitto:
-    image: eclipse-mosquitto:latest
+    image: eclipse-mosquitto:2
     container_name: mosquitto
     restart: always
+    networks:
+      - taknet
     ports:
       - "127.0.0.1:1883:1883"  # MQTT — localhost only; Node-RED reaches via Docker DNS
     volumes:
@@ -223,7 +229,7 @@ services:
   # To enroll the Unraid host after Headscale is running, see README.
 
   authelia:
-    image: ghcr.io/authelia/authelia:latest
+    image: ghcr.io/authelia/authelia:4.39
     container_name: authelia
     restart: always
     networks:
@@ -263,13 +269,13 @@ services:
           memory: 256m
 
   headscale:
-    image: ghcr.io/juanfont/headscale:latest
+    image: ghcr.io/juanfont/headscale:0.28
     container_name: headscale
     restart: always
     networks:
       - taknet
     ports:
-      - "9090:9090"    # Prometheus metrics — LAN only, not routed via cloudflared
+      - "127.0.0.1:9090:9090"  # Prometheus metrics — localhost only; SSH tunnel to access
     volumes:
       - ./headscale:/etc/headscale              # config.yaml + acls.hujson (this repo)
       - /mnt/user/appdata/headscale:/var/lib/headscale  # keys, DB, node state — persists
@@ -289,8 +295,7 @@ services:
     networks:
       - taknet
     ports:
-      - "8083:80"      # Admin web UI — LAN only at http://192.168.50.120:8083
-                       # Configure with: URL=https://tak.thousand-pikes.com, API key from CLI
+      - "127.0.0.1:8083:80"  # Admin web UI — localhost only; SSH tunnel to access
     deploy:
       resources:
         limits:

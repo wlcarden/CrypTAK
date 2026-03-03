@@ -638,7 +638,7 @@
 
         if (items.length === 0) {
             sbList.innerHTML = '<div class="sb-empty">' +
-                (filter ? 'No matches for "' + filter + '"' : 'No markers') + '</div>';
+                (filter ? 'No matches for "' + esc(filter) + '"' : 'No markers') + '</div>';
             sbSummary.textContent = filter ? '0 matching' : 'No markers';
             return;
         }

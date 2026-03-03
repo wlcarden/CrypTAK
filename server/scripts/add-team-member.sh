@@ -55,13 +55,17 @@ if [[ -z "$HASH" ]]; then
     exit 1
 fi
 
+# Escape single quotes for YAML (double them per YAML spec)
+DISPLAY_NAME_SAFE="${DISPLAY_NAME//\'/\'\'}"
+EMAIL_SAFE="${EMAIL//\'/\'\'}"
+
 # Append to Authelia users database
 cat >> "$AUTHELIA_USERS" <<EOF
   ${USERNAME}:
     disabled: false
-    displayname: '${DISPLAY_NAME}'
+    displayname: '${DISPLAY_NAME_SAFE}'
     password: '${HASH}'
-    email: '${EMAIL}'
+    email: '${EMAIL_SAFE}'
     groups:
       - users
 EOF

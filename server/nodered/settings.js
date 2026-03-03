@@ -8,6 +8,26 @@ module.exports = {
   flowFile: "flows.json",
   flowFilePretty: true,
 
+  // Admin authentication — protects the editor and admin API (/flows, /context).
+  // Does NOT protect httpNode routes (WebMap at /tak-map stays open).
+  // To enable: set NR_ADMIN_PASS in .env on Unraid.
+  // When unset, Node-RED runs without auth (backwards compatible).
+  adminAuth: process.env.NR_ADMIN_PASS
+    ? {
+        type: "credentials",
+        users: [
+          {
+            username: "admin",
+            password: require("bcryptjs").hashSync(
+              process.env.NR_ADMIN_PASS,
+              8,
+            ),
+            permissions: "*",
+          },
+        ],
+      }
+    : undefined,
+
   // Serve static assets (favicon, logo) from /data/public
   httpStatic: "/data/public",
 

@@ -28,6 +28,10 @@ jobs:
             --exclude='.env' \
             --exclude='config.local.yaml' \
             --exclude='docker-compose.override.yml' \
+            --exclude='authelia/configuration.yml' \
+            --exclude='authelia/users_database.yml' \
+            --exclude='headscale/config.yaml' \
+            --exclude='incident-tracker/config.yaml' \
             server/ "$DEPLOY_DIR/"
 
       - name: Build local images
@@ -68,10 +72,24 @@ jobs:
         run: |
           # Node-RED reads flows from its /data volume, not the rsync'd repo copy.
           # Push repo flows via the admin API so they take effect immediately.
+
+          # Authenticate if Node-RED has adminAuth enabled (NR_ADMIN_PASS set in .env)
+          CURL_ARGS=()
+          NR_ADMIN_PASS=$(grep '^NR_ADMIN_PASS=' "$DEPLOY_DIR/.env" 2>/dev/null | cut -d= -f2- | tr -d "'" | tr -d '"' || true)
+          if [[ -n "$NR_ADMIN_PASS" ]]; then
+            TOKEN=$(curl -sf -X POST "$NODERED_URL/auth/token" \
+              -H 'Content-Type: application/json' \
+              -d "{\"client_id\":\"node-red-admin\",\"grant_type\":\"password\",\"scope\":\"*\",\"username\":\"admin\",\"password\":\"$NR_ADMIN_PASS\"}" \
+              | python3 -c "import sys,json; print(json.loads(sys.stdin.read())['access_token'])")
+            CURL_ARGS+=(-H "Authorization: Bearer $TOKEN")
+            echo "Authenticated with Node-RED admin API"
+          fi
+
           HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
             -X POST "$NODERED_URL/flows" \
             -H 'Content-Type: application/json' \
             -H 'Node-RED-Deployment-Type: full' \
+            "${CURL_ARGS[@]}" \
             -d @"$DEPLOY_DIR/nodered/flows.json")
           if [ "$HTTP_CODE" = "204" ]; then
             echo "Flows deployed successfully"
