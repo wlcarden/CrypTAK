@@ -200,7 +200,8 @@ services:
       MESH_HOST: ${MESH_HOST:-192.168.50.198}  # TCP fallback if serial device unavailable
       FTS_HOST: freetakserver
       FTS_PORT: "8087"
-      FRIENDLY_NODES: "55c6ddbc,3db00f2c,a51e2838,01f94ec0"  # Our mesh nodes → friendly (blue)
+      FRIENDLY_NODES: "55c6ddbc,3db00f2c,a51e2838"  # Our mesh nodes → friendly (blue)
+      TRACKER_NODES: "${TRACKER_NODES:-01f94ec0}"  # GPS asset tags → suspect (orange), WebMap-controlled
     healthcheck:
       disable: true
     deploy:

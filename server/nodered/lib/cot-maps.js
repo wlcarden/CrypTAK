@@ -157,7 +157,7 @@ function escHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-function buildPopup(callsign, r, color, battery) {
+function buildPopup(callsign, r, color, battery, isTracker) {
   var html =
     '<div style="font-family:sans-serif;font-size:13px;max-width:300px;">';
   if (r.location) html += "<b>" + escHtml(r.location) + "</b><br>";
@@ -182,6 +182,31 @@ function buildPopup(callsign, r, color, battery) {
       r.url.replace(/"/g, "%22") +
       '" target="_blank" ' +
       'style="color:#4A90D9;font-size:12px;">View details &rarr;</a>';
+  }
+  if (isTracker) {
+    var safeCs = escHtml(callsign).replace(/'/g, "\\'");
+    var affs = [
+      { code: "f", label: "Friendly", color: "#0066FF" },
+      { code: "s", label: "Suspect", color: "#FF8C00" },
+      { code: "h", label: "Hostile", color: "#FF0000" },
+    ];
+    html += '<div style="margin-top:6px;font-size:11px;"><b>Classify:</b> ';
+    for (var i = 0; i < affs.length; i++) {
+      html +=
+        "<a href=\"#\" onclick=\"fetch('api/tracker/affiliation',{method:'POST'," +
+        "headers:{'Content-Type':'application/json'}," +
+        "body:JSON.stringify({name:'" +
+        safeCs +
+        "',affiliation:'" +
+        affs[i].code +
+        "'})}).then(function(){location.reload()});return false;\" " +
+        'style="color:' +
+        affs[i].color +
+        ';margin:0 4px;">' +
+        affs[i].label +
+        "</a>";
+    }
+    html += "</div>";
   }
   html += "</div>";
   return html;
@@ -223,6 +248,8 @@ function parseCotToMarker(xml) {
   var batM = xml.match(/<status[^>]+battery="(\d+)"/);
   var battery = batM ? parseInt(batM[1], 10) : 0;
 
+  var isTracker = /<__tracker/.test(xml);
+
   var startM = xml.match(/\bstart="([^"]+)"/);
   var staleM = xml.match(/\bstale="([^"]+)"/);
   var effectiveStart = r.published || (startM ? startM[1] : null);
@@ -255,7 +282,7 @@ function parseCotToMarker(xml) {
     icon: icon,
     iconColor: color,
     tooltip: buildTooltip(cs, r, battery),
-    popup: buildPopup(cs, r, color, battery),
+    popup: buildPopup(cs, r, color, battery, isTracker),
     opacity: Math.round(opacity * 100) / 100,
     ttl: ttlSec,
     _staleMs: staleM ? new Date(staleM[1]).getTime() : 0,
@@ -263,6 +290,7 @@ function parseCotToMarker(xml) {
     _baseColor: color,
     _ageBased: ageBased,
     _battery: battery,
+    _tracker: isTracker,
   };
 }
 

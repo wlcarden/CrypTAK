@@ -173,6 +173,12 @@
     .sb-sort-btn:hover { color: #ccc; border-color: #666; }
     .sb-sort-btn.active { color: #fff; background: #0066FF; border-color: #0066FF; }
     #sb-toolbar-spacer { flex: 1; }
+    #sb-trail-duration {
+        background: #222; color: #aaa; border: 1px solid #444;
+        border-radius: 3px; font-size: 11px; padding: 2px 4px;
+        cursor: pointer;
+    }
+    #sb-trail-duration:hover { border-color: #666; color: #ccc; }
 
     /* Summary bar */
     #sb-summary {
@@ -377,6 +383,13 @@
         <button class="sb-sort-btn active" data-sort="recent" title="Most recent first"><i class="fa fa-clock-o"></i> Recent</button>
         <button class="sb-sort-btn" data-sort="alpha" title="Alphabetical"><i class="fa fa-sort-alpha-asc"></i> A-Z</button>
         <span id="sb-toolbar-spacer"></span>
+        <select id="sb-trail-duration" title="Tracker trail display window">
+            <option value="0">No Trail</option>
+            <option value="3600000" selected>1h Trail</option>
+            <option value="21600000">6h Trail</option>
+            <option value="43200000">12h Trail</option>
+            <option value="86400000">24h Trail</option>
+        </select>
         <button class="sb-sort-btn" data-sort="group" title="Group by layer" id="sb-group-toggle"><i class="fa fa-object-group"></i></button>
     </div>
     <div id="sb-clients">
@@ -452,6 +465,15 @@
     document.getElementById('sb-clients-header').addEventListener('click', function() {
         clientsCollapsed = !clientsCollapsed;
         sbClientsSection.classList.toggle('collapsed', clientsCollapsed);
+    });
+
+    // Trail duration control
+    document.getElementById('sb-trail-duration').addEventListener('change', function() {
+        fetch('api/tracker/trail-duration', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ duration: parseInt(this.value) })
+        });
     });
 
     // Toggle sidebar

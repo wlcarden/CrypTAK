@@ -49,6 +49,13 @@ FRIENDLY_NODES: set[str] = {
     n.strip().lstrip("!") for n in _friendly_raw.split(",") if n.strip()
 }
 
+# Tracker node IDs — these are GPS asset tags whose affiliation is
+# controlled from the WebMap (default: suspect/orange).
+_tracker_raw = os.environ.get("TRACKER_NODES", "")
+TRACKER_NODES: set[str] = {
+    n.strip().lstrip("!") for n in _tracker_raw.split(",") if n.strip()
+}
+
 _DT_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 
@@ -97,23 +104,34 @@ def build_pli(
     course: float = 0.0,
     battery: int = 0,
     hw_model: str = "",
+    tracker: bool = False,
 ) -> str:
     """Build a PLI CoT event for a mesh node position.
+
+    Tracker nodes get type a-s-G-I-i-d (suspect/car icon) with a
+    <__tracker/> detail tag so the WebMap can apply affiliation overrides
+    and trail rendering.
 
     Known nodes (in FRIENDLY_NODES) get type a-f-G-E-S (friendly/blue).
     Unknown nodes get type a-n-G-E-S (neutral/green).
     G-E-S = Ground Equipment Sensor (MIL-STD-2525).
-    Includes <takv> and <uid Droid> so ATAK renders a proper PLI marker
-    instead of a generic grey point.
     """
-    friendly = node_id in FRIENDLY_NODES
-    aff = "f" if friendly else "n"
+    if tracker:
+        aff = "s"  # suspect by default; WebMap can override
+        type_suffix = "G-I-i-d"  # traffic/car icon
+        group_name = "Yellow"
+    else:
+        friendly = node_id in FRIENDLY_NODES
+        aff = "f" if friendly else "n"
+        type_suffix = "G-E-S"
+        group_name = "Cyan" if friendly else "Green"
+
     now = datetime.now(timezone.utc)
     stale = now + timedelta(minutes=STALE_MINUTES)
     event = ET.Element("event", {
         "version": "2.0",
         "uid": f"mesh-{node_id}",
-        "type": f"a-{aff}-G-E-S",
+        "type": f"a-{aff}-{type_suffix}",
         "time": now.strftime(_DT_FMT),
         "start": now.strftime(_DT_FMT),
         "stale": stale.strftime(_DT_FMT),
@@ -131,7 +149,6 @@ def build_pli(
         "callsign": callsign,
         "endpoint": "0.0.0.0:4242:tcp",
     })
-    group_name = "Cyan" if friendly else "Green"
     ET.SubElement(detail, "__group", {"name": group_name, "role": "Team Member"})
     ET.SubElement(detail, "takv", {
         "platform": "CrypTAK MeshRelay",
@@ -147,6 +164,8 @@ def build_pli(
         })
     if battery:
         ET.SubElement(detail, "status", {"battery": str(battery)})
+    if tracker:
+        ET.SubElement(detail, "__tracker")
     ET.SubElement(detail, "__meshtastic")
     return ET.tostring(event, encoding="unicode")
 
@@ -318,6 +337,7 @@ def _seed_from_nodedb(iface, queue, loop, max_age_secs: int = 0):
             "course": 0.0,
             "battery": battery,
             "hw_model": user.get("hwModel", ""),
+            "tracker": node_id in TRACKER_NODES,
         }
         _enqueue(queue, loop, data)
         seeded += 1
@@ -383,6 +403,7 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
                 "course": float(position.get("groundTrack", 0) or 0),
                 "battery": battery,
                 "hw_model": hw_model,
+                "tracker": node_id in TRACKER_NODES,
             }
             _enqueue(queue, loop, data)
             bat_str = " bat=%d%%" % battery if battery else ""
