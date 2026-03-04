@@ -495,6 +495,13 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
                                 )
                             except Exception as exc:
                                 logger.debug("Position poll to %s failed: %s", nid, exc)
+                            try:
+                                iface.sendTelemetry(
+                                    destinationId=nid,
+                                    wantResponse=True,
+                                )
+                            except Exception as exc:
+                                logger.debug("Telemetry poll to %s failed: %s", nid, exc)
             finally:
                 try:
                     pub.unsubscribe(on_disconnect, "meshtastic.connection.lost")
