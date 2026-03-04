@@ -207,6 +207,29 @@ function buildPopup(callsign, r, color, battery, isTracker) {
         "</a>";
     }
     html += "</div>";
+    var icons = [
+      { cls: "fa-crosshairs", label: "Crosshairs" },
+      { cls: "fa-car", label: "Vehicle" },
+      { cls: "fa-user", label: "Person" },
+      { cls: "fa-cube", label: "Cargo" },
+    ];
+    html += '<div style="margin-top:4px;font-size:11px;"><b>Icon:</b> ';
+    for (var ic = 0; ic < icons.length; ic++) {
+      html +=
+        "<a href=\"#\" onclick=\"fetch('api/tracker/icon',{method:'POST'," +
+        "headers:{'Content-Type':'application/json'}," +
+        "body:JSON.stringify({name:'" +
+        safeCs +
+        "',icon:'" +
+        icons[ic].cls +
+        "'})}).then(function(){location.reload()});return false;\" " +
+        'style="color:#aaa;margin:0 5px;" title="' +
+        icons[ic].label +
+        '"><i class="fa ' +
+        icons[ic].cls +
+        '"></i></a>';
+    }
+    html += "</div>";
   }
   html += "</div>";
   return html;

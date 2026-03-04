@@ -118,7 +118,7 @@ def build_pli(
     """
     if tracker:
         aff = "s"  # suspect by default; WebMap can override
-        type_suffix = "G-I-i-d"  # traffic/car icon
+        type_suffix = "G-O-E"  # crosshairs icon
         group_name = "Yellow"
     else:
         friendly = node_id in FRIENDLY_NODES
