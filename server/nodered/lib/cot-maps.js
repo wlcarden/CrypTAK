@@ -5,7 +5,7 @@
 // MIL-STD-2525 affiliation code → marker color
 var colorMap = {
   h: "#FF0000", // hostile
-  s: "#FFA500", // suspect
+  s: "#FF8C00", // suspect
   n: "#00AA00", // neutral
   u: "#CCCC00", // unknown
   f: "#0066FF", // friendly

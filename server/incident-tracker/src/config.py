@@ -20,6 +20,7 @@ _AFFILIATION_MAP = {
     "neutral": "n",
     "unknown": "u",
     "friendly": "f",
+    "pending": "p",
 }
 
 # ── Icon type → CoT type-code suffix ─────────────────────────────────────────
@@ -76,7 +77,7 @@ class WazeConfig(BaseModel):
     enabled: bool = False
     min_reliability: int = 3
     min_confidence: int = 0
-    category: str = "police_sighting"
+    confirmed_threshold: int = 2
 
 
 class RedditConfig(BaseModel):

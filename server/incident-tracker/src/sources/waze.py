@@ -108,6 +108,12 @@ class WazeSource(Source):
             if pub_ms:
                 published = datetime.fromtimestamp(pub_ms / 1000, tz=timezone.utc)
 
+            category = (
+                "police_sighting"
+                if thumbs >= self._config.confirmed_threshold
+                else "police_advisory"
+            )
+
             incidents.append(
                 RawIncident(
                     source_name="Waze",
@@ -117,7 +123,7 @@ class WazeSource(Source):
                     published=published,
                     lat=float(lat),
                     lon=float(lon),
-                    category=self._config.category,
+                    category=category,
                     severity="low",
                     structured=True,
                     source_id=f"waze-{alert.get('uuid', '')}",

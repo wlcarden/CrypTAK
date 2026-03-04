@@ -18,7 +18,7 @@ def _make_geo(bbox=None):
 
 def _make_config(**overrides):
     defaults = {"enabled": True, "min_reliability": 3, "min_confidence": 0,
-                "category": "police_sighting"}
+                "confirmed_threshold": 2}
     defaults.update(overrides)
     return WazeConfig(**defaults)
 
@@ -69,6 +69,34 @@ class TestWazeSource:
         assert inc.structured is True
         assert inc.source_id == "waze-abc-123"
         assert inc.category == "police_sighting"
+
+    @pytest.mark.asyncio
+    async def test_low_thumbs_yields_advisory(self):
+        alerts = [_make_alert(nThumbsUp=1)]
+        with patch("src.sources.waze.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = _mock_response(alerts)
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            source = WazeSource(_make_config(), _make_geo())
+            results = await source.fetch()
+
+        assert results[0].category == "police_advisory"
+
+    @pytest.mark.asyncio
+    async def test_high_thumbs_yields_sighting(self):
+        alerts = [_make_alert(nThumbsUp=5)]
+        with patch("src.sources.waze.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = _mock_response(alerts)
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            source = WazeSource(_make_config(), _make_geo())
+            results = await source.fetch()
+
+        assert results[0].category == "police_sighting"
 
     @pytest.mark.asyncio
     async def test_title_with_street_and_city(self):
