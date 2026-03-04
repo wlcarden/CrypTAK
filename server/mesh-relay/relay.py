@@ -322,7 +322,8 @@ def _seed_from_nodedb(iface, queue, loop, max_age_secs: int = 0):
         _enqueue(queue, loop, data)
         seeded += 1
         logger.debug(
-            "Seeded from nodedb: %s at %.6f, %.6f", callsign, lat, lon,
+            "Seeded from nodedb: %s at %.6f, %.6f bat=%d%%",
+            callsign, lat, lon, battery,
         )
     if seeded:
         logger.info("Refreshed %d positions from nodedb", seeded)
@@ -384,9 +385,10 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
                 "hw_model": hw_model,
             }
             _enqueue(queue, loop, data)
+            bat_str = " bat=%d%%" % battery if battery else ""
             logger.info(
-                "Position from %s: %.6f, %.6f alt=%dm",
-                callsign, lat, lon, int(data["alt"]),
+                "Position from %s: %.6f, %.6f alt=%dm%s",
+                callsign, lat, lon, int(data["alt"]), bat_str,
             )
         except Exception:
             logger.exception("Error processing position packet")

@@ -141,7 +141,8 @@ function parseRemarks(raw) {
 /**
  * Build tooltip text for a marker (shown on hover).
  */
-function buildTooltip(callsign, r) {
+function buildTooltip(callsign, r, battery) {
+  if (battery > 0) return callsign + " (" + battery + "%)";
   return callsign;
 }
 
@@ -156,7 +157,7 @@ function escHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-function buildPopup(callsign, r, color) {
+function buildPopup(callsign, r, color, battery) {
   var html =
     '<div style="font-family:sans-serif;font-size:13px;max-width:300px;">';
   if (r.location) html += "<b>" + escHtml(r.location) + "</b><br>";
@@ -168,6 +169,12 @@ function buildPopup(callsign, r, color) {
     if (r.severity) meta.push(escHtml(r.severity));
     html += meta.join(" &middot; ");
     html += "</span>";
+  }
+  if (battery > 0) {
+    html +=
+      '<br><span style="color:#888;font-size:11px;">Battery: ' +
+      battery +
+      "%</span>";
   }
   if (r.url && /^https?:\/\//i.test(r.url)) {
     html +=
@@ -213,6 +220,9 @@ function parseCotToMarker(xml) {
   var remM = xml.match(/<remarks[^>]*>([^<]*)<\/remarks>/);
   var r = parseRemarks(remM ? remM[1] : "");
 
+  var batM = xml.match(/<status[^>]+battery="(\d+)"/);
+  var battery = batM ? parseInt(batM[1], 10) : 0;
+
   var startM = xml.match(/\bstart="([^"]+)"/);
   var staleM = xml.match(/\bstale="([^"]+)"/);
   var effectiveStart = r.published || (startM ? startM[1] : null);
@@ -244,14 +254,15 @@ function parseCotToMarker(xml) {
     layer: layerName,
     icon: icon,
     iconColor: color,
-    tooltip: buildTooltip(cs, r),
-    popup: buildPopup(cs, r, color),
+    tooltip: buildTooltip(cs, r, battery),
+    popup: buildPopup(cs, r, color, battery),
     opacity: Math.round(opacity * 100) / 100,
     ttl: ttlSec,
     _staleMs: staleM ? new Date(staleM[1]).getTime() : 0,
     _startMs: effectiveStart ? new Date(effectiveStart).getTime() : 0,
     _baseColor: color,
     _ageBased: ageBased,
+    _battery: battery,
   };
 }
 
