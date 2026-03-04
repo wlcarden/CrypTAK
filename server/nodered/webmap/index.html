@@ -591,7 +591,8 @@
         html += '<div class="sb-marker-info">';
         html += '<div class="sb-marker-name">' + esc(m.name) + '</div>';
         var meta = m.lat.toFixed(4) + ', ' + m.lon.toFixed(4);
-        if (m.battery > 0) meta += ' (' + m.battery + '%)';
+        if (m.battery > 100) meta += ' (USB)';
+        else if (m.battery > 0) meta += ' (' + m.battery + '%)';
         html += '<div class="sb-marker-meta">' + meta + '</div>';
         html += '</div>';
         if (age) html += '<span class="sb-marker-age">' + age + '</span>';

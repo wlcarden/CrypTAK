@@ -142,6 +142,7 @@ function parseRemarks(raw) {
  * Build tooltip text for a marker (shown on hover).
  */
 function buildTooltip(callsign, r, battery) {
+  if (battery > 100) return callsign + " (USB)";
   if (battery > 0) return callsign + " (" + battery + "%)";
   return callsign;
 }
@@ -170,7 +171,9 @@ function buildPopup(callsign, r, color, battery, isTracker) {
     html += meta.join(" &middot; ");
     html += "</span>";
   }
-  if (battery > 0) {
+  if (battery > 100) {
+    html += '<br><span style="color:#888;font-size:11px;">Power: USB</span>';
+  } else if (battery > 0) {
     html +=
       '<br><span style="color:#888;font-size:11px;">Battery: ' +
       battery +
@@ -271,7 +274,7 @@ function parseCotToMarker(xml) {
   var batM = xml.match(/<status[^>]+battery="(\d+)"/);
   var battery = batM ? parseInt(batM[1], 10) : 0;
 
-  var isTracker = /<__tracker/.test(xml);
+  var isTracker = uidM[1].indexOf("tracker-") === 0;
 
   var startM = xml.match(/\bstart="([^"]+)"/);
   var staleM = xml.match(/\bstale="([^"]+)"/);

@@ -130,7 +130,7 @@ def build_pli(
     stale = now + timedelta(minutes=STALE_MINUTES)
     event = ET.Element("event", {
         "version": "2.0",
-        "uid": f"mesh-{node_id}",
+        "uid": f"tracker-{node_id}" if tracker else f"mesh-{node_id}",
         "type": f"a-{aff}-{type_suffix}",
         "time": now.strftime(_DT_FMT),
         "start": now.strftime(_DT_FMT),
