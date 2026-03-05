@@ -353,6 +353,7 @@ function parseCotToMarker(xml) {
   }
 
   var isTracker = uidM[1].indexOf("tracker-") === 0;
+  var isMeshtastic = xml.indexOf("<__meshtastic") !== -1;
   var isBridge = xml.indexOf("<__meshBridge") !== -1;
 
   var startM = xml.match(/\bstart="([^"]+)"/);
@@ -396,6 +397,7 @@ function parseCotToMarker(xml) {
     _ageBased: ageBased,
     _battery: battery,
     _tracker: isTracker,
+    _meshtastic: isMeshtastic,
     _meshBridge: isBridge,
     _mesh: meshTelem,
   };
