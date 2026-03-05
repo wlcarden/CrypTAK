@@ -363,6 +363,8 @@ def _seed_from_nodedb(iface, queue, loop, max_age_secs: int = 0):
             uptime_s = int(dm.get("uptimeSeconds", 0) or 0)
         # Telemetry cache may have fresher values than nodedb snapshot
         telem = _telemetry_cache.get(node_id, {})
+        if telem.get("battery"):
+            battery = telem["battery"]
         if telem.get("voltage"):
             voltage = telem["voltage"]
         if telem.get("channelUtil"):
@@ -455,6 +457,8 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
             hw_model = user.get("hwModel", "")
 
             telem = _telemetry_cache.get(node_id, {})
+            if telem.get("battery"):
+                battery = telem["battery"]
             if telem.get("voltage"):
                 voltage = telem["voltage"]
             if telem.get("channelUtil"):
@@ -508,7 +512,10 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
             channel_util = float(dm.get("channelUtilization", 0) or 0)
             air_util_tx = float(dm.get("airUtilTx", 0) or 0)
             uptime_s = int(dm.get("uptimeSeconds", 0) or 0)
-            # Reboot detection: uptime decreased → inject event marker
+            # Reboot detection: uptime decreased → log only (no map marker).
+            # The node's normal PLI will update its existing marker on the
+            # next position broadcast.  Creating a separate CoT event caused
+            # duplicate clients and noise on the TAK map.
             if uptime_s > 0:
                 prev = _uptime_cache.get(node_id, 0)
                 if prev > 0 and uptime_s < prev:
@@ -516,33 +523,11 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
                         "Node %s rebooted (was up %ds, now %ds)",
                         node_id, prev, uptime_s,
                     )
-                    # Inject a transient reboot event at the node's last known position
-                    node_info = interface.nodes.get(from_id, {})
-                    pos = node_info.get("position", {})
-                    rlat = pos.get("latitude", 0.0) or 0.0
-                    rlon = pos.get("longitude", 0.0) or 0.0
-                    if rlat != 0.0 or rlon != 0.0:
-                        user = node_info.get("user", {})
-                        callsign = (
-                            user.get("longName")
-                            or user.get("shortName")
-                            or from_id
-                        )
-                        prev_d = prev // 86400
-                        prev_h = (prev % 86400) // 3600
-                        up_str = f"{prev_d}d {prev_h}h" if prev_d else f"{prev_h}h"
-                        _enqueue(queue, loop, {
-                            "node_id": f"reboot-{node_id}-{int(time.time())}",
-                            "callsign": f"{callsign} rebooted",
-                            "lat": rlat,
-                            "lon": rlon,
-                            "alt": float(pos.get("altitude", 0) or 0),
-                            "battery": 0,
-                            "hw_model": user.get("hwModel", ""),
-                        })
                 _uptime_cache[node_id] = uptime_s
+            battery_level = int(dm.get("batteryLevel", 0) or 0)
             _telemetry_cache[node_id] = {
                 "voltage": voltage,
+                "battery": battery_level,
                 "channelUtil": channel_util,
                 "airUtilTx": air_util_tx,
                 "uptime": uptime_s,
