@@ -141,9 +141,13 @@ function parseRemarks(raw) {
 /**
  * Build tooltip text for a marker (shown on hover).
  */
-function buildTooltip(callsign, r, battery) {
-  if (battery > 100) return callsign + " (USB)";
-  if (battery > 0) return callsign + " (" + battery + "%)";
+function buildTooltip(callsign, r, battery, mesh) {
+  var v = mesh && mesh.voltage > 0 ? mesh.voltage.toFixed(1) + "V" : "";
+  if (battery > 100)
+    return callsign + " (USB" + (v ? " \u00b7 " + v : "") + ")";
+  if (battery > 0)
+    return callsign + " (" + battery + "%" + (v ? " \u00b7 " + v : "") + ")";
+  if (v) return callsign + " (" + v + ")";
   return callsign;
 }
 
@@ -158,7 +162,16 @@ function escHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-function buildPopup(callsign, r, color, battery, isTracker) {
+function formatUptime(secs) {
+  var d = Math.floor(secs / 86400);
+  var h = Math.floor((secs % 86400) / 3600);
+  var m = Math.floor((secs % 3600) / 60);
+  if (d > 0) return d + "d " + h + "h";
+  if (h > 0) return h + "h " + m + "m";
+  return m + "m";
+}
+
+function buildPopup(callsign, r, color, battery, isTracker, mesh) {
   var html =
     '<div style="font-family:sans-serif;font-size:13px;max-width:300px;">';
   if (r.location) html += "<b>" + escHtml(r.location) + "</b><br>";
@@ -171,13 +184,59 @@ function buildPopup(callsign, r, color, battery, isTracker) {
     html += meta.join(" &middot; ");
     html += "</span>";
   }
+  var voltStr =
+    mesh && mesh.voltage > 0 ? " (" + mesh.voltage.toFixed(2) + "V)" : "";
   if (battery > 100) {
-    html += '<br><span style="color:#888;font-size:11px;">Power: USB</span>';
+    html +=
+      '<br><span style="color:#888;font-size:11px;">Power: USB' +
+      voltStr +
+      "</span>";
   } else if (battery > 0) {
     html +=
       '<br><span style="color:#888;font-size:11px;">Battery: ' +
       battery +
-      "%</span>";
+      "%" +
+      voltStr +
+      "</span>";
+  }
+  if (mesh) {
+    var meshLines = [];
+    if (mesh.channelUtil > 0 || mesh.airUtilTx > 0) {
+      var chParts = [];
+      if (mesh.channelUtil > 0)
+        chParts.push(mesh.channelUtil.toFixed(1) + "% ch util");
+      if (mesh.airUtilTx > 0) chParts.push(mesh.airUtilTx.toFixed(1) + "% TX");
+      meshLines.push("Mesh: " + chParts.join(" &middot; "));
+    }
+    if (mesh.snr !== null) {
+      var hopsStr =
+        mesh.hopsAway !== null
+          ? mesh.hopsAway === 0
+            ? "direct"
+            : mesh.hopsAway + " hop" + (mesh.hopsAway !== 1 ? "s" : "")
+          : "";
+      meshLines.push(
+        "Signal: " +
+          mesh.snr.toFixed(1) +
+          " dB" +
+          (hopsStr ? " &middot; " + hopsStr : ""),
+      );
+    } else if (mesh.hopsAway !== null) {
+      meshLines.push(
+        mesh.hopsAway === 0
+          ? "Direct link"
+          : mesh.hopsAway + " hop" + (mesh.hopsAway !== 1 ? "s" : ""),
+      );
+    }
+    if (mesh.uptime > 0) {
+      meshLines.push("Up: " + formatUptime(mesh.uptime));
+    }
+    if (meshLines.length > 0) {
+      html +=
+        '<br><span style="color:#888;font-size:11px;">' +
+        meshLines.join("<br>") +
+        "</span>";
+    }
   }
   if (r.url && /^https?:\/\//i.test(r.url)) {
     html +=
@@ -274,7 +333,27 @@ function parseCotToMarker(xml) {
   var batM = xml.match(/<status[^>]+battery="(\d+)"/);
   var battery = batM ? parseInt(batM[1], 10) : 0;
 
+  // Parse mesh telemetry (voltage, channel util, SNR, etc.)
+  var meshTelem = null;
+  var telemM = xml.match(/<__meshTelemetry([^/]*)\/?>/);
+  if (telemM) {
+    var ta = telemM[1];
+    var ga = function (n) {
+      var m = ta.match(new RegExp(n + '="([^"]*)"'));
+      return m ? m[1] : null;
+    };
+    meshTelem = {
+      voltage: parseFloat(ga("voltage")) || 0,
+      channelUtil: parseFloat(ga("channelUtil")) || 0,
+      airUtilTx: parseFloat(ga("airUtilTx")) || 0,
+      uptime: parseInt(ga("uptime"), 10) || 0,
+      snr: ga("snr") !== null ? parseFloat(ga("snr")) : null,
+      hopsAway: ga("hopsAway") !== null ? parseInt(ga("hopsAway"), 10) : null,
+    };
+  }
+
   var isTracker = uidM[1].indexOf("tracker-") === 0;
+  var isBridge = xml.indexOf("<__meshBridge") !== -1;
 
   var startM = xml.match(/\bstart="([^"]+)"/);
   var staleM = xml.match(/\bstale="([^"]+)"/);
@@ -307,8 +386,8 @@ function parseCotToMarker(xml) {
     layer: layerName,
     icon: icon,
     iconColor: color,
-    tooltip: buildTooltip(cs, r, battery),
-    popup: buildPopup(cs, r, color, battery, isTracker),
+    tooltip: buildTooltip(cs, r, battery, meshTelem),
+    popup: buildPopup(cs, r, color, battery, isTracker, meshTelem),
     opacity: Math.round(opacity * 100) / 100,
     ttl: ttlSec,
     _staleMs: staleM ? new Date(staleM[1]).getTime() : 0,
@@ -317,6 +396,8 @@ function parseCotToMarker(xml) {
     _ageBased: ageBased,
     _battery: battery,
     _tracker: isTracker,
+    _meshBridge: isBridge,
+    _mesh: meshTelem,
   };
 }
 

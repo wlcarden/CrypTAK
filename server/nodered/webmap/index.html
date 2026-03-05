@@ -343,6 +343,54 @@
       flex-shrink: 0;
     }
 
+    /* Signal quality dot on marker rows */
+    .sb-signal {
+      flex-shrink: 0;
+      margin-left: 6px;
+      font-size: 7px;
+      line-height: 1;
+    }
+    .sb-signal[title] { cursor: help; }
+
+    /* Mesh network health section */
+    #sb-mesh {
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+    }
+    #sb-mesh-header {
+      display: flex;
+      align-items: center;
+      padding: 7px 10px;
+      background: #222;
+      cursor: pointer;
+      user-select: none;
+    }
+    #sb-mesh-header:hover { background: #2a2a2a; }
+    #sb-mesh.collapsed #sb-mesh-body { display: none; }
+    #sb-mesh-body {
+      padding: 6px 10px 8px 26px;
+      font-size: 12px;
+      color: #999;
+    }
+    .sb-mesh-stat {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 3px;
+    }
+    .sb-mesh-stat-val { color: #ccc; }
+    .sb-mesh-bar-wrap {
+      background: #111;
+      border-radius: 2px;
+      height: 6px;
+      margin-top: 4px;
+      overflow: hidden;
+    }
+    .sb-mesh-bar {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.3s;
+    }
+
     /* Empty state */
     .sb-empty {
       padding: 40px 20px;
@@ -400,6 +448,14 @@
         </div>
         <div id="sb-clients-list"></div>
     </div>
+    <div id="sb-mesh" class="collapsed">
+        <div id="sb-mesh-header">
+            <span class="sb-group-caret"><i class="fa fa-caret-down"></i></span>
+            <span class="sb-group-label">Mesh Network</span>
+            <span class="sb-client-count zero" id="sb-mesh-count">0</span>
+        </div>
+        <div id="sb-mesh-body"></div>
+    </div>
     <div id="sb-summary">Waiting for data...</div>
     <div id="sb-list">
         <div class="sb-empty">No markers</div>
@@ -421,6 +477,10 @@
     var sbClientsSection = document.getElementById('sb-clients');
     var sbClientsList = document.getElementById('sb-clients-list');
     var sbClientCount = document.getElementById('sb-client-count');
+    var sbMeshSection = document.getElementById('sb-mesh');
+    var sbMeshBody = document.getElementById('sb-mesh-body');
+    var sbMeshCount = document.getElementById('sb-mesh-count');
+    var meshCollapsed = true;
     var filter = '';
     var sortMode = 'recent';  // 'recent' or 'alpha'
     var groupByLayer = true;
@@ -465,6 +525,12 @@
     document.getElementById('sb-clients-header').addEventListener('click', function() {
         clientsCollapsed = !clientsCollapsed;
         sbClientsSection.classList.toggle('collapsed', clientsCollapsed);
+    });
+
+    // Toggle mesh network section
+    document.getElementById('sb-mesh-header').addEventListener('click', function() {
+        meshCollapsed = !meshCollapsed;
+        sbMeshSection.classList.toggle('collapsed', meshCollapsed);
     });
 
     // Trail duration control
@@ -560,6 +626,7 @@
                 startMs: d._startMs || 0,
                 staleMs: d._staleMs || 0,
                 battery: d._battery || 0,
+                mesh: d._mesh || null,
             });
         }
         return items;
@@ -576,6 +643,13 @@
     function esc(s) {
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
             .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function snrColor(snr) {
+        if (snr > 0) return '#4CAF50';
+        if (snr > -5) return '#FFD600';
+        if (snr > -10) return '#FF8C00';
+        return '#FF5252';
     }
 
     function renderMarkerRow(m, now) {
@@ -596,6 +670,11 @@
         html += '<div class="sb-marker-meta">' + meta + '</div>';
         html += '</div>';
         if (age) html += '<span class="sb-marker-age">' + age + '</span>';
+        if (m.mesh && m.mesh.snr !== null) {
+            html += '<span class="sb-signal" title="SNR: ' + m.mesh.snr.toFixed(1) +
+                ' dB" style="color:' + snrColor(m.mesh.snr) +
+                '"><i class="fa fa-circle"></i></span>';
+        }
         html += '</div>';
         return html;
     }
@@ -656,10 +735,65 @@
         }
     });
 
+    // ── Mesh health summary ──────────────────────────────────
+    function renderMeshHealth(items) {
+        var meshNodes = [];
+        for (var i = 0; i < items.length; i++) {
+            if (items[i].mesh) meshNodes.push(items[i]);
+        }
+
+        var count = meshNodes.length;
+        sbMeshCount.textContent = count;
+        sbMeshCount.classList.toggle('zero', count === 0);
+
+        if (count === 0) {
+            sbMeshSection.style.display = 'none';
+            return;
+        }
+        sbMeshSection.style.display = '';
+
+        var totalUtil = 0;
+        var peakUtil = 0;
+        var peakName = '';
+        var utilCount = 0;
+        for (var j = 0; j < meshNodes.length; j++) {
+            var ch = meshNodes[j].mesh.channelUtil;
+            if (ch > 0) {
+                totalUtil += ch;
+                utilCount++;
+                if (ch > peakUtil) {
+                    peakUtil = ch;
+                    peakName = meshNodes[j].name;
+                }
+            }
+        }
+
+        var html = '';
+        html += '<div class="sb-mesh-stat"><span>Nodes reporting</span>' +
+            '<span class="sb-mesh-stat-val">' + count + '</span></div>';
+
+        if (utilCount > 0) {
+            var avgUtil = totalUtil / utilCount;
+            html += '<div class="sb-mesh-stat"><span>Channel util</span>' +
+                '<span class="sb-mesh-stat-val">' + avgUtil.toFixed(1) +
+                '% avg &middot; ' + peakUtil.toFixed(1) + '% peak</span></div>';
+
+            // Bar: color by peak utilization
+            var barColor = peakUtil < 15 ? '#4CAF50' : peakUtil < 25 ? '#FFD600' : '#FF5252';
+            html += '<div class="sb-mesh-bar-wrap">' +
+                '<div class="sb-mesh-bar" style="width:' + Math.min(peakUtil, 100) +
+                '%;background:' + barColor + '" title="Peak: ' +
+                esc(peakName) + '"></div></div>';
+        }
+
+        sbMeshBody.innerHTML = html;
+    }
+
     // ── Main render ───────────────────────────────────────────
     function renderSidebar() {
         var items = collectMarkers();
         var now = Date.now();
+        renderMeshHealth(items);
 
         if (items.length === 0) {
             sbList.innerHTML = '<div class="sb-empty">' +
@@ -735,6 +869,84 @@
         }
     }
 
+    // ── Mesh topology overlay ──────────────────────────────
+    var meshLinkLayer = null;
+    var meshLinks = {};
+
+    function syncMeshTopology() {
+        if (typeof allData === 'undefined' || typeof map === 'undefined') return;
+        if (!meshLinkLayer) {
+            meshLinkLayer = L.layerGroup().addTo(map);
+        }
+
+        // Find bridge marker position
+        var bridgeLat = null, bridgeLon = null;
+        var keys = Object.keys(allData);
+        for (var i = 0; i < keys.length; i++) {
+            var d = allData[keys[i]];
+            if (d && d._meshBridge && d.lat && d.lon) {
+                bridgeLat = d.lat;
+                bridgeLon = d.lon;
+                break;
+            }
+        }
+        if (bridgeLat === null) {
+            // No bridge — clear any existing links
+            if (Object.keys(meshLinks).length > 0) {
+                meshLinkLayer.clearLayers();
+                meshLinks = {};
+            }
+            return;
+        }
+
+        var active = {};
+        for (var j = 0; j < keys.length; j++) {
+            var nd = allData[keys[j]];
+            if (!nd || !nd._mesh || nd._meshBridge) continue;
+            if (!nd.lat || !nd.lon) continue;
+            if (nd._mesh.snr === null && nd._mesh.hopsAway === null) continue;
+
+            var name = nd.name || keys[j];
+            active[name] = true;
+
+            var latlngs = [[bridgeLat, bridgeLon], [nd.lat, nd.lon]];
+            var color = snrColor(nd._mesh.snr !== null ? nd._mesh.snr : -15);
+            var dashed = nd._mesh.hopsAway !== null && nd._mesh.hopsAway > 0;
+
+            var snrStr = nd._mesh.snr !== null ? nd._mesh.snr.toFixed(1) + ' dB' : '?';
+            var hopStr = nd._mesh.hopsAway !== null
+                ? (nd._mesh.hopsAway === 0 ? 'direct' : nd._mesh.hopsAway + ' hop' + (nd._mesh.hopsAway !== 1 ? 's' : ''))
+                : '';
+            var tip = name + ': ' + snrStr + (hopStr ? ' \u00b7 ' + hopStr : '');
+
+            if (meshLinks[name]) {
+                meshLinks[name].setLatLngs(latlngs);
+                meshLinks[name].setStyle({
+                    color: color,
+                    dashArray: dashed ? '8 6' : null,
+                });
+                meshLinks[name].unbindTooltip();
+                meshLinks[name].bindTooltip(tip, { sticky: true });
+            } else {
+                var opts = { color: color, weight: 2, opacity: 0.5 };
+                if (dashed) opts.dashArray = '8 6';
+                var line = L.polyline(latlngs, opts)
+                    .bindTooltip(tip, { sticky: true });
+                meshLinks[name] = line;
+                meshLinkLayer.addLayer(line);
+            }
+        }
+
+        // Remove stale links
+        var linkKeys = Object.keys(meshLinks);
+        for (var r = 0; r < linkKeys.length; r++) {
+            if (!active[linkKeys[r]]) {
+                meshLinkLayer.removeLayer(meshLinks[linkKeys[r]]);
+                delete meshLinks[linkKeys[r]];
+            }
+        }
+    }
+
     // ── Init ──────────────────────────────────────────────────
     // Set initial group toggle state
     sbGroupToggle.classList.add('active');
@@ -744,9 +956,25 @@
             clearInterval(initInterval);
             map.invalidateSize();
             renderSidebar();
-            setInterval(function() { renderSidebar(); syncMarkerOpacity(); }, 2000);
+            setInterval(function() {
+                renderSidebar();
+                syncMarkerOpacity();
+                syncMeshTopology();
+            }, 2000);
             fetchClients();
             setInterval(fetchClients, 10000);
+
+            // Apply opacity immediately when worldmap.js adds/recreates markers,
+            // eliminating the flash of full-opacity before the next 2s poll.
+            var opacitySyncPending = false;
+            map.on('layeradd', function(e) {
+                if (!(e.layer instanceof L.Marker) || opacitySyncPending) return;
+                opacitySyncPending = true;
+                setTimeout(function() {
+                    opacitySyncPending = false;
+                    syncMarkerOpacity();
+                }, 50);
+            });
         }
     }, 500);
 })();

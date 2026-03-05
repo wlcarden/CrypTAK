@@ -56,6 +56,10 @@ TRACKER_NODES: set[str] = {
     n.strip().lstrip("!") for n in _tracker_raw.split(",") if n.strip()
 }
 
+# Telemetry cache — updated by telemetry handler, read during nodedb seed.
+_telemetry_cache: dict[str, dict] = {}
+_uptime_cache: dict[str, int] = {}
+
 _DT_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 
@@ -105,6 +109,13 @@ def build_pli(
     battery: int = 0,
     hw_model: str = "",
     tracker: bool = False,
+    bridge: bool = False,
+    voltage: float = 0.0,
+    channel_util: float = 0.0,
+    air_util_tx: float = 0.0,
+    uptime: int = 0,
+    snr: float | None = None,
+    hops_away: int | None = None,
 ) -> str:
     """Build a PLI CoT event for a mesh node position.
 
@@ -166,6 +177,23 @@ def build_pli(
         ET.SubElement(detail, "status", {"battery": str(battery)})
     if tracker:
         ET.SubElement(detail, "__tracker")
+    if bridge:
+        ET.SubElement(detail, "__meshBridge")
+    telem_attrs = {}
+    if voltage > 0:
+        telem_attrs["voltage"] = f"{voltage:.2f}"
+    if channel_util > 0:
+        telem_attrs["channelUtil"] = f"{channel_util:.1f}"
+    if air_util_tx > 0:
+        telem_attrs["airUtilTx"] = f"{air_util_tx:.1f}"
+    if uptime > 0:
+        telem_attrs["uptime"] = str(uptime)
+    if snr is not None:
+        telem_attrs["snr"] = f"{snr:.1f}"
+    if hops_away is not None:
+        telem_attrs["hopsAway"] = str(hops_away)
+    if telem_attrs:
+        ET.SubElement(detail, "__meshTelemetry", telem_attrs)
     ET.SubElement(detail, "__meshtastic")
     return ET.tostring(event, encoding="unicode")
 
@@ -298,13 +326,11 @@ def _seed_from_nodedb(iface, queue, loop, max_age_secs: int = 0):
     now_epoch = int(time.time())
     seeded = 0
     for nid, node in list(iface.nodes.items()):
-        if node.get("num") == my_node_num:
-            continue
+        is_bridge = node.get("num") == my_node_num
 
         # Skip nodes not heard recently (they're offline).
-        # Also skip nodes with lastHeard=0 (learned via gossip, never
-        # directly heard by this radio).
-        if max_age_secs > 0:
+        # Bridge node is always included (it's always "online").
+        if max_age_secs > 0 and not is_bridge:
             last_heard = node.get("lastHeard", 0) or 0
             if not last_heard or (now_epoch - last_heard) > max_age_secs:
                 continue
@@ -324,9 +350,29 @@ def _seed_from_nodedb(iface, queue, loop, max_age_secs: int = 0):
         callsign = user.get("longName") or user.get("shortName") or nid
         node_id = nid.replace("!", "")
         battery = 0
+        voltage = 0.0
+        channel_util = 0.0
+        air_util_tx = 0.0
+        uptime_s = 0
         dm = node.get("deviceMetrics", {})
         if dm:
             battery = int(dm.get("batteryLevel", 0) or 0)
+            voltage = float(dm.get("voltage", 0) or 0)
+            channel_util = float(dm.get("channelUtilization", 0) or 0)
+            air_util_tx = float(dm.get("airUtilTx", 0) or 0)
+            uptime_s = int(dm.get("uptimeSeconds", 0) or 0)
+        # Telemetry cache may have fresher values than nodedb snapshot
+        telem = _telemetry_cache.get(node_id, {})
+        if telem.get("voltage"):
+            voltage = telem["voltage"]
+        if telem.get("channelUtil"):
+            channel_util = telem["channelUtil"]
+        if telem.get("airUtilTx"):
+            air_util_tx = telem["airUtilTx"]
+        if telem.get("uptime"):
+            uptime_s = telem["uptime"]
+        snr_val = node.get("snr")
+        hops_val = node.get("hopsAway")
         data = {
             "node_id": node_id,
             "callsign": callsign,
@@ -337,7 +383,14 @@ def _seed_from_nodedb(iface, queue, loop, max_age_secs: int = 0):
             "course": 0.0,
             "battery": battery,
             "hw_model": user.get("hwModel", ""),
-            "tracker": node_id in TRACKER_NODES,
+            "tracker": node_id in TRACKER_NODES and not is_bridge,
+            "bridge": is_bridge,
+            "voltage": voltage,
+            "channel_util": channel_util,
+            "air_util_tx": air_util_tx,
+            "uptime": uptime_s,
+            "snr": snr_val if snr_val is not None else None,
+            "hops_away": hops_val if hops_val is not None else None,
         }
         _enqueue(queue, loop, data)
         seeded += 1
@@ -386,12 +439,32 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
             )
 
             battery = 0
+            voltage = 0.0
+            channel_util = 0.0
+            air_util_tx = 0.0
+            uptime_s = 0
             device_metrics = node_info.get("deviceMetrics", {})
             if device_metrics:
                 battery = int(device_metrics.get("batteryLevel", 0) or 0)
+                voltage = float(device_metrics.get("voltage", 0) or 0)
+                channel_util = float(device_metrics.get("channelUtilization", 0) or 0)
+                air_util_tx = float(device_metrics.get("airUtilTx", 0) or 0)
+                uptime_s = int(device_metrics.get("uptimeSeconds", 0) or 0)
 
             node_id = from_id.replace("!", "")
             hw_model = user.get("hwModel", "")
+
+            telem = _telemetry_cache.get(node_id, {})
+            if telem.get("voltage"):
+                voltage = telem["voltage"]
+            if telem.get("channelUtil"):
+                channel_util = telem["channelUtil"]
+            if telem.get("airUtilTx"):
+                air_util_tx = telem["airUtilTx"]
+            if telem.get("uptime"):
+                uptime_s = telem["uptime"]
+            snr_val = node_info.get("snr")
+            hops_val = node_info.get("hopsAway")
 
             data = {
                 "node_id": node_id,
@@ -404,6 +477,12 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
                 "battery": battery,
                 "hw_model": hw_model,
                 "tracker": node_id in TRACKER_NODES,
+                "voltage": voltage,
+                "channel_util": channel_util,
+                "air_util_tx": air_util_tx,
+                "uptime": uptime_s,
+                "snr": snr_val if snr_val is not None else None,
+                "hops_away": hops_val if hops_val is not None else None,
             }
             _enqueue(queue, loop, data)
             bat_str = " bat=%d%%" % battery if battery else ""
@@ -416,8 +495,68 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
 
     # Global subscription — survives interface reconnects because
     # PyPubSub topics are not bound to a specific interface instance.
+    def on_telemetry(packet, interface):
+        try:
+            decoded = packet.get("decoded", {})
+            telemetry = decoded.get("telemetry", {})
+            dm = telemetry.get("deviceMetrics", {})
+            if not dm:
+                return
+            from_id = packet.get("fromId", str(packet.get("from", "unknown")))
+            node_id = from_id.replace("!", "")
+            voltage = float(dm.get("voltage", 0) or 0)
+            channel_util = float(dm.get("channelUtilization", 0) or 0)
+            air_util_tx = float(dm.get("airUtilTx", 0) or 0)
+            uptime_s = int(dm.get("uptimeSeconds", 0) or 0)
+            # Reboot detection: uptime decreased → inject event marker
+            if uptime_s > 0:
+                prev = _uptime_cache.get(node_id, 0)
+                if prev > 0 and uptime_s < prev:
+                    logger.warning(
+                        "Node %s rebooted (was up %ds, now %ds)",
+                        node_id, prev, uptime_s,
+                    )
+                    # Inject a transient reboot event at the node's last known position
+                    node_info = interface.nodes.get(from_id, {})
+                    pos = node_info.get("position", {})
+                    rlat = pos.get("latitude", 0.0) or 0.0
+                    rlon = pos.get("longitude", 0.0) or 0.0
+                    if rlat != 0.0 or rlon != 0.0:
+                        user = node_info.get("user", {})
+                        callsign = (
+                            user.get("longName")
+                            or user.get("shortName")
+                            or from_id
+                        )
+                        prev_d = prev // 86400
+                        prev_h = (prev % 86400) // 3600
+                        up_str = f"{prev_d}d {prev_h}h" if prev_d else f"{prev_h}h"
+                        _enqueue(queue, loop, {
+                            "node_id": f"reboot-{node_id}-{int(time.time())}",
+                            "callsign": f"{callsign} rebooted",
+                            "lat": rlat,
+                            "lon": rlon,
+                            "alt": float(pos.get("altitude", 0) or 0),
+                            "battery": 0,
+                            "hw_model": user.get("hwModel", ""),
+                        })
+                _uptime_cache[node_id] = uptime_s
+            _telemetry_cache[node_id] = {
+                "voltage": voltage,
+                "channelUtil": channel_util,
+                "airUtilTx": air_util_tx,
+                "uptime": uptime_s,
+            }
+            logger.debug(
+                "Telemetry from %s: %.2fV ch=%.1f%% tx=%.1f%% up=%ds",
+                node_id, voltage, channel_util, air_util_tx, uptime_s,
+            )
+        except Exception:
+            logger.exception("Error processing telemetry packet")
+
     pub.subscribe(on_position, "meshtastic.receive.position")
-    logger.info("Subscribed to mesh position packets")
+    pub.subscribe(on_telemetry, "meshtastic.receive.telemetry")
+    logger.info("Subscribed to mesh position + telemetry packets")
 
     while True:
         disconnected = threading.Event()
