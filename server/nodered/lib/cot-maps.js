@@ -353,7 +353,7 @@ function parseCotToMarker(xml) {
   }
 
   var isTracker = uidM[1].indexOf("tracker-") === 0;
-  var isMeshtastic = xml.indexOf("<__meshtastic") !== -1;
+  var isMeshtastic = uidM[1].indexOf("mesh-") === 0 || isTracker;
   var isBridge = xml.indexOf("<__meshBridge") !== -1;
 
   var startM = xml.match(/\bstart="([^"]+)"/);
