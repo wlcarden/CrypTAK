@@ -1,0 +1,53 @@
+# CrypTAK Mesh Node Registry
+#
+# Each entry maps a node name to its profile and identity.
+# Used by provision.sh to configure nodes in one command.
+#
+# Naming convention:
+#   Long name:  CrypTAK-{ROLE}{##}   (e.g. CrypTAK-RLY01)
+#   Short name: C{role}{##}           (e.g. CR01)
+#
+#   BSE / CB = Base station (fixed emplacement, ROUTER)
+#   BRG / CG = Bridge (TAK server bridge, CLIENT)
+#   RLY / CR = Relay (deployable solar, ROUTER)
+#   VHC / CV = Vehicle (mobile repeater, ROUTER_CLIENT)
+#   TRK / CT = Tracker (mobile GPS, TRACKER)
+#   FLD / CF = Field (general field node, CLIENT)
+#
+# Fields:
+#   profile:    relay | vehicle | tracker | bridge | field
+#   short_name: 4-char display name (auto-generated if omitted)
+#   gps:        false for boards without GPS hardware (default: true)
+#   latitude:   Fixed position (only for gps: false nodes)
+#   longitude:  Fixed position (only for gps: false nodes)
+#   altitude:   Altitude in meters (optional)
+
+nodes:
+  CrypTAK-BRG01:
+    profile: bridge
+    short_name: CG01
+
+  CrypTAK-BSE01:
+    profile: relay
+    short_name: CB01
+    gps: false
+    latitude: 38.84191827
+    longitude: -77.29344941
+    altitude: 155
+
+  CrypTAK-RLY01:
+    profile: relay
+    short_name: CR01
+
+  CrypTAK-RLY02:
+    profile: relay
+    short_name: CR02
+
+  CrypTAK-VHC01:
+    profile: vehicle
+    short_name: CV01
+    gps: false
+
+  CrypTAK-TRK01:
+    profile: tracker
+    short_name: CT01

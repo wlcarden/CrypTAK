@@ -1,0 +1,30 @@
+# Field Node — CLIENT profile
+# GPS-enabled mobile node for general field use.
+# Less aggressive than TRACKER — longer broadcast intervals, no power saving.
+# Requires hardware with GPS module (RAK5005+4630, T-Beam).
+#
+# Apply via: ./firmware/provision.sh "Node Name"
+
+config:
+  lora:
+    modem_preset: LONG_FAST
+    region: US
+    tx_power: 30
+    hop_limit: 3
+    channel_num: 0
+
+  device:
+    role: CLIENT
+    serial_enabled: false
+
+  position:
+    position_broadcast_smart_enabled: true
+    gps_enabled: true
+    gps_update_interval: 30
+    position_broadcast_secs: 300
+
+  power:
+    is_power_saving: false
+
+  display:
+    auto_screen_carousel_secs: 0

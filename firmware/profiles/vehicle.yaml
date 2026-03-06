@@ -1,0 +1,30 @@
+# Vehicle Node — ROUTER_CLIENT profile
+# Mobile repeater mounted in a vehicle. Rebroadcasts all mesh traffic
+# while actively reporting GPS position. Charges via USB when car is on,
+# runs on battery when parked.
+#
+# Apply via: ./firmware/provision.sh "Node Name"
+
+config:
+  lora:
+    modem_preset: LONG_FAST
+    region: US
+    tx_power: 30
+    hop_limit: 3
+    channel_num: 0
+
+  device:
+    role: ROUTER_CLIENT
+    serial_enabled: false
+
+  position:
+    position_broadcast_smart_enabled: true
+    gps_enabled: true
+    gps_update_interval: 15
+    position_broadcast_secs: 120
+
+  power:
+    is_power_saving: false
+
+  display:
+    auto_screen_carousel_secs: 0

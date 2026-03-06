@@ -1,0 +1,30 @@
+# TAK Bridge — CLIENT profile
+# T-Beam connected to TAK server via USB serial.
+# Receives all mesh traffic and forwards to the relay service.
+# This node is the remote admin controller for all other nodes.
+#
+# Apply via: ./firmware/provision.sh "Node Name"
+
+config:
+  lora:
+    modem_preset: LONG_FAST
+    region: US
+    tx_power: 30
+    hop_limit: 3
+    channel_num: 0
+
+  device:
+    role: CLIENT
+    serial_enabled: true
+
+  position:
+    position_broadcast_smart_enabled: true
+    gps_enabled: true
+    gps_update_interval: 30
+    position_broadcast_secs: 900
+
+  power:
+    is_power_saving: false
+
+  display:
+    auto_screen_carousel_secs: 0

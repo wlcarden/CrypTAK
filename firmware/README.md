@@ -1,8 +1,21 @@
 # Meshtastic Firmware and Device Configuration
 
-## Prerequisites
+## Quick Start — Provisioning a Node
 
-Install the Meshtastic Python CLI for flashing and configuration:
+```bash
+# List registered nodes
+./firmware/provision.sh --list
+
+# Provision a registered node (plug in USB, run one command)
+./firmware/provision.sh "CrypTAK Base"
+
+# Provision a new node interactively
+./firmware/provision.sh
+```
+
+The provisioning script handles everything: profile config, channel settings, neighbor info, admin keys, owner name, and fixed position.
+
+## Prerequisites
 
 ```bash
 pip install meshtastic
@@ -10,102 +23,110 @@ pip install meshtastic
 
 Alternatively, use the [Meshtastic Android app](https://play.google.com/store/apps/details?id=com.geeksville.mesh) for configuration over Bluetooth.
 
-## Hardware in This Project
+## Profiles
 
-| Device                   | Role         | Firmware                              | Config                      |
-| ------------------------ | ------------ | ------------------------------------- | --------------------------- |
-| RAK19007 + RAK4631       | Base station | `firmware-rak4631-2.7.15.567b8ea.uf2` | `rak19007-base/device.yaml` |
-| RAK WisBlock 5005 + 4630 | Field node   | `firmware-rak4631-2.7.15.567b8ea.uf2` | `rak5005-4630/device.yaml`  |
-| LilyGo T-Beam            | TAK bridge   | ESP32 — use Web Flasher               | `tbeam-bridge/device.yaml`  |
-| Lilygo 868/915 LORA32    | Field node   | ESP32 — use Web Flasher               | `lilygo-lora32/device.yaml` |
+Role-based configuration templates in `profiles/`:
 
-## Device Roles
+| Profile   | Role    | GPS                  | Use Case                                   |
+| --------- | ------- | -------------------- | ------------------------------------------ |
+| `relay`   | ROUTER  | Off (fixed position) | Solar scatter relays, base stations        |
+| `tracker` | TRACKER | On (15s updates)     | Vehicle/person tracking, battery optimized |
+| `bridge`  | CLIENT  | On                   | T-Beam TAK server bridge (serial enabled)  |
+| `field`   | CLIENT  | On                   | General field node                         |
 
-- **Base station** (`ROUTER`) — Fixed solar-powered relay on the roof. Rebroadcasts all mesh traffic for the community. No GPS (uses fixed position).
-- **TAK bridge** (`CLIENT`) — T-Beam connected to TAK server. Receives mesh packets and forwards to the relay service for injection into FTS. Serial enabled for USB bridge mode.
-- **Field node** (`CLIENT`) — Mobile nodes carried in the field. GPS-enabled, battery-powered.
+## Node Registry
 
-## Channel Strategy
+`nodes.yaml` maps node names to their profile and identity. The provisioning script looks up nodes by name and applies the correct configuration. New nodes can be added interactively or by editing the file directly.
 
-All devices operate on the **default public LongFast channel** (PSK `AQ==`). This means:
+```yaml
+nodes:
+  CrypTAK Relay North:
+    profile: relay
+    short_name: RLN
+    latitude: 38.8455
+    longitude: -77.2901
+    altitude: 50
+```
 
-- Our ROUTER base station relays traffic for the broader Meshtastic community
-- We benefit from other users' relay infrastructure
-- Any Meshtastic user in range can see our nodes' position broadcasts
+## Hardware
 
-TAK-specific payloads (chat, markers, routes) are protected by the **ATAK plugin's AES-256-GCM app-layer encryption**, not by the mesh channel. This provides end-to-end encryption for sensitive data while keeping the mesh open for community use.
+| Device                   | Firmware                              | Notes                        |
+| ------------------------ | ------------------------------------- | ---------------------------- |
+| RAK19007 + RAK4631       | `firmware-rak4631-2.7.15.567b8ea.uf2` | Standard relay/tracker board |
+| RAK WisBlock 5005 + 4630 | `firmware-rak4631-2.7.15.567b8ea.uf2` | Older board, same firmware   |
+| LilyGo T-Beam            | ESP32 — use Web Flasher               | TAK bridge node              |
+
+Both RAK boards use the same RAK4631 core module and firmware. The provisioning script auto-detects hardware.
 
 ## Flashing Firmware
 
-### RAK WisBlock (nRF52840) — RAK19007, RAK5005
+### RAK WisBlock (nRF52840)
 
-The RAK bootloader exposes a USB mass storage drive:
-
-1. Connect the RAK WisBlock via USB.
-2. Double-press the reset button. A USB drive named `RAK4631` should appear.
+1. Connect via USB.
+2. Double-press the reset button. A USB drive named `RAK4631` appears.
 3. Drag and drop `firmware-rak4631-2.7.15.567b8ea.uf2` onto the drive.
-4. The device reboots automatically when the copy completes.
+4. The device reboots automatically.
 
-### LilyGo T-Beam / LORA32 (ESP32)
+### LilyGo T-Beam (ESP32)
 
-Use the Meshtastic Web Flasher:
+1. Connect via USB.
+2. Open https://flasher.meshtastic.org in Chrome.
+3. Select board variant `TBEAM`.
+4. Follow on-screen prompts.
 
-1. Connect the device via USB.
-2. Open https://flasher.meshtastic.org in Chrome (requires Web Serial API).
-3. Select the correct board variant:
-   - T-Beam: `TBEAM` (or `TBEAM_V1.1` depending on revision)
-   - LORA32: `TLORA_V2_1_16` or `T-LORA32_V2`
-4. Follow the on-screen prompts to flash.
+## What Provisioning Does
 
-Alternative: use `esptool` from the command line.
+The `provision.sh` script runs these steps automatically:
 
-## Applying Configuration
+1. **Detect** serial port and hardware
+2. **Apply profile** via `meshtastic --configure`
+3. **Channel config** — position precision 32 (prevents ~5km coordinate truncation)
+4. **NeighborInfo** — enables mesh topology visualization on the WebMap
+5. **Admin key** — trusts the T-Beam bridge for remote admin over mesh (PKC)
+6. **Owner name** — sets the node's display name and 4-char short name
+7. **Fixed position** — sets coordinates for relay nodes
+8. **Verify** — reads back config to confirm
 
-Connect the device via USB and run:
-
-```bash
-# RAK19007 base station
-meshtastic --configure firmware/rak19007-base/device.yaml
-
-# RAK5005 field node
-meshtastic --configure firmware/rak5005-4630/device.yaml
-
-# T-Beam bridge (over WiFi if already configured)
-meshtastic --host 192.168.50.198 --configure firmware/tbeam-bridge/device.yaml
-
-# Lilygo LORA32
-meshtastic --configure firmware/lilygo-lora32/device.yaml
-```
-
-**Important:** `--configure` applies radio/device/position settings but does NOT reliably set channel config. Verify the channel after applying:
+### Manual Post-Configure (if not using provision.sh)
 
 ```bash
-meshtastic --info | grep -A2 "Channels:"
-# Should show: psk=default (AQ==), no channel name
+# Full position precision (all devices)
+meshtastic --port /dev/ttyACM0 --ch-set module_settings.position_precision 32 --ch-index 0
+
+# NeighborInfo module (all devices)
+meshtastic --port /dev/ttyACM0 --set neighbor_info.enabled true
+
+# Admin key (all except bridge)
+meshtastic --port /dev/ttyACM0 --set security.admin_key "base64:FVmX/5EbFDNF8D1IB5rT6UaDil6dacMR9vpjOqoy0Eo="
 ```
 
-## Verifying
+## Remote Administration
 
-After applying configuration, confirm the settings:
+Once provisioned, the T-Beam bridge can remotely manage any node in the mesh:
 
 ```bash
-meshtastic --info
-# or over WiFi:
-meshtastic --host 192.168.50.198 --info
+# Reboot a remote node
+meshtastic --host 192.168.50.198 --dest a51e2838 --reboot
+
+# Change a remote node's setting
+meshtastic --host 192.168.50.198 --dest a51e2838 --set device.role CLIENT
 ```
 
-Check that:
+The `--dest` flag targets a node by ID (without the `!` prefix). Remote admin uses Meshtastic PKC — the target verifies the sender's public key against its `security.admin_key`.
 
-- Channel PSK shows `default` (`AQ==`) — public LongFast
-- Device role matches config (`ROUTER` for base station, `CLIENT` for others)
-- LoRa region shows `US` with modem preset `LONG_FAST`
-- GPS status matches the device (enabled for T-Beam and RAK5005, disabled for base station and LORA32)
+## Channel Strategy
+
+All devices operate on the **default public LongFast channel** (PSK `AQ==`):
+
+- Our ROUTER nodes relay traffic for the broader Meshtastic community
+- We benefit from other users' relay infrastructure
+- Any Meshtastic user in range can see our position broadcasts
+
+TAK payloads (chat, markers, routes) are protected by the **ATAK plugin's AES-256-GCM encryption**, not the mesh channel. This provides end-to-end encryption while keeping the mesh open.
 
 ## Encryption Layers
 
-| Layer                     | Key                | Protects                                   | Scope             |
-| ------------------------- | ------------------ | ------------------------------------------ | ----------------- |
-| LoRa channel (Meshtastic) | Default PSK `AQ==` | Link-layer — public, shared with community | All mesh traffic  |
-| App-layer (ATAK plugin)   | AES-256-GCM key    | TAK payloads — chat, markers, routes       | Team devices only |
-
-The ATAK plugin key is configured in the plugin settings on each Android device and distributed via QR code or Data Package. Mesh position broadcasts (PLI) are intentionally unencrypted at the app layer so the relay service can read and forward them to FTS.
+| Layer                     | Key                | Protects                             | Scope             |
+| ------------------------- | ------------------ | ------------------------------------ | ----------------- |
+| LoRa channel (Meshtastic) | Default PSK `AQ==` | Link-layer — public                  | All mesh traffic  |
+| App-layer (ATAK plugin)   | AES-256-GCM key    | TAK payloads — chat, markers, routes | Team devices only |
