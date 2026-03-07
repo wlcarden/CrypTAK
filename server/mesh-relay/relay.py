@@ -6,6 +6,8 @@ subscribes to position packets from the mesh network, converts them to
 CoT (Cursor on Target) XML, and injects into FreeTAKServer over TCP.
 
 Mesh nodes appear as friendly PLI markers on the TAK map.
+Detection sensor alerts (GPIO triggers) are forwarded as CoT alarm
+markers if the node has a known position, or logged only if not.
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ FTS_HOST = os.environ.get("FTS_HOST", "freetakserver")
 FTS_PORT = int(os.environ.get("FTS_PORT", "8087"))
 CLIENT_UID = "CrypTAK-MeshRelay"
 STALE_MINUTES = int(os.environ.get("STALE_MINUTES", "30"))
+DETECTION_STALE_MINUTES = int(os.environ.get("DETECTION_STALE_MINUTES", "5"))
 SA_REFRESH_MINUTES = 4
 RECONNECT_DELAY = 10
 MESH_HEARTBEAT_SECS = 30  # keep T-Beam TCP alive (firmware app-level idle ~130s)
@@ -195,6 +198,52 @@ def build_pli(
     if telem_attrs:
         ET.SubElement(detail, "__meshTelemetry", telem_attrs)
     ET.SubElement(detail, "__meshtastic")
+    return ET.tostring(event, encoding="unicode")
+
+
+def build_detection_alert(
+    node_id: str,
+    callsign: str,
+    lat: float,
+    lon: float,
+    alert_text: str,
+    alt: float = 0.0,
+) -> str:
+    """Build a CoT alarm marker for a DETECTION_SENSOR_APP event.
+
+    Appears on the TAK map as a red unknown-ground marker at the sensor
+    node's last known position, stale after DETECTION_STALE_MINUTES.
+    """
+    now = datetime.now(timezone.utc)
+    stale = now + timedelta(minutes=DETECTION_STALE_MINUTES)
+    uid = f"detection-{node_id}-{int(now.timestamp())}"
+    event = ET.Element("event", {
+        "version": "2.0",
+        "uid": uid,
+        "type": "a-u-G",          # unknown ground contact
+        "time": now.strftime(_DT_FMT),
+        "start": now.strftime(_DT_FMT),
+        "stale": stale.strftime(_DT_FMT),
+        "how": "m-g",
+    })
+    ET.SubElement(event, "point", {
+        "lat": f"{lat:.6f}",
+        "lon": f"{lon:.6f}",
+        "hae": str(int(alt)),
+        "ce": "9999999",
+        "le": "9999999",
+    })
+    detail = ET.SubElement(event, "detail")
+    ET.SubElement(detail, "contact", {"callsign": callsign})
+    ET.SubElement(detail, "uid", {"Droid": callsign})
+    # Red marker so it stands out from PLI nodes
+    ET.SubElement(detail, "color", {"argb": "-65536"})
+    remarks = ET.SubElement(detail, "remarks")
+    remarks.text = f"[SENSOR] {callsign}: {alert_text}"
+    ET.SubElement(detail, "__meshDetection", {
+        "nodeId": node_id,
+        "alertText": alert_text,
+    })
     return ET.tostring(event, encoding="unicode")
 
 
@@ -511,7 +560,7 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
             dm = telemetry.get("deviceMetrics", {})
             if not dm:
                 return
-            from_id = packet.get("fromId", str(packet.get("from", "unknown")))
+            from_id = packet.get("fromId") or str(packet.get("from") or "unknown")
             node_id = from_id.replace("!", "")
             voltage = float(dm.get("voltage", 0) or 0)
             channel_util = float(dm.get("channelUtilization", 0) or 0)
@@ -544,9 +593,60 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
         except Exception:
             logger.exception("Error processing telemetry packet")
 
+    def on_detection(packet, interface):
+        try:
+            from_id = packet.get("fromId", str(packet.get("from", "unknown")))
+            decoded = packet.get("decoded", {})
+            alert_text = decoded.get("text", "Detection triggered")
+
+            node_info = interface.nodes.get(from_id, {})
+            user = node_info.get("user", {})
+            callsign = (
+                user.get("longName")
+                or user.get("shortName")
+                or from_id
+            )
+            node_id = from_id.replace("!", "")
+
+            pos = node_info.get("position", {})
+            lat = pos.get("latitude", 0.0) or 0.0
+            lon = pos.get("longitude", 0.0) or 0.0
+            if lat == 0.0 and lon == 0.0:
+                lat_i = pos.get("latitudeI", 0) or 0
+                lon_i = pos.get("longitudeI", 0) or 0
+                if lat_i and lon_i:
+                    lat = lat_i / 1e7
+                    lon = lon_i / 1e7
+
+            if lat == 0.0 and lon == 0.0:
+                logger.warning(
+                    "DETECTION from %s (%s): %s — no position, cannot place CoT marker",
+                    node_id, callsign, alert_text,
+                )
+                return
+
+            alt = float(pos.get("altitude", 0) or 0)
+            logger.info(
+                "DETECTION from %s (%s) at %.6f, %.6f: %s",
+                node_id, callsign, lat, lon, alert_text,
+            )
+            data = {
+                "node_id": node_id,
+                "callsign": callsign,
+                "lat": lat,
+                "lon": lon,
+                "alt": alt,
+                "alert_text": alert_text,
+                "_type": "detection",
+            }
+            _enqueue(queue, loop, data)
+        except Exception:
+            logger.exception("Error processing detection packet")
+
     pub.subscribe(on_position, "meshtastic.receive.position")
     pub.subscribe(on_telemetry, "meshtastic.receive.telemetry")
-    logger.info("Subscribed to mesh position + telemetry packets")
+    pub.subscribe(on_detection, "meshtastic.receive.detection")
+    logger.info("Subscribed to mesh position + telemetry + detection packets")
 
     while True:
         disconnected = threading.Event()
@@ -709,12 +809,18 @@ async def main() -> None:
                     logger.exception("SA refresh error")
                 continue
 
-            cot = build_pli(**data)
+            event_type = data.pop("_type", "pli")
+            if event_type == "detection":
+                cot = build_detection_alert(**data)
+                label = f"detection from {data['callsign']}"
+            else:
+                cot = build_pli(**data)
+                label = f"PLI for {data['callsign']}"
             ok = await fts.send(cot)
             if ok:
-                logger.debug("Forwarded PLI for %s", data["callsign"])
+                logger.debug("Forwarded %s", label)
             else:
-                logger.error("Failed to forward PLI for %s", data["callsign"])
+                logger.error("Failed to forward %s", label)
     finally:
         await fts.close()
         logger.info("Mesh relay stopped")
