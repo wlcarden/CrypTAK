@@ -78,18 +78,63 @@ No internet or fixed infrastructure required. The Raspberry Pi acts as both WiFi
 
 ## Node Role Reference
 
-| Node               | Type                  | Role             | GPS               | Notes                                               |
-| ------------------ | --------------------- | ---------------- | ----------------- | --------------------------------------------------- |
-| Lilygo 868/915     | LoRa radio (ESP32)    | CLIENT           | No                | Primary testing node; pairs via BT to Pixel 6a      |
-| RAK 5005/4630 (x2) | LoRa radio (nRF52840) | CLIENT or ROUTER | Yes (4631 module) | Full GPS capability; can serve as mesh relay nodes  |
-| Raspberry Pi 4B    | ARM server            | TAK Server       | No                | Runs FreeTAKServer in Docker; WiFi AP in field mode |
-| Google Pixel 6a    | Android phone         | ATAK device      | Phone GPS         | Primary ATAK-CIV test device with Meshtastic plugin |
+| Node | ID | Type | Role | GPS | Notes |
+|---|---|---|---|---|---|
+| CrypTAK-BRG01 | !55c6ddbc | LilyGo T-Beam | TAK bridge | No | USB serial to Unraid; WiFi to LAN; MQTT bridge to Mosquitto |
+| CrypTAK Base | !a51e2838 | RAK4631 | Fixed base station | Yes | Home rooftop, 155m, solar powered |
+| CrypTAK-RLY01 | !3db00f2c | RAK4631 | ROUTER relay | Yes | Field relay; currently at home for case repair after drop |
+| CrypTAK-RLY02 | !c6eadff0 | RAK4631 | ROUTER relay | No | Wall/vehicle powered relay |
+| CrypTAK-VHC01 | !9aa4baf0 | RAK4631 | Vehicle/field | No | Mobile field node |
+| Tracker Alpha | !01f94ec0 | RAK4631 | TRACKER | Yes | GPS position tracker |
+| Raspberry Pi 4B | N/A | ARM server | TAK Server | No | Runs FreeTAKServer in Docker; WiFi AP in field mode |
+| Google Pixel 6a | N/A | Android phone | ATAK device | Phone GPS | Primary ATAK-CIV test device with Meshtastic plugin |
 
 ### Role Definitions
 
 - **CLIENT:** End-user node. Sends and receives messages but does not actively relay for other nodes (unless no other path exists). Lower power consumption.
 - **ROUTER:** Relay node. Actively forwards messages for other nodes in the mesh. Should be positioned for maximum coverage (elevated, central). Higher power draw.
 - **TAK Server:** Aggregates CoT (Cursor on Target) events from all ATAK clients and redistributes to the group. Provides SA (Situational Awareness) persistence.
+
+---
+
+## MQTT Bridge
+
+The T-Beam bridge node (`CrypTAK-BRG01`, `!55c6ddbc`) connects to the Unraid Mosquitto broker
+via WiFi, enabling MQTT-based mesh bridging between LoRa islands that lack direct RF connectivity.
+
+### Configuration
+
+| Setting | Value |
+|---|---|
+| Broker | `192.168.50.120:1883` (Unraid LAN) |
+| Auth | Username/password required; no anonymous access |
+| Channel 0 uplink | Enabled — mesh → MQTT |
+| Channel 0 downlink | Enabled — MQTT → mesh |
+| Encryption | Enabled (Meshtastic channel PSK) |
+| Broker binding | `0.0.0.0:1883` (LAN-accessible) |
+
+### MQTT Topics
+
+Meshtastic publishes/subscribes on the standard topic scheme:
+
+```
+msh/US/2/e/LongFast/!<node-id>   # encrypted packets (uplink)
+msh/US/2/c/LongFast/!<node-id>   # cleartext JSON (disabled)
+```
+
+### Remote Deployment Note
+
+If the T-Beam is deployed away from home WiFi, configure the broker address to the
+Unraid Tailscale IP (`100.101.255.78`) so it remains reachable from any network.
+
+### Managing Mosquitto Users
+
+```bash
+docker exec -i mosquitto mosquitto_passwd -b /mosquitto/config/passwd <username> <password>
+cd /mnt/user/appdata/tak-server && docker compose restart mosquitto
+```
+
+Current accounts: `nodered` (Node-RED mesh map), `openclaw` (Kit/AI assistant), `meshtastic` (T-Beam bridge)
 
 ---
 

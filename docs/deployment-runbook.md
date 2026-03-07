@@ -54,11 +54,14 @@ Meshtastic's built-in default — no key generation needed unless switching to a
 
   Known node IDs:
 
-  | Node     | ID          | Hardware      | Notes                          |
-  | -------- | ----------- | ------------- | ------------------------------ |
-  | T-beam   | `!55c6ddbc` | LilyGo T-Beam | WiFi at 192.168.50.198, no GPS |
-  | RAK-4ec0 | `!01f94ec0` | RAK4631       | GPS enabled                    |
-  | RAK-0f2c | `!3db00f2c` | RAK4631       | GPS enabled, role=TAK          |
+  | Node | ID | Hardware | Role | Notes |
+  |---|---|---|---|---|
+  | CrypTAK-BRG01 | `!55c6ddbc` | LilyGo T-Beam | Bridge | USB to Unraid; WiFi LAN; MQTT bridge |
+  | CrypTAK Base | `!a51e2838` | RAK4631 | Base station | Home rooftop, solar, fixed |
+  | CrypTAK-RLY01 | `!3db00f2c` | RAK4631 | ROUTER | Field relay |
+  | CrypTAK-RLY02 | `!c6eadff0` | RAK4631 | ROUTER | Wall/vehicle powered |
+  | CrypTAK-VHC01 | `!9aa4baf0` | RAK4631 | CLIENT | Vehicle/field node |
+  | Tracker Alpha | `!01f94ec0` | RAK4631 | TRACKER | GPS tracker |
 
 ---
 

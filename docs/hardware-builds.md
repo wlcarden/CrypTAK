@@ -47,6 +47,36 @@ meshtastic --configure firmware/lilygo-lora32/device.yaml
 | Green | GPS lock (N/A on this board) |
 | Red   | Battery charging             |
 
+### MQTT Bridge Configuration
+
+CrypTAK-BRG01 acts as the Meshtastic MQTT bridge node. After applying base config, push MQTT settings:
+
+```bash
+meshtastic --port /dev/ttyACM0 \\
+  --set mqtt.enabled true \\
+  --set mqtt.address 192.168.50.120 \\
+  --set mqtt.port 1883 \\
+  --set mqtt.username meshtastic \\
+  --set mqtt.password <password> \\
+  --set mqtt.encryption_enabled true \\
+  --set mqtt.json_enabled false
+
+# Enable uplink + downlink on primary channel
+meshtastic --port /dev/ttyACM0 --ch-set uplink_enabled true --ch-index 0
+meshtastic --port /dev/ttyACM0 --ch-set downlink_enabled true --ch-index 0
+```
+
+Verify MQTT is active — Mosquitto logs should show `CONNACK to !55c6ddbc` and `PUBLISH from !55c6ddbc`
+within 30 seconds of the node booting on WiFi.
+
+> **Note:** The mesh-relay service holds `/dev/ttyACM0` while running. Stop it first:
+> ```bash
+> cd /mnt/user/appdata/tak-server && docker compose stop mesh-relay
+> # ... run meshtastic commands ...
+> docker compose start mesh-relay
+> ```
+
+
 ---
 
 ## 2. RAK WisBlock 5005 + 4630 + 4631

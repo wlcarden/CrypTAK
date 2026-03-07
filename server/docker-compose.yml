@@ -165,7 +165,7 @@ services:
     networks:
       - taknet
     ports:
-      - "127.0.0.1:1883:1883"  # MQTT — localhost only; Node-RED reaches via Docker DNS
+      - "0.0.0.0:1883:1883"  # MQTT — LAN-accessible for Meshtastic T-Beam bridge; auth required (no anonymous)
     volumes:
       - /mnt/user/appdata/mosquitto/config:/mosquitto/config
       - /mnt/user/appdata/mosquitto/data:/mosquitto/data
