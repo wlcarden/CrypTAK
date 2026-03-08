@@ -50,6 +50,23 @@ var affiliationNames = {
 };
 
 /**
+ * Return worldmap line style (color + weight) for a mesh link based on SNR.
+ * SNR thresholds match Meshtastic signal quality guidance:
+ *   >= 5 dB  → strong (green)
+ *   >= 0 dB  → good (yellow-green)
+ *   >= -7 dB → marginal (orange)
+ *   <  -7 dB → weak (red)
+ * @param {number} snr - signal-to-noise ratio in dB
+ * @returns {{ color: string, weight: number }}
+ */
+function snrToLinkStyle(snr) {
+  if (snr >= 5)  return { color: '#00DD00', weight: 3 };
+  if (snr >= 0)  return { color: '#AADD00', weight: 2 };
+  if (snr >= -7) return { color: '#FFAA00', weight: 2 };
+  return { color: '#FF4444', weight: 1 };
+}
+
+/**
  * Interpolate a hex color toward dark gray using a power curve.
  * Markers stay vivid for most of their lifespan, then drop off sharply.
  * factor=1 returns the original color, factor=0 returns #444444.
@@ -476,4 +493,5 @@ module.exports = {
   parseCotToMarker: parseCotToMarker,
   refreshMarkerColors: refreshMarkerColors,
   makeSA: makeSA,
+  snrToLinkStyle: snrToLinkStyle,
 };
