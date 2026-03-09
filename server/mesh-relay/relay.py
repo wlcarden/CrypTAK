@@ -44,6 +44,11 @@ SA_REFRESH_MINUTES = 4
 RECONNECT_DELAY = 10
 MESH_HEARTBEAT_SECS = 30  # keep T-Beam TCP alive (firmware app-level idle ~130s)
 POSITION_POLL_SECS = int(os.environ.get("POSITION_POLL_SECS", "120"))
+# Nodes not heard within this window are skipped during nodedb seed.
+# Initial seed on connect uses no age filter (to show all known nodes
+# immediately), but periodic re-seeds apply this cutoff so markers for
+# offline nodes expire naturally via the CoT stale timeout.
+NODEDB_SEED_MAX_AGE_SECS = int(os.environ.get("NODEDB_SEED_MAX_AGE_SECS", "7200"))  # 2h
 
 # Known node IDs (without '!' prefix) treated as friendly (blue).
 # All other mesh nodes appear as neutral (green).
@@ -719,17 +724,16 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
                         break
 
                     # Refresh PLI from nodedb and poll remote nodes.
-                    # No age filter on seed — the CoT stale timeout handles
-                    # marker expiry on the TAK map side.  Nodes that are truly
-                    # offline won't respond to position polls, so their nodedb
-                    # position data goes stale and markers expire via TTL.
-                    # Filtering here created a chicken-and-egg problem: stale
-                    # lastHeard blocked seeding, but the position poll responses
-                    # that would refresh lastHeard arrived AFTER the seed check.
+                    # Age filter applied here: nodes not heard within
+                    # NODEDB_SEED_MAX_AGE_SECS are skipped so their CoT
+                    # markers expire naturally via the stale timeout instead
+                    # of being continuously refreshed as ghost markers.
+                    # The initial seed (above) has no age filter so all
+                    # known positions appear immediately on connect.
                     now = time.monotonic()
                     if now - last_poll >= POSITION_POLL_SECS:
                         last_poll = now
-                        _seed_from_nodedb(iface, queue, loop)
+                        _seed_from_nodedb(iface, queue, loop, max_age_secs=NODEDB_SEED_MAX_AGE_SECS)
                         for nid in list(iface.nodes):
                             node = iface.nodes.get(nid)
                             if node is None:
