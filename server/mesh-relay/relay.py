@@ -704,10 +704,11 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
                 MESH_HEARTBEAT_SECS, POSITION_POLL_SECS,
             )
 
-            # Seed initial PLI from T-Beam's cached nodedb so markers
-            # appear immediately without waiting for the first broadcast.
-            # No age filter on initial seed — show all known nodes.
-            _seed_from_nodedb(iface, queue, loop)
+            # Seed initial PLI from T-Beam's cached nodedb.
+            # Age filter applied from the start — no point showing positions
+            # for nodes that haven't been heard recently. Stale nodes appear
+            # when they come back online and start broadcasting again.
+            _seed_from_nodedb(iface, queue, loop, max_age_secs=NODEDB_SEED_MAX_AGE_SECS)
 
             pub.subscribe(on_disconnect, "meshtastic.connection.lost")
             try:
