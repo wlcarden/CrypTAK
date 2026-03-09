@@ -399,6 +399,71 @@
       font-size: 13px;
     }
 
+    /* Mesh network status panel */
+    #sb-mesh-nodes, #sb-mesh-community-nodes {
+      overflow-x: hidden;
+    }
+    .sb-mesh-node {
+      display: flex;
+      align-items: flex-start;
+      padding: 5px 10px 5px 10px;
+      border-bottom: 1px solid #1f1f1f;
+    }
+    .sb-mesh-node-dot {
+      font-size: 10px;
+      width: 16px;
+      flex-shrink: 0;
+      margin-right: 6px;
+      padding-top: 2px;
+      text-align: center;
+    }
+    .sb-mesh-node-info { flex: 1; min-width: 0; }
+    .sb-mesh-node-name {
+      font-size: 12px;
+      color: #ccc;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .sb-mesh-node-name.owned { color: #aac0ee; }
+    .sb-mesh-node-meta {
+      font-size: 11px;
+      color: #666;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 1px;
+    }
+    .sb-mesh-node-age {
+      font-size: 11px;
+      color: #555;
+      flex-shrink: 0;
+      margin-left: 6px;
+      font-variant-numeric: tabular-nums;
+      padding-top: 1px;
+    }
+    .mesh-st-online { color: #4CAF50; }
+    .mesh-st-recent { color: #FFD600; }
+    .mesh-st-stale  { color: #888; }
+    .mesh-st-old    { color: #3a3a3a; }
+    #sb-mesh-community-toggle {
+      padding: 5px 10px 5px 26px;
+      font-size: 11px;
+      color: #555;
+      cursor: pointer;
+      border-top: 1px solid #2a2a2a;
+      border-bottom: 1px solid #1f1f1f;
+      user-select: none;
+    }
+    #sb-mesh-community-toggle:hover { color: #999; }
+    #sb-mesh-last-update {
+      padding: 3px 10px 4px 26px;
+      font-size: 10px;
+      color: #3a3a3a;
+      font-style: italic;
+      border-top: 1px solid #1f1f1f;
+    }
+
     /* Mobile: hide sidebar below 768px */
     @media (max-width: 768px) {
       #sidebar { display: none; }
@@ -454,7 +519,12 @@
             <span class="sb-group-label">Mesh Network</span>
             <span class="sb-client-count zero" id="sb-mesh-count">0</span>
         </div>
-        <div id="sb-mesh-body"></div>
+        <div id="sb-mesh-body">
+            <div id="sb-mesh-nodes"></div>
+            <div id="sb-mesh-community-toggle" style="display:none"></div>
+            <div id="sb-mesh-community-nodes" style="display:none"></div>
+            <div id="sb-mesh-last-update"></div>
+        </div>
     </div>
     <div id="sb-summary">Waiting for data...</div>
     <div id="sb-list">
@@ -679,6 +749,124 @@
         return html;
     }
 
+    // ── Mesh network status panel ─────────────────────────────
+    var HW_MODELS = {
+        0:'?', 4:'T-Beam', 6:'Heltec', 8:'Heltec', 9:'NanoG1',
+        10:'RAK4631', 17:'Heltec V3', 24:'NanoG1', 37:'RAK',
+        43:'RAK', 57:'T-Echo', 65:'RAK', 68:'T-Beam S3',
+        113:'Heltec V3'
+    };
+    var ROLES = {
+        0:'CLIENT', 1:'MUTE', 2:'ROUTER', 3:'RTR+CLI',
+        4:'TRACKER', 5:'RPTR', 6:'TAK'
+    };
+    var sbMeshNodes         = document.getElementById('sb-mesh-nodes');
+    var sbMeshCommToggle    = document.getElementById('sb-mesh-community-toggle');
+    var sbMeshCommNodes     = document.getElementById('sb-mesh-community-nodes');
+    var sbMeshLastUpdate    = document.getElementById('sb-mesh-last-update');
+    var meshCommShowing     = false;
+
+    sbMeshCommToggle.addEventListener('click', function() {
+        meshCommShowing = !meshCommShowing;
+        sbMeshCommNodes.style.display = meshCommShowing ? '' : 'none';
+        sbMeshCommToggle.textContent = (meshCommShowing ? '▾ ' : '▸ ') +
+            sbMeshCommToggle.dataset.label;
+    });
+
+    function meshSnrColor(snr) {
+        if (snr >= 5)   return '#4CAF50';
+        if (snr >= 0)   return '#90EE30';
+        if (snr >= -7)  return '#FFD600';
+        if (snr >= -12) return '#FF8C00';
+        return '#FF5252';
+    }
+
+    function meshNodeRow(n, nowSec) {
+        var ageSec = n.lastHeard ? nowSec - n.lastHeard : null;
+        var stCls, stDot;
+        if (ageSec === null || ageSec > 86400)  { stCls = 'mesh-st-old';    stDot = '·'; }
+        else if (ageSec > 7200)                 { stCls = 'mesh-st-stale';  stDot = '○'; }
+        else if (ageSec > 900)                  { stCls = 'mesh-st-recent'; stDot = '◉'; }
+        else                                    { stCls = 'mesh-st-online'; stDot = '●'; }
+
+        var ageStr = '';
+        if (ageSec !== null) {
+            if (ageSec < 60)      ageStr = ageSec + 's';
+            else if (ageSec < 3600) ageStr = Math.floor(ageSec/60) + 'm';
+            else if (ageSec < 86400) ageStr = Math.floor(ageSec/3600) + 'h';
+            else ageStr = Math.floor(ageSec/86400) + 'd';
+        }
+
+        var role = n.role !== null ? (ROLES[n.role] || 'R'+n.role) : '';
+        var meta = [];
+        if (role) meta.push(role);
+        if (n.hopsToBridge !== null)
+            meta.push(n.hopsToBridge === 0 ? 'direct' :
+                n.hopsToBridge + ' hop' + (n.hopsToBridge !== 1 ? 's' : ''));
+        if (n.battery > 0) meta.push(n.battery > 100 ? 'USB' : n.battery + '%');
+        if (n.snrToBridge !== null) meta.push(n.snrToBridge.toFixed(1) + 'dB');
+        var snrC = n.snrToBridge !== null ? meshSnrColor(n.snrToBridge) : '#555';
+
+        var shortTag = n.shortName ? ' <span style="color:#555;font-size:10px">' +
+            esc(n.shortName) + '</span>' : '';
+
+        return '<div class="sb-mesh-node">' +
+            '<div class="sb-mesh-node-dot ' + stCls + '">' + stDot + '</div>' +
+            '<div class="sb-mesh-node-info">' +
+            '<div class="sb-mesh-node-name' + (n.owned ? ' owned' : '') + '">' +
+            esc(n.name) + shortTag + '</div>' +
+            '<div class="sb-mesh-node-meta" style="color:' + snrC + '">' +
+            esc(meta.join(' · ')) + '</div></div>' +
+            '<div class="sb-mesh-node-age">' + ageStr + '</div></div>';
+    }
+
+    function renderMeshPanel(nodes, fetchTs) {
+        var count = nodes.length;
+        sbMeshCount.textContent = count;
+        sbMeshCount.classList.toggle('zero', count === 0);
+
+        if (count === 0) {
+            sbMeshNodes.innerHTML = '<div style="padding:6px 26px;color:#555;font-size:12px;">No mesh nodes heard</div>';
+            sbMeshCommToggle.style.display = 'none';
+            sbMeshCommNodes.style.display = 'none';
+            sbMeshLastUpdate.textContent = '';
+            return;
+        }
+
+        var nowSec = Math.floor(Date.now() / 1000);
+        var owned = nodes.filter(function(n) { return n.owned; });
+        var community = nodes.filter(function(n) { return !n.owned; });
+
+        var html = '';
+        for (var i = 0; i < owned.length; i++) html += meshNodeRow(owned[i], nowSec);
+        sbMeshNodes.innerHTML = html || '<div style="padding:6px 26px;color:#555;font-size:12px;">No owned nodes heard</div>';
+
+        if (community.length > 0) {
+            var label = 'Community (' + community.length + ')';
+            sbMeshCommToggle.dataset.label = label;
+            sbMeshCommToggle.textContent = (meshCommShowing ? '▾ ' : '▸ ') + label;
+            sbMeshCommToggle.style.display = '';
+            if (meshCommShowing) {
+                var cHtml = '';
+                for (var j = 0; j < community.length; j++) cHtml += meshNodeRow(community[j], nowSec);
+                sbMeshCommNodes.innerHTML = cHtml;
+                sbMeshCommNodes.style.display = '';
+            }
+        } else {
+            sbMeshCommToggle.style.display = 'none';
+            sbMeshCommNodes.style.display = 'none';
+        }
+
+        sbMeshLastUpdate.textContent = 'Updated ' + new Date(fetchTs).toLocaleTimeString();
+    }
+
+    function fetchMeshNodes() {
+        fetch('api/mesh/nodes')
+            .then(function(r) { return r.ok ? r.json() : { nodes: [] }; })
+            .then(function(d) { renderMeshPanel(d.nodes || [], d.ts || Date.now()); })
+            .catch(function() {});
+    }
+
     // ── Connected clients ─────────────────────────────────────
     function fetchClients() {
         fetch('api/clients')
@@ -735,7 +923,7 @@
         }
     });
 
-    // ── Mesh health summary ──────────────────────────────────
+    // ── Mesh health summary (legacy stub — replaced by renderMeshPanel) ─
     function renderMeshHealth(items) {
         var meshNodes = [];
         for (var i = 0; i < items.length; i++) {
@@ -793,7 +981,6 @@
     function renderSidebar() {
         var items = collectMarkers();
         var now = Date.now();
-        renderMeshHealth(items);
 
         if (items.length === 0) {
             sbList.innerHTML = '<div class="sb-empty">' +
@@ -963,6 +1150,8 @@
             }, 2000);
             fetchClients();
             setInterval(fetchClients, 10000);
+            fetchMeshNodes();
+            setInterval(fetchMeshNodes, 30000);
 
             // Apply opacity immediately when worldmap.js adds/recreates markers,
             // eliminating the flash of full-opacity before the next 2s poll.
