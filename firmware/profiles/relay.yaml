@@ -16,6 +16,7 @@ config:
   device:
     role: ROUTER
     serial_enabled: false
+    rebroadcast_mode: ALL
     node_info_broadcast_secs: 3600
 
   position:

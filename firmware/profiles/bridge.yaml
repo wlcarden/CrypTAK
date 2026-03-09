@@ -16,6 +16,7 @@ config:
   device:
     role: CLIENT
     serial_enabled: true
+    rebroadcast_mode: ALL
     node_info_broadcast_secs: 3600
 
   position:
