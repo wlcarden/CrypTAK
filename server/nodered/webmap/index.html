@@ -446,6 +446,24 @@
     .mesh-st-recent { color: #FFD600; }
     .mesh-st-stale  { color: #888; }
     .mesh-st-old    { color: #3a3a3a; }
+    /* Battery color classes */
+    .bat-usb  { color: #64B5F6; }
+    .bat-ok   { color: #4CAF50; }
+    .bat-low  { color: #FFD600; }
+    .bat-crit { color: #FF5252; }
+    /* Reboot flag */
+    .mesh-reboot { color: #FF8C00; font-size: 10px; margin-left: 3px; }
+    /* Mesh health summary bar */
+    #sb-mesh-summary {
+      padding: 4px 10px 4px 26px;
+      font-size: 11px;
+      border-bottom: 1px solid #1f1f1f;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .mesh-warn  { color: #FF8C00; }
+    .mesh-alert { color: #FF5252; }
     #sb-mesh-community-toggle {
       padding: 5px 10px 5px 26px;
       font-size: 11px;
@@ -520,6 +538,7 @@
             <span class="sb-client-count zero" id="sb-mesh-count">0</span>
         </div>
         <div id="sb-mesh-body">
+            <div id="sb-mesh-summary" style="display:none"></div>
             <div id="sb-mesh-nodes"></div>
             <div id="sb-mesh-community-toggle" style="display:none"></div>
             <div id="sb-mesh-community-nodes" style="display:none"></div>
@@ -773,12 +792,21 @@
             sbMeshCommToggle.dataset.label;
     });
 
+    var sbMeshSummary = document.getElementById('sb-mesh-summary');
+
     function meshSnrColor(snr) {
         if (snr >= 5)   return '#4CAF50';
         if (snr >= 0)   return '#90EE30';
         if (snr >= -7)  return '#FFD600';
         if (snr >= -12) return '#FF8C00';
         return '#FF5252';
+    }
+
+    function fmtUptime(secs) {
+        if (!secs) return '—';
+        if (secs < 3600)  return Math.floor(secs/60) + 'm';
+        if (secs < 86400) return Math.floor(secs/3600) + 'h ' + Math.floor((secs%3600)/60) + 'm';
+        return Math.floor(secs/86400) + 'd ' + Math.floor((secs%86400)/3600) + 'h';
     }
 
     function meshNodeRow(n, nowSec) {
@@ -791,32 +819,61 @@
 
         var ageStr = '';
         if (ageSec !== null) {
-            if (ageSec < 60)      ageStr = ageSec + 's';
-            else if (ageSec < 3600) ageStr = Math.floor(ageSec/60) + 'm';
+            if (ageSec < 60)         ageStr = ageSec + 's';
+            else if (ageSec < 3600)  ageStr = Math.floor(ageSec/60) + 'm';
             else if (ageSec < 86400) ageStr = Math.floor(ageSec/3600) + 'h';
-            else ageStr = Math.floor(ageSec/86400) + 'd';
+            else                     ageStr = Math.floor(ageSec/86400) + 'd';
         }
 
-        var role = n.role !== null ? (ROLES[n.role] || 'R'+n.role) : '';
-        var meta = [];
-        if (role) meta.push(role);
+        // Reboot indicator — uptime < 5 min
+        var rebootFlag = (n.uptime > 0 && n.uptime < 300) ?
+            ' <span class="mesh-reboot" title="Uptime: ' + n.uptime + 's — recently rebooted">↺</span>' : '';
+
+        // Battery: 101 = POWER_PLUGGED_IN in Meshtastic proto
+        var batStr = '', batCls = '';
+        if (n.battery > 100) {
+            batStr = '⚡USB'; batCls = 'bat-usb';
+        } else if (n.battery > 0) {
+            batStr = n.battery + '%';
+            batCls = n.battery < 20 ? 'bat-crit' : n.battery < 50 ? 'bat-low' : 'bat-ok';
+        }
+
+        var role = n.role !== null ? (ROLES[n.role] || 'R' + n.role) : '';
+        var hops = '';
         if (n.hopsToBridge !== null)
-            meta.push(n.hopsToBridge === 0 ? 'direct' :
-                n.hopsToBridge + ' hop' + (n.hopsToBridge !== 1 ? 's' : ''));
-        if (n.battery > 0) meta.push(n.battery > 100 ? 'USB' : n.battery + '%');
-        if (n.snrToBridge !== null) meta.push(n.snrToBridge.toFixed(1) + 'dB');
+            hops = n.hopsToBridge === 0 ? 'direct' : n.hopsToBridge + ' hop' + (n.hopsToBridge !== 1 ? 's' : '');
+
         var snrC = n.snrToBridge !== null ? meshSnrColor(n.snrToBridge) : '#555';
 
-        var shortTag = n.shortName ? ' <span style="color:#555;font-size:10px">' +
-            esc(n.shortName) + '</span>' : '';
+        // Meta line: role + hops on left (gray), battery + SNR on right (colored)
+        var leftParts = [role, hops].filter(Boolean);
+        var rightParts = [];
+        if (batStr) rightParts.push('<span class="' + batCls + '">' + batStr + '</span>');
+        if (n.snrToBridge !== null)
+            rightParts.push('<span style="color:' + snrC + '">' + n.snrToBridge.toFixed(1) + 'dB</span>');
 
-        return '<div class="sb-mesh-node">' +
+        var metaLeft  = '<span style="color:#555">' + esc(leftParts.join(' · ')) + '</span>';
+        var metaRight = rightParts.join('<span style="color:#444"> · </span>');
+        var metaSep   = leftParts.length && rightParts.length ? '<span style="color:#444"> · </span>' : '';
+        var metaHtml  = metaLeft + metaSep + metaRight;
+
+        // Hover tooltip with extended telemetry
+        var tip = [];
+        if (n.voltage > 0)       tip.push('Voltage: ' + n.voltage.toFixed(2) + 'V');
+        if (n.rssi !== null)     tip.push('RSSI: ' + n.rssi + ' dBm');
+        if (n.channelUtil > 0)   tip.push('Ch util: ' + n.channelUtil.toFixed(1) + '%');
+        if (n.airUtilTx > 0)    tip.push('TX air: ' + n.airUtilTx.toFixed(2) + '%');
+        if (n.uptime > 0)        tip.push('Up: ' + fmtUptime(n.uptime));
+        var tipAttr = tip.length ? ' title="' + tip.join(' · ').replace(/"/g, '&quot;') + '"' : '';
+
+        var shortTag = n.shortName ? ' <span style="color:#555;font-size:10px">' + esc(n.shortName) + '</span>' : '';
+
+        return '<div class="sb-mesh-node"' + tipAttr + '>' +
             '<div class="sb-mesh-node-dot ' + stCls + '">' + stDot + '</div>' +
             '<div class="sb-mesh-node-info">' +
             '<div class="sb-mesh-node-name' + (n.owned ? ' owned' : '') + '">' +
-            esc(n.name) + shortTag + '</div>' +
-            '<div class="sb-mesh-node-meta" style="color:' + snrC + '">' +
-            esc(meta.join(' · ')) + '</div></div>' +
+            esc(n.name) + shortTag + rebootFlag + '</div>' +
+            '<div class="sb-mesh-node-meta">' + metaHtml + '</div></div>' +
             '<div class="sb-mesh-node-age">' + ageStr + '</div></div>';
     }
 
@@ -826,6 +883,7 @@
         sbMeshCount.classList.toggle('zero', count === 0);
 
         if (count === 0) {
+            sbMeshSummary.style.display = 'none';
             sbMeshNodes.innerHTML = '<div style="padding:6px 26px;color:#555;font-size:12px;">No mesh nodes heard</div>';
             sbMeshCommToggle.style.display = 'none';
             sbMeshCommNodes.style.display = 'none';
@@ -834,9 +892,35 @@
         }
 
         var nowSec = Math.floor(Date.now() / 1000);
-        var owned = nodes.filter(function(n) { return n.owned; });
+        var owned     = nodes.filter(function(n) { return n.owned; });
         var community = nodes.filter(function(n) { return !n.owned; });
 
+        // ── Mesh health summary bar ───────────────────────────
+        var lowBat = owned.filter(function(n) {
+            return n.battery > 0 && n.battery <= 100 && n.battery < 25;
+        });
+        var recentOwned = owned.filter(function(n) {
+            return n.lastHeard && (nowSec - n.lastHeard) < 3600;
+        });
+        var utils = recentOwned.map(function(n) { return n.channelUtil; }).filter(function(u) { return u > 0; });
+        var summaryParts = [];
+        if (lowBat.length > 0)
+            summaryParts.push('<span class="mesh-alert">⚠ ' + lowBat.length + ' low bat</span>');
+        if (utils.length > 0) {
+            var uMin = Math.min.apply(null, utils), uMax = Math.max.apply(null, utils);
+            var uCls = uMax > 20 ? 'mesh-alert' : uMax > 10 ? 'mesh-warn' : '';
+            var uStr = 'ch ' + uMin.toFixed(0) + '–' + uMax.toFixed(0) + '%';
+            summaryParts.push(uCls ? '<span class="' + uCls + '">' + uStr + '</span>' :
+                '<span style="color:#555">' + uStr + '</span>');
+        }
+        if (summaryParts.length) {
+            sbMeshSummary.innerHTML = summaryParts.join('<span style="color:#333"> &nbsp; </span>');
+            sbMeshSummary.style.display = '';
+        } else {
+            sbMeshSummary.style.display = 'none';
+        }
+
+        // ── Node rows ─────────────────────────────────────────
         var html = '';
         for (var i = 0; i < owned.length; i++) html += meshNodeRow(owned[i], nowSec);
         sbMeshNodes.innerHTML = html || '<div style="padding:6px 26px;color:#555;font-size:12px;">No owned nodes heard</div>';
