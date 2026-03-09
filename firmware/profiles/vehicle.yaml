@@ -16,12 +16,18 @@ config:
   device:
     role: ROUTER_CLIENT
     serial_enabled: false
+    node_info_broadcast_secs: 3600
 
   position:
     position_broadcast_smart_enabled: true
+    broadcast_smart_minimum_interval_secs: 120
     gps_enabled: true
     gps_update_interval: 15
     position_broadcast_secs: 120
+
+  telemetry:
+    device_update_interval: 300
+    device_telemetry_enabled: true
 
   power:
     is_power_saving: false
