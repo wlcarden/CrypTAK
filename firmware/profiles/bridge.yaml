@@ -16,12 +16,17 @@ config:
   device:
     role: CLIENT
     serial_enabled: true
+    node_info_broadcast_secs: 3600
 
   position:
     position_broadcast_smart_enabled: true
     gps_enabled: true
     gps_update_interval: 30
     position_broadcast_secs: 900
+
+  telemetry:
+    device_update_interval: 600              # Mains-powered; less critical but gives channel util
+    device_telemetry_enabled: true
 
   power:
     is_power_saving: false

@@ -16,12 +16,17 @@ config:
   device:
     role: ROUTER
     serial_enabled: false
+    node_info_broadcast_secs: 3600
 
   position:
-    position_broadcast_smart_enabled: true
+    position_broadcast_smart_enabled: false   # Fixed nodes never move; smart = never broadcasts
     gps_enabled: true
-    gps_update_interval: 30
-    position_broadcast_secs: 300
+    gps_update_interval: 60
+    position_broadcast_secs: 600             # 10 min timer, reduces relay channel load
+
+  telemetry:
+    device_update_interval: 300              # 5 min — solar battery % is critical to monitor
+    device_telemetry_enabled: true
 
   power:
     is_power_saving: false

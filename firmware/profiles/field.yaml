@@ -16,12 +16,18 @@ config:
   device:
     role: CLIENT
     serial_enabled: false
+    node_info_broadcast_secs: 3600
 
   position:
     position_broadcast_smart_enabled: true
+    broadcast_smart_minimum_interval_secs: 300  # 5 min floor when stationary
     gps_enabled: true
     gps_update_interval: 30
     position_broadcast_secs: 300
+
+  telemetry:
+    device_update_interval: 300
+    device_telemetry_enabled: true
 
   power:
     is_power_saving: false

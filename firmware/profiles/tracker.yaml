@@ -16,12 +16,18 @@ config:
   device:
     role: TRACKER
     serial_enabled: false
+    node_info_broadcast_secs: 3600
 
   position:
     position_broadcast_smart_enabled: true
+    broadcast_smart_minimum_interval_secs: 60  # Report at least every 60s when awake/moving
     gps_enabled: true
     gps_update_interval: 15
     position_broadcast_secs: 120
+
+  telemetry:
+    device_update_interval: 600              # Longer interval to respect power_saving
+    device_telemetry_enabled: true
 
   power:
     is_power_saving: true
