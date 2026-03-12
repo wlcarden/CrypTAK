@@ -1,39 +1,7 @@
-# CrypTAK Mesh Node Registry
-#
-# Each entry maps a node name to its profile and identity.
-# Used by provision.sh to configure nodes in one command.
-#
-# Naming convention:
-#   Long name:  CrypTAK-{ROLE}{##}   (e.g. CrypTAK-RLY01)
-#   Short name: C{role}{##}           (e.g. CR01)
-#
-#   BSE / CB = Base station (fixed emplacement, ROUTER_CLIENT)
-#   BRG / CG = Bridge (TAK server bridge, CLIENT)
-#   RLY / CR = Relay (deployable solar, ROUTER)
-#   VHC / CV = Vehicle (mobile, ROUTER_CLIENT, GPS required)
-#   TRK / CT = Tracker (dismounted mobile, TRACKER, GPS required)
-#   FLD / CF = Field (general field node, CLIENT)
-#
-# Fields:
-#   profile:    relay | vehicle | tracker | bridge | field
-#   short_name: 4-char display name (auto-generated if omitted)
-#   gps:        false for boards without GPS hardware (default: true)
-#   latitude:   Fixed position (only for gps: false nodes)
-#   longitude:  Fixed position (only for gps: false nodes)
-#   altitude:   Altitude in meters (optional)
-#
-# ⚠ Board swap note:
-#   Node IDs are hardware-derived (chip MAC). Swapping a board generates a new ID.
-#   After reprovisioning a swapped board, update:
-#     1. server/nodered/flows.json → Mesh Node Whitelist function
-#     2. server/docker-compose.yml → FRIENDLY_NODES env var
-#   The name/profile in this file is board-agnostic; the hex ID is not.
-
 nodes:
   CrypTAK-BRG01:
     profile: bridge
     short_name: CG01
-
   CrypTAK-BSE01:
     profile: relay
     short_name: CB01
@@ -41,19 +9,19 @@ nodes:
     latitude: 38.84191827
     longitude: -77.29344941
     altitude: 155
-
   CrypTAK-RLY01:
     profile: relay
     short_name: CR01
-
   CrypTAK-SOL01:
     profile: relay
     short_name: CS01
-
   CrypTAK-VHC01:
     profile: vehicle
     short_name: CV01
-
   CrypTAK-TRK01:
     profile: tracker
     short_name: CT01
+  CrypTAK-SOL02:
+    profile: prototype-solar
+    short_name: CS02
+    gps: false
