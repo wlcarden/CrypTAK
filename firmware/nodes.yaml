@@ -9,9 +9,6 @@ nodes:
     latitude: 38.84191827
     longitude: -77.29344941
     altitude: 155
-  CrypTAK-RLY01:
-    profile: relay
-    short_name: CR01
   CrypTAK-SOL01:
     profile: relay
     short_name: CS01
