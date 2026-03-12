@@ -237,8 +237,10 @@ print(f'{max(nums)+1:02d}' if nums else '01')
     # GPS or fixed position
     LAT="" LON="" ALT=""
     echo ""
-    read -rp "  Does this board have a GPS module? [Y/n]: " gps_choice
-    if [[ "${gps_choice:-Y}" =~ ^[Nn] ]]; then
+    read -rp "  Does this board have a GPS module? [Y/n/auto]: " gps_choice
+    if [[ "${gps_choice:-auto}" =~ ^[Aa] || -z "$gps_choice" ]]; then
+        HAS_GPS="probe"
+    elif [[ "${gps_choice}" =~ ^[Nn] ]]; then
         HAS_GPS="false"
         echo "  Position can be set now or later via remote admin."
         read -rp "  Latitude (blank to skip): " LAT
@@ -269,6 +271,52 @@ role_label() {
         field)   echo "CLIENT" ;;
         *)       echo "$1" ;;
     esac
+}
+
+# ---------------------------------------------------------------------------
+# GPS hardware probe
+# Enables GPS mode, waits for firmware init, checks locationSource.
+# Sets HAS_GPS="true" if GPS module detected, "false" if not.
+# Reverts to NOT_PRESENT and sets fixed_position if no hardware found.
+# ---------------------------------------------------------------------------
+detect_gps() {
+    warn "GPS not specified in nodes.yaml — probing hardware..."
+    mesh_cmd --set position.gps_mode ENABLED >/dev/null 2>&1
+    sleep 10
+
+    local probe_info node_num hex_id
+    probe_info=$(mesh_cmd --info 2>&1)
+
+    # Extract own node number from My info
+    node_num=$(echo "$probe_info" | grep -oP '"myNodeNum":\s*\K\d+' | head -1)
+    if [[ -z "$node_num" ]]; then
+        warn "GPS probe: could not read node info — assuming no GPS"
+        HAS_GPS="false"
+        mesh_cmd --set position.gps_mode NOT_PRESENT --set position.fixed_position true >/dev/null 2>&1
+        return
+    fi
+
+    # Convert to hex node ID (e.g. !3db00f2c)
+    hex_id=$(python3 -c "print('!' + format($node_num, '08x'))")
+
+    # Check if our node's position block shows LOC_INTERNAL (GPS hardware initialized)
+    if echo "$probe_info" | python3 -c "
+import sys, re
+raw = sys.stdin.read()
+hex_id = sys.argv[1]
+# Find our node's block and look for LOC_INTERNAL
+pattern = re.escape(hex_id) + r'.*?\"locationSource\":\s*\"LOC_INTERNAL\"'
+if re.search(pattern, raw, re.DOTALL):
+    sys.exit(0)
+sys.exit(1)
+" "$hex_id" 2>/dev/null; then
+        HAS_GPS="true"
+        ok "GPS: hardware detected (auto-probe)"
+    else
+        HAS_GPS="false"
+        mesh_cmd --set position.gps_mode NOT_PRESENT --set position.fixed_position true >/dev/null 2>&1
+        ok "GPS: no hardware detected (auto-probe) — set to NOT_PRESENT"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -307,8 +355,14 @@ main() {
         LON=$(get_field "$node_json" "longitude")
         ALT=$(get_field "$node_json" "altitude")
 
-        # Default to GPS enabled unless explicitly set to false
-        [[ "$HAS_GPS" == "False" || "$HAS_GPS" == "false" ]] && HAS_GPS="false" || HAS_GPS="true"
+        # false = confirmed no GPS; empty = unknown (will probe in step 5); else = confirmed present
+        if [[ "$HAS_GPS" == "False" || "$HAS_GPS" == "false" ]]; then
+            HAS_GPS="false"
+        elif [[ -z "$HAS_GPS" ]]; then
+            HAS_GPS="probe"
+        else
+            HAS_GPS="true"
+        fi
 
         [[ -z "$PROFILE" ]] && die "Node '$NODE_NAME' is missing the 'profile' field in nodes.yaml"
 
@@ -382,7 +436,12 @@ main() {
     ok "Owner: $NODE_NAME ($SHORT_NAME)"
     sleep 1
 
-    # GPS override for no-GPS boards
+    # GPS: probe if not explicitly set, override if confirmed absent
+    if [[ "$HAS_GPS" == "probe" ]]; then
+        detect_gps
+        sleep 1
+    fi
+
     if [[ "$HAS_GPS" == "false" ]]; then
         mesh_cmd --set position.gps_enabled false --set position.gps_mode NOT_PRESENT --set position.fixed_position true >/dev/null 2>&1
         ok "GPS: disabled (no hardware)"
@@ -418,7 +477,7 @@ main() {
     elif [[ "$HAS_GPS" == "false" ]]; then
         echo "  Position:  Fixed — NOT SET (reprovision with coordinates)"
     else
-        echo "  Position:  GPS"
+        echo "  Position:  GPS (hardware confirmed)"
     fi
     if [[ "$PROFILE" == "bridge" ]]; then
         echo "  Admin:     This is the admin node"
