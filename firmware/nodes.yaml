@@ -24,4 +24,3 @@ nodes:
   CrypTAK-SOL02:
     profile: prototype-solar
     short_name: CS02
-    gps: false
