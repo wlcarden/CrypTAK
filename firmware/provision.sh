@@ -100,7 +100,7 @@ detect_hardware() {
 # Node registry helpers (python3 + PyYAML)
 # ---------------------------------------------------------------------------
 lookup_node() {
-    python3 -c "
+    python3.12 -c "
 import yaml, json, sys
 with open(sys.argv[1]) as f:
     data = yaml.safe_load(f)
@@ -113,7 +113,7 @@ else:
 }
 
 get_field() {
-    python3 -c "
+    python3.12 -c "
 import json, sys
 d = json.loads(sys.argv[1])
 v = d.get(sys.argv[2])
@@ -123,7 +123,7 @@ print('' if v is None else v)
 
 list_nodes() {
     echo -e "\n${BOLD}Registered nodes:${NC}\n"
-    python3 -c "
+    python3.12 -c "
 import yaml, sys
 with open(sys.argv[1]) as f:
     data = yaml.safe_load(f)
@@ -142,7 +142,7 @@ for name, cfg in nodes.items():
 }
 
 save_node() {
-    python3 -c "
+    python3.12 -c "
 import yaml, sys
 
 name, profile, short = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -216,7 +216,7 @@ interactive_setup() {
 
     # Find next available number for this role prefix
     local next_num
-    next_num=$(python3 -c "
+    next_num=$(python3.12 -c "
 import yaml, sys, re
 with open(sys.argv[1]) as f:
     data = yaml.safe_load(f) or {}
