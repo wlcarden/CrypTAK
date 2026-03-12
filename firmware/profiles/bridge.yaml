@@ -17,16 +17,16 @@ config:
     role: CLIENT
     serial_enabled: true
     rebroadcast_mode: ALL
-    node_info_broadcast_secs: 3600
+    node_info_broadcast_secs: 900            # 15 min — frequent enough for diagnostics
 
   position:
     position_broadcast_smart_enabled: true
     gps_enabled: true
     gps_update_interval: 30
-    position_broadcast_secs: 900
+    position_broadcast_secs: 300
 
   telemetry:
-    device_update_interval: 600              # Mains-powered; less critical but gives channel util
+    device_update_interval: 60              # 1 min — max diagnostics during testing
     device_telemetry_enabled: true
 
   power:

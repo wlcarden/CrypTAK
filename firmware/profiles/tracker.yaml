@@ -17,21 +17,21 @@ config:
     role: TRACKER
     serial_enabled: false
     rebroadcast_mode: ALL
-    node_info_broadcast_secs: 3600
+    node_info_broadcast_secs: 900            # 15 min — frequent enough for diagnostics
 
   position:
     position_broadcast_smart_enabled: true
-    broadcast_smart_minimum_interval_secs: 60  # Report at least every 60s when awake/moving
+    broadcast_smart_minimum_interval_secs: 30  # Floor at 30s when moving during testing
     gps_enabled: true
     gps_update_interval: 15
-    position_broadcast_secs: 120
+    position_broadcast_secs: 60             # 1 min timer — high frequency during testing
 
   telemetry:
-    device_update_interval: 600              # Longer interval to respect power_saving
+    device_update_interval: 60              # 1 min — max diagnostics during testing
     device_telemetry_enabled: true
 
   power:
-    is_power_saving: true
+    is_power_saving: false                  # Off during testing; re-evaluate for field deployment
 
   display:
     auto_screen_carousel_secs: 0

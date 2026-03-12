@@ -1,7 +1,9 @@
 # Mesh Relay — ROUTER profile
-# Solar relay node. Rebroadcasts all mesh traffic.
-# Uses GPS if available. For boards without GPS (e.g. RAK19007),
-# set gps: false in nodes.yaml — provision.sh will override to fixed position.
+# Deployable relay node. Assumed solar-powered for CrypTAK deployments.
+# Rebroadcasts all mesh traffic. GPS position broadcast on a fixed timer
+# (smart positioning disabled — relay positions are static in the field).
+# For boards without GPS (e.g. RAK19007), set gps: false in nodes.yaml
+# and provision.sh will apply a fixed coordinate instead.
 #
 # Apply via: ./firmware/provision.sh "Node Name"
 
@@ -17,16 +19,16 @@ config:
     role: ROUTER
     serial_enabled: false
     rebroadcast_mode: ALL
-    node_info_broadcast_secs: 3600
+    node_info_broadcast_secs: 900            # 15 min — frequent enough for diagnostics
 
   position:
-    position_broadcast_smart_enabled: false   # Fixed nodes never move; smart = never broadcasts
+    position_broadcast_smart_enabled: false  # Relays are fixed; smart = never broadcasts
     gps_enabled: true
     gps_update_interval: 60
-    position_broadcast_secs: 600             # 10 min timer, reduces relay channel load
+    position_broadcast_secs: 300             # 5 min — high frequency during testing
 
   telemetry:
-    device_update_interval: 300              # 5 min — solar battery % is critical to monitor
+    device_update_interval: 60              # 1 min — solar health critical to monitor; max during testing
     device_telemetry_enabled: true
 
   power:

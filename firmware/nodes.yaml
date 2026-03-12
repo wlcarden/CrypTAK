@@ -7,11 +7,11 @@
 #   Long name:  CrypTAK-{ROLE}{##}   (e.g. CrypTAK-RLY01)
 #   Short name: C{role}{##}           (e.g. CR01)
 #
-#   BSE / CB = Base station (fixed emplacement, ROUTER)
+#   BSE / CB = Base station (fixed emplacement, ROUTER_CLIENT)
 #   BRG / CG = Bridge (TAK server bridge, CLIENT)
 #   RLY / CR = Relay (deployable solar, ROUTER)
-#   VHC / CV = Vehicle (mobile repeater, ROUTER_CLIENT)
-#   TRK / CT = Tracker (mobile GPS, TRACKER)
+#   VHC / CV = Vehicle (mobile, ROUTER_CLIENT, GPS required)
+#   TRK / CT = Tracker (dismounted mobile, TRACKER, GPS required)
 #   FLD / CF = Field (general field node, CLIENT)
 #
 # Fields:
@@ -21,6 +21,13 @@
 #   latitude:   Fixed position (only for gps: false nodes)
 #   longitude:  Fixed position (only for gps: false nodes)
 #   altitude:   Altitude in meters (optional)
+#
+# ⚠ Board swap note:
+#   Node IDs are hardware-derived (chip MAC). Swapping a board generates a new ID.
+#   After reprovisioning a swapped board, update:
+#     1. server/nodered/flows.json → Mesh Node Whitelist function
+#     2. server/docker-compose.yml → FRIENDLY_NODES env var
+#   The name/profile in this file is board-agnostic; the hex ID is not.
 
 nodes:
   CrypTAK-BRG01:
@@ -39,14 +46,13 @@ nodes:
     profile: relay
     short_name: CR01
 
-  CrypTAK-RLY02:
+  CrypTAK-SOL01:
     profile: relay
-    short_name: CR02
+    short_name: CS01
 
   CrypTAK-VHC01:
     profile: vehicle
     short_name: CV01
-    gps: false
 
   CrypTAK-TRK01:
     profile: tracker

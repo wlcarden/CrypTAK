@@ -17,17 +17,17 @@ config:
     role: CLIENT
     serial_enabled: false
     rebroadcast_mode: ALL
-    node_info_broadcast_secs: 3600
+    node_info_broadcast_secs: 900            # 15 min — frequent enough for diagnostics
 
   position:
     position_broadcast_smart_enabled: true
-    broadcast_smart_minimum_interval_secs: 300  # 5 min floor when stationary
+    broadcast_smart_minimum_interval_secs: 60  # Floor at 60s when moving during testing
     gps_enabled: true
     gps_update_interval: 30
-    position_broadcast_secs: 300
+    position_broadcast_secs: 120            # 2 min timer during testing
 
   telemetry:
-    device_update_interval: 300
+    device_update_interval: 60              # 1 min — max diagnostics during testing
     device_telemetry_enabled: true
 
   power:
