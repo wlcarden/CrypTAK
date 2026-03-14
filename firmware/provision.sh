@@ -13,7 +13,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROFILES_DIR="$SCRIPT_DIR/profiles"
 NODES_FILE="$SCRIPT_DIR/nodes.yaml"
-ADMIN_KEY="base64:FVmX/5EbFDNF8D1IB5rT6UaDil6dacMR9vpjOqoy0Eo="
+# ADMIN_KEY is loaded from firmware/secrets.sh (gitignored — see secrets.sh.example)
+SECRETS_FILE="$(dirname "$0")/secrets.sh"
+if [[ -f "$SECRETS_FILE" ]]; then
+    # shellcheck source=secrets.sh.example
+    source "$SECRETS_FILE"
+else
+    echo "ERROR: firmware/secrets.sh not found."
+    echo "  Copy firmware/secrets.sh.example → firmware/secrets.sh"
+    echo "  Generate a new key pair and set ADMIN_KEY before provisioning."
+    echo "  See firmware/README.md for key generation instructions."
+    exit 1
+fi
 
 # Colors
 RED='\033[0;31m'

@@ -97,7 +97,7 @@ meshtastic --port /dev/ttyACM0 --ch-set module_settings.position_precision 32 --
 meshtastic --port /dev/ttyACM0 --set neighbor_info.enabled true
 
 # Admin key (all except bridge)
-meshtastic --port /dev/ttyACM0 --set security.admin_key "base64:FVmX/5EbFDNF8D1IB5rT6UaDil6dacMR9vpjOqoy0Eo="
+meshtastic --port /dev/ttyACM0 --set security.admin_key "base64:<your-public-key>  # from firmware/secrets.sh"
 ```
 
 ## Remote Administration

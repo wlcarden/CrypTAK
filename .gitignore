@@ -27,3 +27,8 @@ build/
 .kotlin/
 .DS_Store
 Thumbs.db
+
+# Local secrets (never commit)
+firmware/secrets.sh
+*.pem
+*.key
