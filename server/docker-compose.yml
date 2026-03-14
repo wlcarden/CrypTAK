@@ -44,6 +44,10 @@ services:
       # FTS 2.2.1 patch: AllowedCLIIPs config setting removed from schema but REST API still
       # references it. Without this patch, /Clients and other endpoints return 500.
       - /mnt/user/appdata/fts/MainConfig_patched.py:/home/freetak/FreeTAKServer/core/configuration/MainConfig.py:ro
+      # FTS 2.2.1 patch: CreateLoggerController only handles log levels "info", "error", "debug".
+      # Any other value (e.g. "warning") leaves log_level unbound → UnboundLocalError on Python 3.12+.
+      # Patch adds default log_level=WARNING and an explicit "warning" branch.
+      - /mnt/user/appdata/fts/CreateLoggerController_patched.py:/home/freetak/FreeTAKServer/core/configuration/CreateLoggerController.py:ro
     environment:
       # Ports
       FTS_COT_PORT: 8087
