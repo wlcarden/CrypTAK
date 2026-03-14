@@ -81,6 +81,7 @@ meshtastic --host <device-ip> --ch-set downlink_enabled true --ch-index 0
 ### Configure for MQTT relay role
 
 Same MQTT config as Gateway above. Additionally:
+
 - Role: ROUTER (if acting as relay) or CLIENT (if vehicle/field)
 - WiFi: Set to the target network SSID/PSK
 
@@ -186,10 +187,16 @@ esptool.py --chip esp32 --port /dev/ttyUSB0 write_flash 0x1000 firmware.bin
 
 ### Apply Configuration
 
-Connect device via USB, then:
+Use the provisioning script (recommended):
 
 ```bash
-meshtastic --configure firmware/lilygo-lora32/device.yaml
+./firmware/provision.sh "CrypTAK-BRG01"
+```
+
+Or apply a profile manually:
+
+```bash
+python3 -m meshtastic --port /dev/ttyACM0 --configure firmware/profiles/bridge.yaml
 ```
 
 ### Status LEDs
@@ -223,12 +230,12 @@ Verify MQTT is active — Mosquitto logs should show `CONNACK to !55c6ddbc` and 
 within 30 seconds of the node booting on WiFi.
 
 > **Note:** The mesh-relay service holds `/dev/ttyACM0` while running. Stop it first:
+>
 > ```bash
 > cd /mnt/user/appdata/tak-server && docker compose stop mesh-relay
 > # ... run meshtastic commands ...
 > docker compose start mesh-relay
 > ```
-
 
 ---
 
@@ -248,7 +255,7 @@ nRF52840-based LoRa radio with GPS module. Two units available.
 - SW1 pin 1: **ON** (USB power/data)
 - SW1 pin 2: **OFF**
 
-> TODO: Verify exact DIP switch positions against RAK documentation before first power-on.
+> **Note:** Verify exact DIP switch positions against RAK documentation for your board revision before first power-on.
 
 ### Firmware Flash
 
@@ -259,8 +266,16 @@ nRF52840-based LoRa radio with GPS module. Two units available.
 
 ### Apply Configuration
 
+Use the provisioning script (recommended):
+
 ```bash
-meshtastic --configure firmware/rak5005-4630/device.yaml
+./firmware/provision.sh "CrypTAK-BSE01"   # or whichever node name
+```
+
+Or apply a profile manually:
+
+```bash
+python3 -m meshtastic --port /dev/ttyACM0 --configure firmware/profiles/relay.yaml
 ```
 
 ### GPS Cold Start

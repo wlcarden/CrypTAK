@@ -2,26 +2,18 @@
 
 ## Project Summary
 
-CrypTAK: AES-256-GCM encrypted tactical communications over Meshtastic LoRa mesh,
-with a self-hosted FreeTAKServer backend and ATAK-CIV plugin. CrypTAK traffic
-rides as standard Meshtastic packets, relayable by any community node on the same
-channel.
+CrypTAK: Privacy-focused situational awareness over LoRa mesh radio. Bridges
+Meshtastic mesh networks to FreeTAKServer with AES-256-GCM content encryption,
+a real-time WebMap, automated incident detection, and a field-deployable command
+unit. Self-hosted, no cloud dependencies.
 
 ## Repository
 
 - **Monorepo**: `https://github.com/wlcarden/CrypTAK` (private)
 - **Branch**: `main`
+- **Version**: 0.9.0 (pre-release)
 - **Plugin lineage**: forked from upstream `meshtastic/ATAK-Plugin`, history
   absorbed via `git subtree add`
-
-## Current State
-
-- AES-256-GCM encryption, server relay (chat + PLI + DM), epoch rotation — done
-- QR key distribution (display + in-app scanner), Data Package export — done
-- Self-hosted server stack (FTS + headscale VPN + Authelia OIDC) — deployed
-- **199 unit tests** passing
-- Hardware testing partially complete (FTS relay + LoRa link confirmed; PLI
-  inbound pending outdoor GPS fix)
 
 ## Repository Layout
 
@@ -29,52 +21,54 @@ channel.
 ~/Desktop/CrypTAK/
 ├── plugin/              ← ATAK plugin (Android Gradle project)
 │   ├── sdk/             ← ATAK SDK files (gitignored, obtain separately)
-│   │   ├── main.jar
-│   │   ├── android_keystore
-│   │   └── proguard-release-keep.txt
-│   └── app/             ← Plugin source
+│   └── app/             ← Plugin source (AES-256-GCM encryption)
 ├── server/              ← Docker Compose stack
-│   ├── docker-compose.yml
-│   ├── .env.example
-│   ├── headscale/       ← VPN coordination server config
-│   └── authelia/        ← OIDC auth config (templates, no secrets)
-├── firmware/            ← Meshtastic node configs and firmware files
-├── docs/                ← Deployment runbook, hardware builds, network architecture
-├── scripts/             ← Build, install, signing, SDK setup scripts
+│   ├── docker-compose.yml       ← Full Unraid stack (10 services)
+│   ├── docker-compose.field.yml ← Field unit (FTS + Mumble + halow-bridge)
+│   ├── mesh-relay/      ← Meshtastic → FTS relay service
+│   ├── incident-tracker/← Event monitoring (RSS, NWS, USGS, etc.)
+│   ├── halow-bridge/    ← Field-to-home CoT bridge
+│   ├── nodered/         ← WebMap + mesh panel + CoT pipeline
+│   ├── field-services/  ← systemd units (GPS bridge, power button)
+│   ├── scripts/         ← Server-side utilities
+│   ├── fts-patches/     ← FTS 2.2.1 bug patches (5 files)
+│   ├── headscale/       ← VPN config
+│   └── authelia/        ← OIDC auth config
+├── firmware/            ← Meshtastic node profiles and provisioning
+│   ├── profiles/        ← Role-based configs
+│   ├── nodes.yaml       ← Node registry
+│   └── provision.sh     ← Auto-provisioning script
+├── docs/                ← Architecture, deployment, security, hardware
+├── scripts/             ← Dev tools, field Pi setup
 ├── apks/                ← (gitignored) ATAK-CIV APKs
 ├── sdk-archives/        ← (gitignored) SDK download zips
 ├── auth/                ← (gitignored) Credentials
 └── test-artifacts/      ← (gitignored) Logcat captures, test notes
 ```
 
-## Critical Plugin Files
-
-All paths relative to `plugin/app/src/main/java/com/atakmap/android/meshtastic/`:
-
-| File                                        | Role                                    |
-| ------------------------------------------- | --------------------------------------- |
-| `encryption/AppLayerEncryptionManager.java` | Core AES-256-GCM encrypt/decrypt        |
-| `encryption/KeyQrDialog.java`               | QR code display for key sharing         |
-| `encryption/KeyQrScanDialog.java`           | In-app camera scanner for QR key import |
-| `encryption/DataPackageExporter.java`       | ZIP export for key distribution         |
-| `CotEventProcessor.java`                    | CoT event hook — encrypt before LoRa TX |
-| `MeshtasticReceiver.java`                   | Receive from mesh — decrypt path        |
-
 ## Build Commands
 
 ```bash
+# Plugin
 cd ~/Desktop/CrypTAK/plugin
-
 ./gradlew test                # Run unit tests (199 passing)
 ./gradlew assembleCivDebug    # Build debug APK
 
-# APK output: app/build/outputs/apk/civ/debug/
+# Server (on Unraid)
+cd server/
+docker compose up -d
+
+# Mesh relay (standalone for development)
+cd server/mesh-relay/
+MESH_HOST=192.168.50.198 FTS_HOST=localhost python3 relay.py
+
+# Incident tracker tests
+cd server/incident-tracker/
+python3 -m pytest tests/ -v   # 249 tests
+
+# Firmware provisioning
+./firmware/provision.sh "CrypTAK-BRG01"
 ```
-
-## ATAK SDK Setup
-
-1. Download `pluginsdk.zip` from [TAK Product Center](https://github.com/TAK-Product-Center/atak-civ)
-2. Extract to `plugin/sdk/`: `main.jar`, `android_keystore`, `proguard-release-keep.txt`
 
 ## Key Security Notes
 
@@ -84,3 +78,5 @@ cd ~/Desktop/CrypTAK/plugin
   in `test-artifacts/notes/` (gitignored).
 - Server configs in `server/` are templates with placeholder secrets. Real secrets
   live in `/secrets/` volume mounts on the server host.
+- `.env` files are gitignored. `.env.example` and `.env.field.example` are
+  templates only.

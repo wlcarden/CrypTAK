@@ -29,17 +29,19 @@ Meshtastic's built-in default — no key generation needed unless switching to a
   sudo chmod a+rw /dev/ttyACM0   # or /dev/ttyUSB0 — check with: ls /dev/tty{ACM,USB}*
   ```
 
-- [ ] **Step 2:** Apply configuration to each node:
+- [ ] **Step 2:** Provision each node using the provisioning script:
 
   ```bash
-  # T-beam (Lilygo) — connect via WiFi if already on the network
-  python3 -m meshtastic --host 192.168.50.198 --configure firmware/lilygo-lora32/device.yaml
+  # Provision by name (auto-detects serial port and hardware)
+  ./firmware/provision.sh "CrypTAK-BRG01"
 
-  # RAK nodes (repeat for each via USB)
-  python3 -m meshtastic --port /dev/ttyACM0 --configure firmware/rak5005-4630/device.yaml
+  # Or provision interactively for a new node
+  ./firmware/provision.sh
   ```
 
-  Both YAML files already have `psk: "AQ=="` (LongFast default). No edits needed.
+  The provisioning script applies the correct profile, sets channel config
+  (position precision 32), enables NeighborInfo, and verifies the result.
+  See `firmware/README.md` for details.
 
 - [ ] **Step 3:** Verify mesh connectivity. With at least two nodes powered on, traceroute
       between them:
@@ -54,14 +56,14 @@ Meshtastic's built-in default — no key generation needed unless switching to a
 
   Known node IDs:
 
-  | Node | ID | Hardware | Role | Notes |
-  |---|---|---|---|---|
-  | CrypTAK-BRG01 | `!55c6ddbc` | LilyGo T-Beam | Bridge | USB to Unraid; WiFi LAN; MQTT bridge |
-  | CrypTAK Base | `!a51e2838` | RAK4631 | Base station | Home rooftop, solar, fixed |
-  | CrypTAK-RLY01 | `!3db00f2c` | RAK4631 | ROUTER | Field relay |
-  | CrypTAK-RLY02 | `!c6eadff0` | RAK4631 | ROUTER | Wall/vehicle powered |
-  | CrypTAK-VHC01 | `!9aa4baf0` | RAK4631 | CLIENT | Vehicle/field node |
-  | Tracker Alpha | `!01f94ec0` | RAK4631 | TRACKER | GPS tracker |
+  | Node          | ID          | Hardware      | Role          | Notes                                |
+  | ------------- | ----------- | ------------- | ------------- | ------------------------------------ |
+  | CrypTAK-BRG01 | `!55c6ddbc` | LilyGo T-Beam | Bridge        | USB to Unraid; WiFi LAN; MQTT bridge |
+  | CrypTAK-BSE01 | `!a51e2838` | RAK4631       | Base station  | Home rooftop, solar, fixed           |
+  | CrypTAK-SOL01 | `!3db00f2c` | RAK4631       | ROUTER relay  | Solar relay                          |
+  | CrypTAK-VHC01 | `!9aa4baf0` | RAK4631       | ROUTER_CLIENT | Vehicle/field node                   |
+  | CrypTAK-TRK01 | `!01f94ec0` | RAK4631       | TRACKER       | GPS tracker                          |
+  | CrypTAK-SOL02 | —           | RAK4631       | ROUTER        | Prototype solar                      |
 
 ---
 
@@ -69,7 +71,7 @@ Meshtastic's built-in default — no key generation needed unless switching to a
 
 The Unraid server (`192.168.50.120`) runs the full stack via Docker Compose. The
 stack includes FreeTAKServer, FTS-UI (admin), Node-RED worldmap, Mosquitto MQTT,
-Headscale VPN, nginx, and Authelia OIDC. See `tak-server/README.md` for details.
+Headscale VPN, nginx, and Authelia OIDC. See `server/README.md` for details.
 
 - [ ] **Step 4:** Configure environment:
 

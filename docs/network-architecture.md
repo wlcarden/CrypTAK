@@ -78,16 +78,16 @@ No internet or fixed infrastructure required. The Raspberry Pi acts as both WiFi
 
 ## Node Role Reference
 
-| Node | ID | Type | Role | GPS | Notes |
-|---|---|---|---|---|---|
-| CrypTAK-BRG01 | !55c6ddbc | LilyGo T-Beam | TAK bridge | No | USB serial to Unraid; WiFi to LAN; MQTT bridge to Mosquitto |
-| CrypTAK Base | !a51e2838 | RAK4631 | Fixed base station | Yes | Home rooftop, 155m, solar powered |
-| CrypTAK-RLY01 | !3db00f2c | RAK4631 | ROUTER relay | Yes | Field relay; currently at home for case repair after drop |
-| CrypTAK-RLY02 | !c6eadff0 | RAK4631 | ROUTER relay | No | Wall/vehicle powered relay |
-| CrypTAK-VHC01 | !9aa4baf0 | RAK4631 | Vehicle/field | No | Mobile field node |
-| Tracker Alpha | !01f94ec0 | RAK4631 | TRACKER | Yes | GPS position tracker |
-| Raspberry Pi 4B | N/A | ARM server | TAK Server | No | Runs FreeTAKServer in Docker; WiFi AP in field mode |
-| Google Pixel 6a | N/A | Android phone | ATAK device | Phone GPS | Primary ATAK-CIV test device with Meshtastic plugin |
+| Node            | ID        | Type          | Role                        | GPS        | Notes                                                       |
+| --------------- | --------- | ------------- | --------------------------- | ---------- | ----------------------------------------------------------- |
+| CrypTAK-BRG01   | !55c6ddbc | LilyGo T-Beam | TAK bridge (CLIENT)         | Yes        | USB serial to Unraid; WiFi to LAN; MQTT bridge to Mosquitto |
+| CrypTAK-BSE01   | !a51e2838 | RAK4631       | Fixed base station (ROUTER) | No (fixed) | Home rooftop, 155m altitude, fixed position                 |
+| CrypTAK-SOL01   | !3db00f2c | RAK4631       | Solar relay (ROUTER)        | Yes        | Solar-powered relay                                         |
+| CrypTAK-VHC01   | !9aa4baf0 | RAK4631       | Vehicle (ROUTER_CLIENT)     | Yes        | Mobile field node and repeater                              |
+| CrypTAK-TRK01   | !01f94ec0 | RAK4631       | GPS tracker (TRACKER)       | Yes        | Asset tracker, position every 60s                           |
+| CrypTAK-SOL02   | —         | RAK4631       | Prototype solar (ROUTER)    | No         | Enhanced telemetry, env/power measurement                   |
+| reTerminal      | N/A       | Seeed CM4     | Field unit                  | EC25 GNSS  | Portable FTS + Mumble + VPN reach-back                      |
+| Google Pixel 6a | N/A       | Android phone | ATAK device                 | Phone GPS  | Primary ATAK-CIV test device with Meshtastic plugin         |
 
 ### Role Definitions
 
@@ -104,14 +104,14 @@ via WiFi, enabling MQTT-based mesh bridging between LoRa islands that lack direc
 
 ### Configuration
 
-| Setting | Value |
-|---|---|
-| Broker | `192.168.50.120:1883` (Unraid LAN) |
-| Auth | Username/password required; no anonymous access |
-| Channel 0 uplink | Enabled — mesh → MQTT |
-| Channel 0 downlink | Enabled — MQTT → mesh |
-| Encryption | Enabled (Meshtastic channel PSK) |
-| Broker binding | `0.0.0.0:1883` (LAN-accessible) |
+| Setting            | Value                                           |
+| ------------------ | ----------------------------------------------- |
+| Broker             | `192.168.50.120:1883` (Unraid LAN)              |
+| Auth               | Username/password required; no anonymous access |
+| Channel 0 uplink   | Enabled — mesh → MQTT                           |
+| Channel 0 downlink | Enabled — MQTT → mesh                           |
+| Encryption         | Enabled (Meshtastic channel PSK)                |
+| Broker binding     | `0.0.0.0:1883` (LAN-accessible)                 |
 
 ### MQTT Topics
 
