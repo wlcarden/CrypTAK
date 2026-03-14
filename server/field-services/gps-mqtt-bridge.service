@@ -1,0 +1,14 @@
+[Unit]
+Description=GPS MQTT Bridge (gpsd to MQTT)
+After=gpsd.service network.target
+Wants=gpsd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/gps-mqtt-bridge.py
+Restart=always
+RestartSec=5
+User=pi
+
+[Install]
+WantedBy=multi-user.target

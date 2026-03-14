@@ -1,0 +1,113 @@
+# CrypTAK Field Server — Raspberry Pi 4 deployment
+#
+# Lightweight stack for field operations without internet. Runs on the
+# base Pi alongside hostapd (2.4 GHz AP) and Tailscale (VPN reach-back).
+#
+# Services:
+#   freetakserver  — CoT aggregation for ATAK clients on the field AP
+#   mumble         — Encrypted push-to-talk voice (Opus codec)
+#   halow-bridge   — Buffers CoT events, forwards to home Unraid FTS when VPN is up
+#
+# Usage:
+#   cd /opt/cryptak
+#   cp .env.field.example .env.field
+#   nano .env.field
+#   docker compose -f docker-compose.field.yml up -d
+#
+# ATAK client config:
+#   Server: 192.168.73.1:8087 TCP
+#   Mumble: 192.168.73.1:64738
+
+services:
+  freetakserver:
+    image: ghcr.io/freetakteam/freetakserver:latest
+    container_name: fts-field
+    restart: always
+    networks:
+      - fieldnet
+    ports:
+      - "8087:8087"
+      - "8089:8089"
+      - "8080:8080"
+    environment:
+      FTS_COT_PORT: 8087
+      FTS_SSLCOT_PORT: 8089
+      FTS_DP_ADDRESS: ${FIELD_AP_IP:-192.168.73.1}
+      FTS_USER_ADDRESS: "0.0.0.0"
+      FTS_API_ADDRESS: "0.0.0.0"
+      FTS_API_PORT: 19023
+      FTS_COT_TO_DB: "false"
+      FTS_OPTIMIZE_API: "true"
+      FTS_LOG_LEVEL: "warning"
+      FTS_NUM_ROUTING_WORKERS: 2
+      FTS_MAINLOOP_DELAY: 100
+      FTS_SECRET_KEY: ${FTS_SECRET_KEY:-change-me-in-env}
+      FTS_WEBSOCKET_KEY: ${FTS_WEBSOCKET_KEY:-change-me-in-env}
+      FTS_FED_PASSWORD: ${FTS_FED_PASSWORD:-change-me-in-env}
+      FTS_CLIENT_CERT_PASSWORD: ${FTS_CLIENT_CERT_PASSWORD:-change-me-in-env}
+      # Routing proxy (internal, do not expose)
+      FTS_ROUTING_PROXY_SUBSCRIBE_PORT: 19030
+      FTS_ROUTING_PROXY_SUBSCRIBE_IP: "fts-field"
+      FTS_ROUTING_PROXY_PUBLISHER_PORT: 19032
+      FTS_ROUTING_PROXY_PUBLISHER_IP: "fts-field"
+      FTS_ROUTING_PROXY_SERVER_PORT: 19031
+      FTS_ROUTING_PROXY_SERVER_IP: "fts-field"
+      FTS_INTEGRATION_MANAGER_PULLER_PORT: 19033
+      FTS_INTEGRATION_MANAGER_PULLER_ADDRESS: "fts-field"
+      FTS_INTEGRATION_MANAGER_PUBLISHER_PORT: 19034
+      FTS_INTEGRATION_MANAGER_PUBLISHER_ADDRESS: "fts-field"
+    healthcheck:
+      disable: true
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+
+  mumble:
+    image: mumblevoip/mumble-server:latest
+    container_name: mumble-field
+    restart: always
+    networks:
+      - fieldnet
+    ports:
+      - "64738:64738/tcp"
+      - "64738:64738/udp"
+    environment:
+      MUMBLE_SUPERUSER_PASSWORD: ${MUMBLE_PASSWORD:-change-me-in-env}
+    volumes:
+      - mumble-data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  halow-bridge:
+    build: ./halow-bridge
+    container_name: halow-bridge
+    restart: always
+    depends_on:
+      freetakserver:
+        condition: service_started
+    networks:
+      - fieldnet
+    environment:
+      LOCAL_FTS_HOST: fts-field
+      LOCAL_FTS_PORT: "8087"
+      REMOTE_FTS_HOST: ${REMOTE_FTS_HOST:-}
+      REMOTE_FTS_PORT: ${REMOTE_FTS_PORT:-8087}
+      BUFFER_MAX: ${BUFFER_MAX:-5000}
+      RECONNECT_DELAY: "10"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    healthcheck:
+      disable: true
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+networks:
+  fieldnet:
+    driver: bridge
+
+volumes:
+  mumble-data:

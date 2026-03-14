@@ -1,0 +1,13 @@
+[Unit]
+Description=Enable Quectel EC25 GNSS
+After=ModemManager.service
+Wants=ModemManager.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 10
+ExecStart=/bin/bash -c "echo -e \"AT+QGPS=1\r\n\" > /dev/ttyUSB2"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

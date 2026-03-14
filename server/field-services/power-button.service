@@ -1,0 +1,12 @@
+[Unit]
+Description=reTerminal Power Button Handler
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/power-button.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

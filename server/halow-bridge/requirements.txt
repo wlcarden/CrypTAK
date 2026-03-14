@@ -1,0 +1,1 @@
+# No external runtime dependencies — stdlib only (asyncio, xml.etree, collections)
