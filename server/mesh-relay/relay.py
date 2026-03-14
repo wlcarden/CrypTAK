@@ -344,7 +344,12 @@ class FtsClient:
 # --- Meshtastic listener ---
 
 def _enqueue(queue, loop, data):
-    """Thread-safe enqueue with backpressure — drops oldest if full."""
+    """Thread-safe enqueue from the Meshtastic callback thread into asyncio.
+
+    Uses call_soon_threadsafe to schedule the put on the event loop.
+    If the queue is full (maxsize=100), drops the oldest item to prevent
+    the Meshtastic thread from blocking on a full queue.
+    """
     def _put():
         try:
             queue.put_nowait(data)
@@ -361,18 +366,24 @@ def _enqueue(queue, loop, data):
 def _seed_from_nodedb(iface, queue, loop, max_age_secs: int = 0):
     """Push cached positions from the T-Beam's nodedb into the queue.
 
-    The meshtastic firmware doesn't forward received position packets
+    The Meshtastic firmware doesn't forward received position packets
     to the serial/TCP API if the position data hasn't changed (it
     updates lastHeard internally but suppresses duplicate content).
     This means fixed-position nodes never generate pubsub events after
     the initial boot broadcast.
 
-    We compensate by periodically re-reading the nodedb and pushing
-    PLI for nodes that are still alive.  The lastHeard timestamp tells
+    Compensates by periodically re-reading the nodedb and pushing
+    PLI for nodes that are still alive. The lastHeard timestamp tells
     us when the T-Beam's radio last received ANY packet from a node.
-    If max_age_secs > 0, only nodes heard within that window are
-    included — nodes that go offline will be skipped and their TAK
-    markers will naturally expire via the CoT stale timeout.
+
+    Args:
+        iface: Active Meshtastic interface (serial or TCP).
+        queue: asyncio.Queue for position data dicts.
+        loop: The asyncio event loop (for thread-safe enqueue).
+        max_age_secs: If > 0, skip nodes not heard within this window.
+            Nodes that go offline have their markers expire naturally
+            via the CoT stale timeout instead of being continuously
+            refreshed as ghost markers.
     """
     my_node_num = getattr(
         getattr(iface, "myInfo", None), "my_node_num", None,
@@ -780,6 +791,12 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
 # --- Main loop ---
 
 async def main() -> None:
+    """Entry point: connect to FTS, start mesh listener, relay positions.
+
+    Runs the main event loop that consumes position/detection data from
+    the Meshtastic thread's queue and forwards it to FTS as CoT XML.
+    Handles graceful shutdown on SIGINT/SIGTERM.
+    """
     fts = FtsClient(FTS_HOST, FTS_PORT)
     await fts.connect()
 
