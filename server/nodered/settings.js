@@ -42,6 +42,14 @@ module.exports = {
   // Allow function nodes to require() external npm packages
   functionExternalModules: true,
 
+  // Persist flow context across restarts (mesh node state, etc.)
+  // Using both: in-memory for speed, file as durable fallback on restart.
+  // Use file-based context storage so mesh node state (registry, telemetry)
+  // survives Node-RED restarts without any flow code changes.
+  contextStorage: {
+    default: { module: "localfilesystem" },
+  },
+
   // Editor theme
   editorTheme: {
     projects: { enabled: false },

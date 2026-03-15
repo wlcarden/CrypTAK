@@ -150,7 +150,7 @@ services:
       - ./nodered/settings.js:/data/settings.js:ro  # functionGlobalContext (net, cotMaps)
       - ./nodered/lib:/opt/cot-maps:ro               # cot-maps.js module
       - ./nodered/public:/data/public:ro              # favicon.ico, cryptak-logo.png
-      - ./nodered/webmap/index.html:/data/node_modules/node-red-contrib-web-worldmap/worldmap/index.html:ro
+      - /mnt/cache/appdata/tak-server/nodered/webmap/index.html:/data/node_modules/node-red-contrib-web-worldmap/worldmap/index.html:ro
     environment:
       NR_ADMIN_PASS: ${NR_ADMIN_PASS:-}    # Set in .env to enable admin auth; blank = no auth
     user: "1000:1000"

@@ -474,6 +474,7 @@
       user-select: none;
     }
     #sb-mesh-community-toggle:hover { color: #999; }
+    .mesh-bridge-badge { color: #7EB3FF; font-size: 10px; letter-spacing: 0.05em; font-weight: 600; }
     #sb-mesh-last-update {
       padding: 3px 10px 4px 26px;
       font-size: 10px;
@@ -523,15 +524,7 @@
         </select>
         <button class="sb-sort-btn" data-sort="group" title="Group by layer" id="sb-group-toggle"><i class="fa fa-object-group"></i></button>
     </div>
-    <div id="sb-clients">
-        <div id="sb-clients-header">
-            <span class="sb-group-caret"><i class="fa fa-caret-down"></i></span>
-            <span class="sb-group-label">Connected</span>
-            <span class="sb-client-count zero" id="sb-client-count">0</span>
-        </div>
-        <div id="sb-clients-list"></div>
-    </div>
-    <div id="sb-mesh" class="collapsed">
+    <div id="sb-mesh">
         <div id="sb-mesh-header">
             <span class="sb-group-caret"><i class="fa fa-caret-down"></i></span>
             <span class="sb-group-label">Mesh Network</span>
@@ -544,6 +537,14 @@
             <div id="sb-mesh-community-nodes" style="display:none"></div>
             <div id="sb-mesh-last-update"></div>
         </div>
+    </div>
+    <div id="sb-clients">
+        <div id="sb-clients-header">
+            <span class="sb-group-caret"><i class="fa fa-caret-down"></i></span>
+            <span class="sb-group-label">Connected</span>
+            <span class="sb-client-count zero" id="sb-client-count">0</span>
+        </div>
+        <div id="sb-clients-list"></div>
     </div>
     <div id="sb-summary">Waiting for data...</div>
     <div id="sb-list">
@@ -624,7 +625,7 @@
 
     // Trail duration control
     document.getElementById('sb-trail-duration').addEventListener('change', function() {
-        fetch('api/tracker/trail-duration', {
+        fetch('/tak-map/api/tracker/trail-duration', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ duration: parseInt(this.value) })
@@ -846,9 +847,13 @@
         var snrC = n.snrToBridge !== null ? meshSnrColor(n.snrToBridge) : '#555';
 
         // Meta line: role + hops on left (gray), battery + SNR on right (colored)
-        var leftParts = [role, hops].filter(Boolean);
+        var hwModel = n.hwModel !== null ? (HW_MODELS[n.hwModel] || 'HW' + n.hwModel) : '';
+        var leftParts = [hwModel, role, hops].filter(Boolean);
         var rightParts = [];
         if (batStr) rightParts.push('<span class="' + batCls + '">' + batStr + '</span>');
+        var isBridge = n.owned && n.snrToBridge === null && n.hopsToBridge === null && n.lastHeard > 0;
+        if (isBridge)
+            rightParts.push('<span class="mesh-bridge-badge">BRIDGE</span>');
         if (n.snrToBridge !== null)
             rightParts.push('<span style="color:' + snrC + '">' + n.snrToBridge.toFixed(1) + 'dB</span>');
 
@@ -945,7 +950,7 @@
     }
 
     function fetchMeshNodes() {
-        fetch('api/mesh/nodes')
+        fetch('/tak-map/api/mesh/nodes')
             .then(function(r) { return r.ok ? r.json() : { nodes: [] }; })
             .then(function(d) { renderMeshPanel(d.nodes || [], d.ts || Date.now()); })
             .catch(function() {});
@@ -953,7 +958,7 @@
 
     // ── Connected clients ─────────────────────────────────────
     function fetchClients() {
-        fetch('api/clients')
+        fetch('/tak-map/api/clients')
             .then(function(r) { return r.ok ? r.json() : { clients: [] }; })
             .then(function(data) { renderClients(data.clients || []); })
             .catch(function() { renderClients([]); });
