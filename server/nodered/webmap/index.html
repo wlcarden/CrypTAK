@@ -695,7 +695,7 @@
         for (var i = 0; i < keys.length; i++) {
             var d = allData[keys[i]];
             if (!d || !d.lat || !d.lon) continue;
-            if (keys[i].indexOf('_seed_') === 0) continue;
+            if (keys[i].indexOf('_seed_') === 0 || d._internal) continue;
             if (d.name === 'CrypTAK-WebMap') continue;
 
             var name = d.name || keys[i];
@@ -710,7 +710,8 @@
                 lat: d.lat,
                 lon: d.lon,
                 layer: layer,
-                icon: d.icon || 'fa-question-circle',
+                icon: d.icon || (d.SIDC ? null : 'fa-question-circle'),
+                SIDC: d.SIDC || null,
                 color: d.iconColor || layerColors[layer] || '#888',
                 opacity: d.opacity !== undefined ? d.opacity : 1,
                 startMs: d._startMs || 0,
@@ -735,23 +736,37 @@
             .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    // Unified SNR color scale — matches cot-maps.js snrToLinkStyle() thresholds
     function snrColor(snr) {
-        if (snr > 0) return '#4CAF50';
-        if (snr > -5) return '#FFD600';
-        if (snr > -10) return '#FF8C00';
-        return '#FF5252';
+        if (snr >= 5)  return '#00DD00';
+        if (snr >= 0)  return '#AADD00';
+        if (snr >= -7) return '#FFAA00';
+        return '#FF4444';
     }
 
     function renderMarkerRow(m, now) {
         var age = m.startMs > 0 ? formatAge(now - m.startMs) : '';
-        var iconClass = m.icon.indexOf('fa-') === 0 ? 'fa ' + m.icon : m.icon;
 
         var opStyle = m.opacity < 1 ? 'opacity:' + m.opacity + ';' : '';
         var html = '<div class="sb-marker" data-name="' + m.name.replace(/"/g, '&quot;') +
             '" data-lat="' + m.lat + '" data-lon="' + m.lon + '"' +
             (opStyle ? ' style="' + opStyle + '"' : '') + '>';
-        html += '<div class="sb-marker-icon" style="color:' + m.color + '">' +
-            '<i class="fa ' + m.icon + '"></i></div>';
+
+        // Render SIDC milsymbol or fall back to Font Awesome icon
+        if (m.SIDC && typeof ms !== 'undefined') {
+            try {
+                var sym = new ms.Symbol(m.SIDC, { size: 20 });
+                var svgStr = sym.asSVG();
+                html += '<div class="sb-marker-icon" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;">' + svgStr + '</div>';
+            } catch(e) {
+                html += '<div class="sb-marker-icon" style="color:' + m.color + '">' +
+                    '<i class="fa fa-question-circle"></i></div>';
+            }
+        } else {
+            var iconName = m.icon || 'fa-question-circle';
+            html += '<div class="sb-marker-icon" style="color:' + m.color + '">' +
+                '<i class="fa ' + iconName + '"></i></div>';
+        }
         html += '<div class="sb-marker-info">';
         html += '<div class="sb-marker-name">' + esc(m.name) + '</div>';
         var meta = m.lat.toFixed(4) + ', ' + m.lon.toFixed(4);
@@ -770,6 +785,8 @@
     }
 
     // ── Mesh network status panel ─────────────────────────────
+    // HW_MODELS and ROLES now live in cot-maps.js (server-side).
+    // The mesh API resolves names server-side; these are kept as fallback only.
     var HW_MODELS = {
         0:'?', 4:'T-Beam', 6:'Heltec', 8:'Heltec', 9:'NanoG1',
         10:'RAK4631', 17:'Heltec V3', 24:'NanoG1', 37:'RAK',
@@ -795,13 +812,7 @@
 
     var sbMeshSummary = document.getElementById('sb-mesh-summary');
 
-    function meshSnrColor(snr) {
-        if (snr >= 5)   return '#4CAF50';
-        if (snr >= 0)   return '#90EE30';
-        if (snr >= -7)  return '#FFD600';
-        if (snr >= -12) return '#FF8C00';
-        return '#FF5252';
-    }
+    // meshSnrColor removed — use unified snrColor() everywhere
 
     function fmtUptime(secs) {
         if (!secs) return '—';
@@ -844,7 +855,7 @@
         if (n.hopsToBridge !== null)
             hops = n.hopsToBridge === 0 ? 'direct' : n.hopsToBridge + ' hop' + (n.hopsToBridge !== 1 ? 's' : '');
 
-        var snrC = n.snrToBridge !== null ? meshSnrColor(n.snrToBridge) : '#555';
+        var snrC = n.snrToBridge !== null ? snrColor(n.snrToBridge) : '#555';
 
         // Meta line: role + hops on left (gray), battery + SNR on right (colored)
         var hwModel = n.hwModel !== null ? (HW_MODELS[n.hwModel] || 'HW' + n.hwModel) : '';
@@ -1145,84 +1156,6 @@
         }
     }
 
-    // ── Mesh topology overlay ──────────────────────────────
-    var meshLinkLayer = null;
-    var meshLinks = {};
-
-    function syncMeshTopology() {
-        if (typeof allData === 'undefined' || typeof map === 'undefined') return;
-        if (!meshLinkLayer) {
-            meshLinkLayer = L.layerGroup().addTo(map);
-        }
-
-        // Find bridge marker position
-        var bridgeLat = null, bridgeLon = null;
-        var keys = Object.keys(allData);
-        for (var i = 0; i < keys.length; i++) {
-            var d = allData[keys[i]];
-            if (d && d._meshBridge && d.lat && d.lon) {
-                bridgeLat = d.lat;
-                bridgeLon = d.lon;
-                break;
-            }
-        }
-        if (bridgeLat === null) {
-            // No bridge — clear any existing links
-            if (Object.keys(meshLinks).length > 0) {
-                meshLinkLayer.clearLayers();
-                meshLinks = {};
-            }
-            return;
-        }
-
-        var active = {};
-        for (var j = 0; j < keys.length; j++) {
-            var nd = allData[keys[j]];
-            if (!nd || !nd._mesh || nd._meshBridge) continue;
-            if (!nd.lat || !nd.lon) continue;
-            if (nd._mesh.snr === null && nd._mesh.hopsAway === null) continue;
-
-            var name = nd.name || keys[j];
-            active[name] = true;
-
-            var latlngs = [[bridgeLat, bridgeLon], [nd.lat, nd.lon]];
-            var color = snrColor(nd._mesh.snr !== null ? nd._mesh.snr : -15);
-            var dashed = nd._mesh.hopsAway !== null && nd._mesh.hopsAway > 0;
-
-            var snrStr = nd._mesh.snr !== null ? nd._mesh.snr.toFixed(1) + ' dB' : '?';
-            var hopStr = nd._mesh.hopsAway !== null
-                ? (nd._mesh.hopsAway === 0 ? 'direct' : nd._mesh.hopsAway + ' hop' + (nd._mesh.hopsAway !== 1 ? 's' : ''))
-                : '';
-            var tip = name + ': ' + snrStr + (hopStr ? ' \u00b7 ' + hopStr : '');
-
-            if (meshLinks[name]) {
-                meshLinks[name].setLatLngs(latlngs);
-                meshLinks[name].setStyle({
-                    color: color,
-                    dashArray: dashed ? '8 6' : null,
-                });
-                meshLinks[name].unbindTooltip();
-                meshLinks[name].bindTooltip(tip, { sticky: true });
-            } else {
-                var opts = { color: color, weight: 2, opacity: 0.5 };
-                if (dashed) opts.dashArray = '8 6';
-                var line = L.polyline(latlngs, opts)
-                    .bindTooltip(tip, { sticky: true });
-                meshLinks[name] = line;
-                meshLinkLayer.addLayer(line);
-            }
-        }
-
-        // Remove stale links
-        var linkKeys = Object.keys(meshLinks);
-        for (var r = 0; r < linkKeys.length; r++) {
-            if (!active[linkKeys[r]]) {
-                meshLinkLayer.removeLayer(meshLinks[linkKeys[r]]);
-                delete meshLinks[linkKeys[r]];
-            }
-        }
-    }
-
     // ── Init ──────────────────────────────────────────────────
     // Set initial group toggle state
     sbGroupToggle.classList.add('active');
@@ -1235,7 +1168,6 @@
             setInterval(function() {
                 renderSidebar();
                 syncMarkerOpacity();
-                syncMeshTopology();
             }, 2000);
             fetchClients();
             setInterval(fetchClients, 10000);
