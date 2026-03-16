@@ -498,7 +498,10 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
             if lat == 0.0 and lon == 0.0:
                 return
 
-            from_id = packet.get("fromId", str(packet.get("from", "unknown")))
+            from_id = packet.get("fromId") or str(packet.get("from", ""))
+            if not from_id:
+                logger.warning("Position packet with no fromId — skipping")
+                return
             node_info = interface.nodes.get(from_id, {})
             user = node_info.get("user", {})
             callsign = (
