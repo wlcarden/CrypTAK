@@ -35,3 +35,4 @@ firmware/secrets.sh
 scripts/phone-provision/atak-maps/nova-streets.sqlite
 scripts/phone-provision/apks/
 scripts/phone-provision/osmand-maps/
+scripts/phone-provision/apks/
