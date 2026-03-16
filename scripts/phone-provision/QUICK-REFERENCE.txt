@@ -1,0 +1,161 @@
+================================================================================
+                 CrypTAK MISSION DEVICES — QUICK REFERENCE
+================================================================================
+
+FLASHING DAY: 2026-03-15 | TIME: 4:00–6:00 PM EDT | DEVICES: 3 Pixels
+
+================================================================================
+                              STEP-BY-STEP FLOW
+================================================================================
+
+FOR EACH DEVICE (TAK-01, TAK-02, TAK-03):
+
+  1. GRAPHENEOS FLASH (~15 min)
+     • Settings > About > Build Number (tap 7×)
+     • Settings > Developer Options > OEM Unlocking > ON
+     • adb reboot bootloader
+     • grapheneos.org/install/web (Chrome)
+     • Select device > Flash
+     • Lock bootloader after flash
+     • Complete setup, skip Google
+
+  2. SECURITY SETUP (~5 min)
+     • Settings > Security > Screen Lock (8+ digit PIN)
+     • Settings > Security > Duress PIN (write down separately)
+     • Settings > Developer Options > USB Debugging > ON
+
+  3. RUN PROVISIONING SCRIPT (~10 min)
+     • ~/Desktop/CrypTAK/phone-provision/provision-phone.sh TAK-01
+     • (Repeat with TAK-02, TAK-03)
+     • Disables USB debugging when done
+
+  4. TAILSCALE ENROLLMENT (~2 min)
+     • Open Tailscale app
+     • "Log in with auth key"
+     • Paste pre-auth key (see below)
+
+  5. VPN LOCK (~1 min)
+     • Settings > Network > VPN > Tailscale > gear
+     • "Always-on VPN" > ON
+     • "Block connections without VPN" > ON
+
+  6. ATAK VERIFICATION (~1 min)
+     • Open ATAK app
+     • Verify callsign (TAK-01/02/03)
+     • Verify server (100.64.0.1:8087)
+
+  7. TERMUX SSH SETUP (~5 min)
+     • Open Termux
+     • bash /sdcard/termux_setup.sh
+     • Save printed public key
+
+================================================================================
+                         PRE-AUTH KEYS (COPY-PASTE)
+================================================================================
+
+TAK-01 (Pixel 6 Pro):
+hskey-auth--Za8CoDgmdob-M5Pziy1Yxxi7z-P1d9w_O9kEuzcgbAr_DDMCde8eLTaKWtkYbkvZFzjNQq8hJ-FW
+
+TAK-02 (Pixel 6a):
+hskey-auth-10qyNNg4aRQD-OzNUAtUAypNfbkhmR54gM-X-YHaHPqAylDkIUWesYvg_rHx04J54oyV0-75tn8nr
+
+TAK-03 (Pixel 6a):
+hskey-auth-xF3iS1g1sl8p-W-0SIM_OUvVpxnsWh6wybyezBJcF6F_X191qvA74yDY57PdPjiQdxvpYnGUaXaZ3
+
+Expiry: 2026-03-18 (72 hours)
+
+================================================================================
+                           CRITICAL REMINDERS
+================================================================================
+
+✓ GrapheneOS bootloader MUST be LOCKED after flash
+✓ USB Debugging OFF after provisioning
+✓ Duress PIN written down separately (NOT on device)
+✓ Pre-auth keys used only once per device
+✓ Tailscale "Always-on VPN" must be enabled
+✓ Each device must appear on ATAK map
+
+================================================================================
+                         POST-FLASHING VERIFICATION
+================================================================================
+
+RUN THESE COMMANDS:
+
+1. Check Headscale enrollment:
+   ssh unraid "docker exec headscale headscale nodes list | grep TAK"
+   
+   Expected: 3 entries (TAK-01, TAK-02, TAK-03) with IP 100.64.0.x
+
+2. Test SSH access:
+   ssh -p 8022 u0_a[UID]@100.64.0.[IP]
+   
+   Expected: Termux prompt appears
+
+3. Check MDM dashboard:
+   http://100.64.0.1:8095
+   
+   Expected: 3 devices listed with last check-in "just now"
+
+4. Verify ATAK map:
+   Open ATAK on any phone
+   
+   Expected: 3 cyan markers visible
+
+================================================================================
+                          TROUBLESHOOTING QUICK FIX
+================================================================================
+
+"adb: command not found"
+→ apt install android-tools-adb
+
+"Device not showing in fastboot"
+→ Unlock bootloader first; reboot in fastboot
+
+"Headscale key expired"
+→ ssh unraid "docker exec headscale headscale preauthkeys create --expiration 72h --user 1"
+
+"ATAK not showing other devices"
+→ Wait 2 min, restart ATAK, verify Tailscale connected
+
+"SSH timeout"
+→ ping 100.64.0.x; check Tailscale connection on both sides
+
+================================================================================
+                              KEY INFRASTRUCTURE
+================================================================================
+
+FTS (ATAK Server):           100.64.0.1:8087 (primary)
+Field FTS:                   100.64.0.2:8087 (backup)
+Headscale (VPN):             vpn.thousand-pikes.com
+Headwind MDM (Device Mgmt):  100.64.0.1:8095
+
+All Tailscale-only (encrypted, private network)
+
+================================================================================
+                              FILES & SCRIPTS
+================================================================================
+
+Provisioning script:
+  ~/Desktop/CrypTAK/phone-provision/provision-phone.sh
+
+APK directory:
+  ~/Desktop/CrypTAK/phone-provision/apks/
+  
+  FDroid.apk ✓ (downloaded)
+  ATAK-CIV.apk ⏳ (download before 3 PM from tak.gov)
+  Tailscale.apk ⏳ (install from F-Droid Store)
+
+Documentation:
+  README.md                      (overview)
+  FLASHING-DAY-CHECKLIST.md      (detailed steps)
+  HEADWIND-MDM-SETUP.md          (device management)
+  SSH-SETUP-DESKTOP.md           (remote access)
+  PREPARATION-SUMMARY.md         (what's been set up)
+
+================================================================================
+
+Questions? Check README.md or FLASHING-DAY-CHECKLIST.md first.
+
+Good luck! 🚀
+
+================================================================================

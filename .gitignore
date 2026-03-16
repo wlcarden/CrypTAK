@@ -32,3 +32,6 @@ Thumbs.db
 firmware/secrets.sh
 *.pem
 *.key
+scripts/phone-provision/atak-maps/nova-streets.sqlite
+scripts/phone-provision/apks/
+scripts/phone-provision/osmand-maps/
