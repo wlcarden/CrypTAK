@@ -619,7 +619,11 @@ function makeSA(uid) {
     stale +
     '" how="m-g">' +
     '<point lat="0" lon="0" hae="0" ce="9999999" le="9999999"/>' +
-    '<detail><contact endpoint="*:-1:stcp" callsign="CrypTAK-WebMap"/></detail>' +
+    '<detail>' +
+    '<contact endpoint="127.0.0.1:4242:tcp" callsign="CrypTAK-WebMap"/>' +
+    '<__group name="Cyan" role="Team Member"/>' +
+    '<uid Droid="CrypTAK-WebMap"/>' +
+    '</detail>' +
     "</event>"
   );
 }

@@ -808,9 +808,20 @@
         sbMeshCommNodes.style.display = meshCommShowing ? '' : 'none';
         sbMeshCommToggle.textContent = (meshCommShowing ? '▾ ' : '▸ ') +
             sbMeshCommToggle.dataset.label;
+        // Render community rows immediately on expand — renderMeshPanel
+        // only populates them when meshCommShowing is true, so expanding
+        // from a collapsed state would show an empty div until the next poll.
+        if (meshCommShowing && lastMeshData) {
+            var nowSec = Math.floor(Date.now() / 1000);
+            var community = lastMeshData.filter(function(n) { return !n.owned; });
+            var cHtml = '';
+            for (var j = 0; j < community.length; j++) cHtml += meshNodeRow(community[j], nowSec);
+            sbMeshCommNodes.innerHTML = cHtml;
+        }
     });
 
     var sbMeshSummary = document.getElementById('sb-mesh-summary');
+    var lastMeshData = null;  // cached for immediate community expand
 
     // meshSnrColor removed — use unified snrColor() everywhere
 
@@ -862,6 +873,11 @@
         var leftParts = [hwModel, role, hops].filter(Boolean);
         var rightParts = [];
         if (batStr) rightParts.push('<span class="' + batCls + '">' + batStr + '</span>');
+        // GPS indicator: green crosshair if position known, dim if no position
+        if (n.hasPosition)
+            rightParts.push('<span style="color:#4CAF50;font-size:10px" title="GPS fix"><i class="fa fa-crosshairs"></i></span>');
+        else
+            rightParts.push('<span style="color:#333;font-size:10px" title="No GPS"><i class="fa fa-crosshairs"></i></span>');
         if (n.bridge)
             rightParts.push('<span class="mesh-bridge-badge">BRIDGE</span>');
         if (n.snrToBridge !== null)
@@ -893,6 +909,7 @@
     }
 
     function renderMeshPanel(nodes, fetchTs) {
+        lastMeshData = nodes;
         var count = nodes.length;
         sbMeshCount.textContent = count;
         sbMeshCount.classList.toggle('zero', count === 0);
