@@ -196,6 +196,17 @@ else
   echo "  WARNING: nova-streets.sqlite not found — skip offline map push"
 fi
 
+echo "[7] Installing Headwind MDM launcher..."
+if [ ! -f "$APK_DIR/HeadwindMDM.apk" ]; then
+  echo "  ERROR: HeadwindMDM.apk not found at $APK_DIR/HeadwindMDM.apk"
+  echo "  Download from: https://h-mdm.com/files/hmdm-6.31-os.apk"
+  exit 1
+fi
+if ! adb install -r "$APK_DIR/HeadwindMDM.apk"; then
+  echo "ERROR: Headwind MDM launcher install failed"
+  exit 1
+fi
+
 echo "AUTOMATED STEPS COMPLETE for $DEVICE_ID"
 echo "========================================="
 echo ""
@@ -219,5 +230,13 @@ echo ""
 echo "5. ATAK: Open ATAK → Server preferences should be pre-loaded"
 echo "   Verify callsign = $DEVICE_ID, team = Cyan"
 echo ""
-echo "6. SECURITY: Settings → Developer Options → USB Debugging → OFF"
+echo "6. HEADWIND MDM: Open 'Headwind MDM' launcher app"
+echo "   This will trigger permission setup wizard (install unknown sources, device admin, storage access)"
+echo "   → Grant all requested permissions when prompted"
+echo "   → When enrollment screen appears:"
+echo "   Server URL: http://192.168.50.120:8095"
+echo "   Device Code: $DEVICE_ID"
+echo "   → Device will register with HMDM and pull configuration"
+echo ""
+echo "7. SECURITY: Settings → Developer Options → USB Debugging → OFF"
 echo ""
