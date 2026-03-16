@@ -8,7 +8,7 @@
 - **MQTT port:** 31000
 - **DB:** PostgreSQL container `hmdm-db`, user `hmdm`, db `hmdm`
 - **Config file:** `/usr/local/tomcat/conf/Catalina/localhost/ROOT.xml` (inside container)
-- **Admin credentials:** Changed from default by Leighton 2026-03-15
+- **Admin credentials:** `admin` / `Fi$hpaste1990!!` (changed from default by Leighton 2026-03-15)
 
 ## Known Issues
 
@@ -73,10 +73,32 @@ Phone enrollment requires the **Headwind MDM Launcher APK** — NOT the regular 
 - Force reboot (unless device owner mode enabled)
 - Access files on device (only push, not pull)
 
+## Login Method
+HMDM uses **salted hash authentication**: Client sends `MD5(password).upper()`, server stores `SHA1(MD5(password))`.
+
+**Login via REST API:**
+```bash
+# Get MD5 of password
+MD5=$(python3 -c "import hashlib; print(hashlib.md5('Fi\$hpaste1990!!'.encode()).hexdigest().upper())")
+
+# POST to login endpoint
+curl -X POST http://192.168.50.120:8095/rest/public/auth/login \
+  -H "Content-Type: application/json" \
+  -d "{\"login\":\"admin\",\"password\":\"$MD5\"}" \
+  -c /tmp/hmdm_cookies.txt
+
+# API calls include Cookie from above
+curl -X GET http://192.168.50.120:8095/rest/private/devices/search \
+  -H "Content-Type: application/json" \
+  -d '{"pageSize":10,"pageNum":1}' \
+  -b /tmp/hmdm_cookies.txt
+```
+
 ## Status as of 2026-03-16
 - ✅ Server running on Unraid (container `hmdm`)
 - ✅ DB healthy (`hmdm-db`)
-- ✅ Admin password changed
+- ✅ Admin logged in, API working
+- ✅ `base.url` fixed to LAN IP (`192.168.50.120:8095`)
 - ❌ TAK-01 NOT enrolled (launcher never installed)
 - ❌ TAK-02/03 NOT enrolled (phones not yet provisioned)
-- ⚠️ `base.url` set to Tailscale IP — API only works from Tailnet
+- 📥 Headwind launcher APK downloading
