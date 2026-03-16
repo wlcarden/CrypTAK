@@ -862,8 +862,7 @@
         var leftParts = [hwModel, role, hops].filter(Boolean);
         var rightParts = [];
         if (batStr) rightParts.push('<span class="' + batCls + '">' + batStr + '</span>');
-        var isBridge = n.owned && n.snrToBridge === null && n.hopsToBridge === null && n.lastHeard > 0;
-        if (isBridge)
+        if (n.bridge)
             rightParts.push('<span class="mesh-bridge-badge">BRIDGE</span>');
         if (n.snrToBridge !== null)
             rightParts.push('<span style="color:' + snrC + '">' + n.snrToBridge.toFixed(1) + 'dB</span>');
