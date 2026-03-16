@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timezone
 
 import httpx
@@ -19,6 +20,9 @@ _SUBTYPE_LABELS = {
 }
 _DEFAULT_LABEL = "Police Spotted"
 
+_BACKOFF_BASE = 1800  # 30 minutes initial backoff on 403
+_BACKOFF_MAX = 7200  # 2 hours max backoff
+
 
 class WazeSource(Source):
     """Fetches police sighting alerts from the Waze LiveMap API."""
@@ -26,6 +30,8 @@ class WazeSource(Source):
     def __init__(self, config: WazeConfig, geo_filter: GeoFilter) -> None:
         self._config = config
         self._geo = geo_filter
+        self._blocked_until = 0.0
+        self._backoff = _BACKOFF_BASE
 
     @property
     def name(self) -> str:
@@ -50,6 +56,12 @@ class WazeSource(Source):
         if not self._config.enabled:
             return []
 
+        now = time.monotonic()
+        if now < self._blocked_until:
+            remaining = int(self._blocked_until - now)
+            logger.debug("Waze: rate-limited, skipping (%ds remaining)", remaining)
+            return []
+
         bbox = self._build_bbox()
         params = {**bbox, "env": "na", "types": "alerts"}
 
@@ -59,11 +71,25 @@ class WazeSource(Source):
         ) as client:
             try:
                 resp = await client.get(_API_URL, params=params)
+                if resp.status_code == 403:
+                    self._blocked_until = now + self._backoff
+                    logger.warning(
+                        "Waze: 403 rate-limited, backing off %ds",
+                        int(self._backoff),
+                    )
+                    self._backoff = min(self._backoff * 2, _BACKOFF_MAX)
+                    return []
                 resp.raise_for_status()
                 data = resp.json()
+            except httpx.HTTPStatusError:
+                logger.exception("Waze API request failed")
+                return []
             except Exception:
                 logger.exception("Waze API request failed")
                 return []
+
+        # Successful response — reset backoff
+        self._backoff = _BACKOFF_BASE
 
         incidents: list[RawIncident] = []
         for alert in data.get("alerts", []):

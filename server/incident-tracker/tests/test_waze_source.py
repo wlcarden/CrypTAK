@@ -337,3 +337,91 @@ class TestWazeSource:
     def test_name(self):
         source = WazeSource(_make_config(), _make_geo())
         assert source.name == "Waze"
+
+
+class TestWazeBackoff:
+    def _mock_403(self):
+        resp = MagicMock()
+        resp.status_code = 403
+        return resp
+
+    @pytest.mark.asyncio
+    async def test_403_triggers_backoff(self):
+        with patch("src.sources.waze.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = self._mock_403()
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            source = WazeSource(_make_config(), _make_geo())
+            results = await source.fetch()
+
+        assert results == []
+        assert source._blocked_until > 0
+
+    @pytest.mark.asyncio
+    async def test_skips_during_backoff(self):
+        """Should not make an API call while blocked."""
+        with patch("src.sources.waze.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = self._mock_403()
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            source = WazeSource(_make_config(), _make_geo())
+            await source.fetch()  # triggers backoff
+
+            mock_client.get.reset_mock()
+            results = await source.fetch()  # should skip
+
+        assert results == []
+        mock_client.get.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_backoff_doubles_on_repeated_403(self):
+        from src.sources.waze import _BACKOFF_BASE
+
+        with patch("src.sources.waze.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = self._mock_403()
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            source = WazeSource(_make_config(), _make_geo())
+            await source.fetch()
+
+        assert source._backoff == _BACKOFF_BASE * 2
+
+    @pytest.mark.asyncio
+    async def test_backoff_capped_at_max(self):
+        from src.sources.waze import _BACKOFF_MAX
+
+        with patch("src.sources.waze.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = self._mock_403()
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            source = WazeSource(_make_config(), _make_geo())
+            source._backoff = _BACKOFF_MAX
+            source._blocked_until = 0  # allow fetch
+            await source.fetch()
+
+        assert source._backoff == _BACKOFF_MAX
+
+    @pytest.mark.asyncio
+    async def test_success_resets_backoff(self):
+        from src.sources.waze import _BACKOFF_BASE
+
+        with patch("src.sources.waze.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = _mock_response([_make_alert()])
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            source = WazeSource(_make_config(), _make_geo())
+            source._backoff = 7200  # simulate previous failures
+            results = await source.fetch()
+
+        assert len(results) == 1
+        assert source._backoff == _BACKOFF_BASE
