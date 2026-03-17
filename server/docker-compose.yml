@@ -154,6 +154,10 @@ services:
       - ./nodered/lib:/opt/cot-maps:ro               # cot-maps.js module
       - ./nodered/public:/data/public:ro              # favicon.ico, cryptak-logo.png
       - /mnt/cache/appdata/tak-server/nodered/webmap/index.html:/data/node_modules/node-red-contrib-web-worldmap/worldmap/index.html:ro
+      # worldmap.js patch: don't auto-set uniqueDesignation on SIDC markers.
+      # Default behavior renders callsign as hard-to-read milsymbol text at bottom-left.
+      # Patch makes it opt-in only; markers use Leaflet tooltip for clean labels instead.
+      - /mnt/user/appdata/nodered/worldmap_patched.js:/data/node_modules/node-red-contrib-web-worldmap/worldmap/worldmap.js:ro
     environment:
       NR_ADMIN_PASS: ${NR_ADMIN_PASS:-}    # Set in .env to enable admin auth; blank = no auth
     user: "1000:1000"
