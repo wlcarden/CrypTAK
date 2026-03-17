@@ -30,6 +30,7 @@ nodes:
     short_name: CT01
     cot_type: "a-f-G-E-V"
     tracker: true
+    position_precision: 32
   CrypTAK-SOL02:
     id: "!3db00f2c"
     profile: prototype-solar
