@@ -41,6 +41,9 @@ services:
       # Disconnection handler only cleans client_information_queue, not connections.
       # This patch auto-removes dead sockets on relay failure instead of spamming Bad fd errors.
       - /mnt/user/appdata/fts/send_component_data_controller_patched.py:/home/freetak/FreeTAKServer/services/tcp_cot_service/controllers/send_component_data_controller.py:ro
+      # FTS 2.2.1 patch: IAMUsersController returns None for connection/disconnection responses.
+      # send_component_message tries to send None over socket → TypeError that deadlocks event loop.
+      - /mnt/user/appdata/fts/tcp_cot_service_main_patched.py:/home/freetak/FreeTAKServer/services/tcp_cot_service/tcp_cot_service_main.py:ro
       # FTS 2.2.1 patch: AllowedCLIIPs config setting removed from schema but REST API still
       # references it. Without this patch, /Clients and other endpoints return 500.
       - /mnt/user/appdata/fts/MainConfig_patched.py:/home/freetak/FreeTAKServer/core/configuration/MainConfig.py:ro
