@@ -20,20 +20,28 @@
     "payloadType": "date",
     "x": 170,
     "y": 100,
-    "wires": [["fn_cot"]]
+    "wires": [
+      [
+        "fn_cot"
+      ]
+    ]
   },
   {
     "id": "fn_cot",
     "type": "function",
     "z": "tab1",
     "name": "FTS CoT TCP Client",
-    "func": "var net  = global.get('net');\nvar maps = global.get('cotMaps');\n\n// Pre-built CoT XML passthrough (drawing \u2192 ATAK)\nif (msg.payload && typeof msg.payload === 'string' && msg.payload.startsWith('<?xml')) {\n    var s = context.get('socket');\n    if (s && typeof s.write === 'function' && !s.destroyed) {\n        s.write(msg.payload);\n        node.log('Drawing CoT sent (' + msg.payload.length + ' bytes)');\n    } else {\n        node.warn('FTS socket not ready, drawing CoT dropped');\n    }\n    return null;\n}\n\nvar socket  = context.get('socket');\nvar kaTimer = context.get('kaTimer');\n\n// Validate socket is a real net.Socket, not a stale deserialized JSON object\nif (socket && typeof socket.write !== 'function') {\n    context.set('socket', null);\n    socket = null;\n}\n\nif (socket && !socket.destroyed) {\n    return null;\n}\n\nif (kaTimer) { clearInterval(kaTimer); context.set('kaTimer', null); }\n\nfunction connectToFTS() {\n    var existing = context.get('socket');\n    if (existing && typeof existing.write === 'function' && !existing.destroyed) return;\n\n    var myUid = 'CrypTAK-NR-WebMap';\n\n    var s = new net.Socket();\n    var buf = '';\n\n    s.connect(8087, 'freetakserver', function() {\n        node.log('FTS connected as ' + myUid);\n        s.write(maps.makeSA(myUid));\n        var timer = setInterval(function() {\n            if (s && !s.destroyed) {\n                s.write(maps.makeSA(myUid));\n            } else {\n                clearInterval(timer);\n                context.set('kaTimer', null);\n            }\n        }, 240000);\n        context.set('kaTimer', timer);\n    });\n\n    s.on('data', function(data) {\n        context.set('retryCount', 0);\n        buf += data.toString();\n        var endTag = '</event>';\n        var idx;\n        while ((idx = buf.indexOf(endTag)) !== -1) {\n            var xml = buf.substring(0, idx + endTag.length);\n            buf = buf.substring(idx + endTag.length);\n            try {\n                var marker = maps.parseCotToMarker(xml);\n                if (!marker) {\n                    // Try drawing parser for u-d-* types\n                    var typeCheck = xml.match(/\\btype=\"([^\"]+)\"/);\n                    if (typeCheck && typeCheck[1].startsWith(\"u-d-\")) {\n                        var drawing = maps.parseCotDrawing(xml);\n                        if (drawing) {\n                            node.send({ payload: drawing });\n                        }\n                    }\n                    continue;\n                }\n\n                var cache = flow.get('takMarkers') || {};\n                if (marker.deleted) {\n                    delete cache[marker.name];\n                    flow.set('takMarkers', cache);\n                    node.send({ payload: marker });\n                    continue;\n                }\n\n                // Tracker overrides: apply WebMap-set affiliation and icon\n                if (marker._tracker) {\n                    var affOverrides = flow.get('trackerAffiliations') || {};\n                    var aff = affOverrides[marker.name];\n                    if (aff) {\n                        marker.iconColor = maps.colorMap[aff] || marker.iconColor;\n                        marker.layer = maps.affiliationNames[aff] || marker.layer;\n                        marker._baseColor = marker.iconColor;\n                    }\n                    var iconOverrides = flow.get('trackerIcons') || {};\n                    var customIcon = iconOverrides[marker.name];\n                    if (customIcon) {\n                        marker.icon = customIcon;\n                    }\n                }\n\n                cache[marker.name] = marker;\n\n                // Purge stale markers from cache (every 100th write)\n                var writeCount = (context.get('writeCount') || 0) + 1;\n                context.set('writeCount', writeCount);\n                if (writeCount % 100 === 0) {\n                    var now = Date.now();\n                    var cKeys = Object.keys(cache);\n                    for (var ci = 0; ci < cKeys.length; ci++) {\n                        var cm = cache[cKeys[ci]];\n                        if (cm && cm._staleMs && cm._staleMs < now) {\n                            delete cache[cKeys[ci]];\n                        }\n                    }\n                }\n                flow.set('takMarkers', cache);\n                node.send({ payload: marker });\n\n                // Tracker trail: store position history and emit polyline\n                if (marker._tracker) {\n                    var history = flow.get('trackerHistory') || {};\n                    var trail = history[marker.name] || [];\n                    trail.push({ lat: marker.lat, lon: marker.lon, ts: Date.now() });\n\n                    // Trim to 24h\n                    var cutoff = Date.now() - 24 * 3600000;\n                    trail = trail.filter(function(p) { return p.ts >= cutoff; });\n                    history[marker.name] = trail;\n                    flow.set('trackerHistory', history);\n\n                    // Emit polyline to worldmap\n                    var trailDuration = flow.get('trailDuration');\n                    if (trailDuration === undefined || trailDuration === null) trailDuration = 3600000;\n                    if (trailDuration > 0 && trail.length >= 2) {\n                        var displayCutoff = Date.now() - trailDuration;\n                        var displayTrail = trail.filter(function(p) { return p.ts >= displayCutoff; });\n                        if (displayTrail.length >= 2) {\n                            node.send({ payload: {\n                                name: 'trail-' + marker.name,\n                                line: displayTrail.map(function(p) { return { lat: p.lat, lng: p.lon }; }),\n                                color: marker.iconColor,\n                                weight: 3,\n                                opacity: 0.6,\n                                layer: 'TAK Tracks',\n                                ttl: 600\n                            }});\n                        }\n                    }\n                }\n            } catch(e) { node.warn('CoT parse error: ' + e.message); }\n        }\n    });\n\n    s.on('error', function(e) {\n        node.warn('FTS socket error: ' + e.message);\n        var t = context.get('kaTimer');\n        if (t) { clearInterval(t); context.set('kaTimer', null); }\n        s.destroy();\n        context.set('socket', null);\n    });\n\n    s.on('close', function() {\n        node.warn('FTS socket closed (' + myUid + ')');\n        var t = context.get('kaTimer');\n        if (t) { clearInterval(t); context.set('kaTimer', null); }\n        context.set('socket', null);\n        if (context.get('closing')) return;\n        var retries = context.get('retryCount') || 0;\n        if (retries < 5) {\n            context.set('retryCount', retries + 1);\n            var delay = (retries + 1) * 2000;\n            node.warn('Retry ' + (retries + 1) + '/5 in ' + (delay/1000) + 's');\n            setTimeout(function() { connectToFTS(); }, delay);\n        } else {\n            node.warn('FTS: 5 retries exhausted, waiting for inject cycle');\n            context.set('retryCount', 0);\n        }\n    });\n\n    context.set('socket', s);\n}\n\ncontext.set('closing', false);\nconnectToFTS();\n\n// Periodic color refresh \u2014 recalculate fade colors every 30s and remove expired markers.\n// Clear stale deserialized timer from persisted context\nvar _rt = context.get('refreshTimer');\nif (_rt && typeof _rt.ref !== 'function') {\n    context.set('refreshTimer', null);\n}\n\nif (!context.get('refreshTimer')) {\n    var refreshTimer = setInterval(function() {\n        var cache = flow.get('takMarkers') || {};\n        var result = maps.refreshMarkerColors(cache);\n\n        // Send updated colors to worldmap\n        for (var i = 0; i < result.updated.length; i++) {\n            node.send({ payload: result.updated[i] });\n        }\n\n        // Remove fully expired markers\n        for (var j = 0; j < result.expired.length; j++) {\n            node.send({ payload: { name: result.expired[j], deleted: true } });\n            delete cache[result.expired[j]];\n        }\n\n        if (result.updated.length > 0 || result.expired.length > 0) {\n            flow.set('takMarkers', cache);\n        }\n        if (result.expired.length > 0) {\n            node.log('Refresh: updated ' + result.updated.length + ' colors, removed ' + result.expired.length + ' expired');\n        }\n\n        // Refresh tracker trails \u2014 re-emit polylines with updated colors and TTL\n        var history = flow.get('trackerHistory') || {};\n        var trailDuration = flow.get('trailDuration');\n        if (trailDuration === undefined || trailDuration === null) trailDuration = 3600000;\n        if (trailDuration > 0) {\n            var displayCutoff = Date.now() - trailDuration;\n            var trackerKeys = Object.keys(history);\n            for (var t = 0; t < trackerKeys.length; t++) {\n                var tName = trackerKeys[t];\n                var tMarker = cache[tName];\n                if (!tMarker) continue;\n                var tTrail = history[tName].filter(function(p) { return p.ts >= displayCutoff; });\n                if (tTrail.length >= 2) {\n                    node.send({ payload: {\n                        name: 'trail-' + tName,\n                        line: tTrail.map(function(p) { return { lat: p.lat, lng: p.lon }; }),\n                        color: tMarker.iconColor,\n                        weight: 3,\n                        opacity: 0.6,\n                        layer: 'TAK Tracks',\n                        ttl: 600\n                    }});\n                }\n            }\n        }\n    }, 30000);\n    context.set('refreshTimer', refreshTimer);\n}\n\nreturn null;",
+    "func": "var net  = global.get('net');\nvar maps = global.get('cotMaps');\n\n// Pre-built CoT XML passthrough (drawing \u2192 ATAK)\nif (msg.payload && typeof msg.payload === 'string' && msg.payload.startsWith('<?xml')) {\n    var s = context.get('socket');\n    if (s && typeof s.write === 'function' && !s.destroyed) {\n        s.write(msg.payload);\n        node.log('Drawing CoT sent (' + msg.payload.length + ' bytes)');\n    } else {\n        node.warn('FTS socket not ready, drawing CoT dropped');\n    }\n    return null;\n}\n\nvar socket  = context.get('socket');\nvar kaTimer = context.get('kaTimer');\n\n// Validate socket is a real net.Socket, not a stale deserialized JSON object\nif (socket && typeof socket.write !== 'function') {\n    context.set('socket', null);\n    socket = null;\n}\n\nif (socket && !socket.destroyed) {\n    return null;\n}\n\nif (kaTimer) { clearInterval(kaTimer); context.set('kaTimer', null); }\n\nfunction connectToFTS() {\n    var existing = context.get('socket');\n    if (existing && typeof existing.write === 'function' && !existing.destroyed) return;\n\n    var myUid = 'CrypTAK-NR-WebMap';\n\n    var s = new net.Socket();\n    var buf = '';\n\n    s.connect(8087, 'freetakserver', function() {\n        node.log('FTS connected as ' + myUid);\n        s.write(maps.makeSA(myUid));\n        var timer = setInterval(function() {\n            if (s && !s.destroyed) {\n                s.write(maps.makeSA(myUid));\n            } else {\n                clearInterval(timer);\n                context.set('kaTimer', null);\n            }\n        }, 240000);\n        context.set('kaTimer', timer);\n    });\n\n    s.on('data', function(data) {\n        context.set('retryCount', 0);\n        buf += data.toString();\n        var endTag = '</event>';\n        var idx;\n        while ((idx = buf.indexOf(endTag)) !== -1) {\n            var xml = buf.substring(0, idx + endTag.length);\n            buf = buf.substring(idx + endTag.length);\n            try {\n                var marker = maps.parseCotToMarker(xml);\n                if (!marker) {\n                    // Try drawing parser for u-d-* types\n                    var typeCheck = xml.match(/\\btype=\"([^\"]+)\"/);\n                    if (typeCheck && typeCheck[1].startsWith(\"u-d-\")) {\n                        var drawing = maps.parseCotDrawing(xml);\n                        if (drawing) {\n                            node.send({ payload: drawing });\n                        }\n                    }\n                    continue;\n                }\n\n                var cache = flow.get('takMarkers') || {};\n                if (marker.deleted) {\n                    delete cache[marker.name];\n                    flow.set('takMarkers', cache);\n                    node.send({ payload: marker });\n                    continue;\n                }\n\n                // Tracker overrides: apply WebMap-set affiliation, asset type, and SIDC\n                if (marker._tracker) {\n                    var affOverrides = flow.get('trackerAffiliations') || {};\n                    var aff = affOverrides[marker.name];\n                    if (aff) {\n                        marker.iconColor = maps.colorMap[aff] || marker.iconColor;\n                        marker.layer = maps.affiliationNames[aff] || marker.layer;\n                        marker._baseColor = marker.iconColor;\n                    }\n                    // Apply asset type SIDC (overrides default icon)\n                    var assetTypes = flow.get('trackerAssetTypes') || {};\n                    var assetType = assetTypes[marker.name];\n                    if (assetType) {\n                        marker.SIDC = maps.buildTrackerSIDC(aff || 'f', assetType);\n                        delete marker.icon;\n                    } else {\n                        // Fall back to icon override if no asset type set\n                        var iconOverrides = flow.get('trackerIcons') || {};\n                        var customIcon = iconOverrides[marker.name];\n                        if (customIcon) {\n                            marker.icon = customIcon;\n                        }\n                    }\n                }\n\n                cache[marker.name] = marker;\n\n                // Purge stale markers from cache (every 100th write)\n                var writeCount = (context.get('writeCount') || 0) + 1;\n                context.set('writeCount', writeCount);\n                if (writeCount % 100 === 0) {\n                    var now = Date.now();\n                    var cKeys = Object.keys(cache);\n                    for (var ci = 0; ci < cKeys.length; ci++) {\n                        var cm = cache[cKeys[ci]];\n                        if (cm && cm._staleMs && cm._staleMs < now) {\n                            delete cache[cKeys[ci]];\n                        }\n                    }\n                }\n                flow.set('takMarkers', cache);\n                node.send({ payload: marker });\n\n                // Tracker trail: store position history and emit polyline\n                if (marker._tracker) {\n                    var history = flow.get('trackerHistory') || {};\n                    var trail = history[marker.name] || [];\n                    trail.push({ lat: marker.lat, lon: marker.lon, ts: Date.now() });\n\n                    // Trim to 24h\n                    var cutoff = Date.now() - 24 * 3600000;\n                    trail = trail.filter(function(p) { return p.ts >= cutoff; });\n                    history[marker.name] = trail;\n                    flow.set('trackerHistory', history);\n\n                    // Emit polyline to worldmap\n                    var trailDuration = flow.get('trailDuration');\n                    if (trailDuration === undefined || trailDuration === null) trailDuration = 3600000;\n                    if (trailDuration > 0 && trail.length >= 2) {\n                        var displayCutoff = Date.now() - trailDuration;\n                        var displayTrail = trail.filter(function(p) { return p.ts >= displayCutoff; });\n                        if (displayTrail.length >= 2) {\n                            node.send({ payload: {\n                                name: 'trail-' + marker.name,\n                                line: displayTrail.map(function(p) { return { lat: p.lat, lng: p.lon }; }),\n                                color: marker.iconColor,\n                                weight: 3,\n                                opacity: 0.6,\n                                layer: 'TAK Tracks',\n                                ttl: 600\n                            }});\n                        }\n                    }\n                }\n            } catch(e) { node.warn('CoT parse error: ' + e.message); }\n        }\n    });\n\n    s.on('error', function(e) {\n        node.warn('FTS socket error: ' + e.message);\n        var t = context.get('kaTimer');\n        if (t) { clearInterval(t); context.set('kaTimer', null); }\n        s.destroy();\n        context.set('socket', null);\n    });\n\n    s.on('close', function() {\n        node.warn('FTS socket closed (' + myUid + ')');\n        var t = context.get('kaTimer');\n        if (t) { clearInterval(t); context.set('kaTimer', null); }\n        context.set('socket', null);\n        if (context.get('closing')) return;\n        var retries = context.get('retryCount') || 0;\n        if (retries < 5) {\n            context.set('retryCount', retries + 1);\n            var delay = (retries + 1) * 2000;\n            node.warn('Retry ' + (retries + 1) + '/5 in ' + (delay/1000) + 's');\n            setTimeout(function() { connectToFTS(); }, delay);\n        } else {\n            node.warn('FTS: 5 retries exhausted, waiting for inject cycle');\n            context.set('retryCount', 0);\n        }\n    });\n\n    context.set('socket', s);\n}\n\ncontext.set('closing', false);\nconnectToFTS();\n\n// Periodic color refresh \u2014 recalculate fade colors every 30s and remove expired markers.\n// Clear stale deserialized timer from persisted context\nvar _rt = context.get('refreshTimer');\nif (_rt && typeof _rt.ref !== 'function') {\n    context.set('refreshTimer', null);\n}\n\nif (!context.get('refreshTimer')) {\n    var refreshTimer = setInterval(function() {\n        var cache = flow.get('takMarkers') || {};\n        var result = maps.refreshMarkerColors(cache);\n\n        // Send updated colors to worldmap\n        for (var i = 0; i < result.updated.length; i++) {\n            node.send({ payload: result.updated[i] });\n        }\n\n        // Remove fully expired markers\n        for (var j = 0; j < result.expired.length; j++) {\n            node.send({ payload: { name: result.expired[j], deleted: true } });\n            delete cache[result.expired[j]];\n        }\n\n        if (result.updated.length > 0 || result.expired.length > 0) {\n            flow.set('takMarkers', cache);\n        }\n        if (result.expired.length > 0) {\n            node.log('Refresh: updated ' + result.updated.length + ' colors, removed ' + result.expired.length + ' expired');\n        }\n\n        // Refresh tracker trails \u2014 re-emit polylines with updated colors and TTL\n        var history = flow.get('trackerHistory') || {};\n        var trailDuration = flow.get('trailDuration');\n        if (trailDuration === undefined || trailDuration === null) trailDuration = 3600000;\n        if (trailDuration > 0) {\n            var displayCutoff = Date.now() - trailDuration;\n            var trackerKeys = Object.keys(history);\n            for (var t = 0; t < trackerKeys.length; t++) {\n                var tName = trackerKeys[t];\n                var tMarker = cache[tName];\n                if (!tMarker) continue;\n                var tTrail = history[tName].filter(function(p) { return p.ts >= displayCutoff; });\n                if (tTrail.length >= 2) {\n                    node.send({ payload: {\n                        name: 'trail-' + tName,\n                        line: tTrail.map(function(p) { return { lat: p.lat, lng: p.lon }; }),\n                        color: tMarker.iconColor,\n                        weight: 3,\n                        opacity: 0.6,\n                        layer: 'TAK Tracks',\n                        ttl: 600\n                    }});\n                }\n            }\n        }\n    }, 30000);\n    context.set('refreshTimer', refreshTimer);\n}\n\nreturn null;",
     "finalize": "\ncontext.set('closing', true);\nvar s = context.get('socket');  if (s && typeof s.destroy === 'function') s.destroy();\nvar t = context.get('kaTimer'); if (t && typeof t.ref === 'function') clearInterval(t);\nvar rt = context.get('refreshTimer'); if (rt && typeof rt.ref === 'function') clearInterval(rt);\n",
     "outputs": 1,
     "noerr": 0,
     "x": 420,
     "y": 100,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "inj_states",
@@ -50,7 +58,11 @@
     "payloadType": "date",
     "x": 160,
     "y": 200,
-    "wires": [["http_states"]]
+    "wires": [
+      [
+        "http_states"
+      ]
+    ]
   },
   {
     "id": "http_states",
@@ -70,7 +82,11 @@
     "headers": [],
     "x": 380,
     "y": 200,
-    "wires": [["fmt_states"]]
+    "wires": [
+      [
+        "fmt_states"
+      ]
+    ]
   },
   {
     "id": "fmt_states",
@@ -82,7 +98,11 @@
     "noerr": 0,
     "x": 590,
     "y": 200,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "inj_counties",
@@ -99,7 +119,11 @@
     "payloadType": "date",
     "x": 160,
     "y": 260,
-    "wires": [["http_counties"]]
+    "wires": [
+      [
+        "http_counties"
+      ]
+    ]
   },
   {
     "id": "http_counties",
@@ -119,7 +143,11 @@
     "headers": [],
     "x": 385,
     "y": 260,
-    "wires": [["fmt_counties"]]
+    "wires": [
+      [
+        "fmt_counties"
+      ]
+    ]
   },
   {
     "id": "fmt_counties",
@@ -131,7 +159,11 @@
     "noerr": 0,
     "x": 595,
     "y": 260,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "inj_noaa",
@@ -148,7 +180,11 @@
     "payloadType": "date",
     "x": 150,
     "y": 360,
-    "wires": [["setup_noaa"]]
+    "wires": [
+      [
+        "setup_noaa"
+      ]
+    ]
   },
   {
     "id": "setup_noaa",
@@ -160,7 +196,11 @@
     "noerr": 0,
     "x": 350,
     "y": 360,
-    "wires": [["http_noaa"]]
+    "wires": [
+      [
+        "http_noaa"
+      ]
+    ]
   },
   {
     "id": "http_noaa",
@@ -180,7 +220,11 @@
     "headers": [],
     "x": 560,
     "y": 360,
-    "wires": [["fmt_noaa"]]
+    "wires": [
+      [
+        "fmt_noaa"
+      ]
+    ]
   },
   {
     "id": "fmt_noaa",
@@ -192,7 +236,11 @@
     "noerr": 0,
     "x": 760,
     "y": 360,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "mqtt_broker1",
@@ -239,19 +287,25 @@
     "payloadType": "date",
     "x": 170,
     "y": 480,
-    "wires": [["fn_owned"]]
+    "wires": [
+      [
+        "fn_owned"
+      ]
+    ]
   },
   {
     "id": "fn_owned",
     "type": "function",
     "z": "tab1",
     "name": "Mesh Node Whitelist",
-    "func": "// \u2500\u2500 Owned Meshtastic nodes whitelist \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n// Add your nodes as '!hexid': { name: 'display name', bridge: true/false }\nvar ownedNodes = {\n    '!55c6ddbc': { name: 'CrypTAK-BRG01',  bridge: true },  // T-Beam bridge\n    '!a51e2838': { name: 'CrypTAK Base' },    // RAK4631 base station (fixed)\n    '!3db00f2c': { name: 'CrypTAK-RLY01' },   // RAK4631 relay\n    '!c6eadff0': { name: 'CrypTAK-SOL01' },   // RAK4631 solar relay prototype\n    '!9aa4baf0': { name: 'CrypTAK-VHC01' },   // RAK4631 vehicle node\n    '!dce7b97d': { name: 'CrypTAK-TRK01' },   // Tracker (T-Echo)\n};\n\n// Build flat name lookup for backward compat + flow storage\nvar ownedFlat = {};\nvar ids = Object.keys(ownedNodes);\nfor (var i = 0; i < ids.length; i++) {\n    ownedFlat[ids[i]] = ownedNodes[ids[i]].name;\n}\nflow.set('meshOwnedNodes', ownedFlat);\nflow.set('meshOwnedConfig', ownedNodes);\n\n// Pre-seed registry so owned nodes show correct names immediately,\n// even before their nodeinfo arrives via MQTT.\nvar registry = flow.get('meshRegistry') || {};\nfor (var j = 0; j < ids.length; j++) {\n    registry[ids[j]] = registry[ids[j]] || { id: ids[j] };\n    if (!registry[ids[j]].name) registry[ids[j]].name = ownedNodes[ids[j]].name;\n}\nflow.set('meshRegistry', registry);\n\nnode.log('Mesh whitelist loaded: ' + ids.length + ' owned nodes');\nreturn null;",
+    "func": "// Load node registry from nodes.yaml (single source of truth)\nvar registry = global.get('nodesRegistry');\nif (!registry || !registry.nodes) {\n    node.warn('nodesRegistry not loaded \u2014 check nodes.yaml mount');\n    return null;\n}\n\nvar ownedNodes = {};\nvar ownedFlat = {};\nvar nodes = registry.nodes;\nvar names = Object.keys(nodes);\n\nfor (var i = 0; i < names.length; i++) {\n    var name = names[i];\n    var cfg = nodes[name];\n    var id = cfg.id;\n    if (!id) continue; // skip nodes without hex ID (not yet provisioned)\n\n    ownedNodes[id] = {\n        name: name,\n        bridge: !!cfg.bridge,\n        cotType: cfg.cot_type || 'a-f-G-E-S'\n    };\n    ownedFlat[id] = name;\n}\n\nflow.set('meshOwnedNodes', ownedFlat);\nflow.set('meshOwnedConfig', ownedNodes);\n\n// Pre-seed registry so owned nodes show correct names immediately\nvar meshRegistry = flow.get('meshRegistry') || {};\nvar ids = Object.keys(ownedNodes);\nfor (var j = 0; j < ids.length; j++) {\n    meshRegistry[ids[j]] = meshRegistry[ids[j]] || { id: ids[j] };\n    if (!meshRegistry[ids[j]].name) meshRegistry[ids[j]].name = ownedNodes[ids[j]].name;\n}\nflow.set('meshRegistry', meshRegistry);\n\nnode.log('Mesh whitelist loaded from nodes.yaml: ' + ids.length + ' owned nodes');\nreturn null;",
     "outputs": 1,
     "noerr": 0,
     "x": 390,
     "y": 480,
-    "wires": [[]]
+    "wires": [
+      []
+    ]
   },
   {
     "id": "mqtt_mesh",
@@ -268,7 +322,11 @@
     "inputs": 0,
     "x": 170,
     "y": 560,
-    "wires": [["fn_mesh"]]
+    "wires": [
+      [
+        "fn_mesh"
+      ]
+    ]
   },
   {
     "id": "fn_mesh",
@@ -280,7 +338,11 @@
     "noerr": 0,
     "x": 390,
     "y": 560,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "wmap1",
@@ -321,19 +383,28 @@
     "path": "/tak-map",
     "x": 170,
     "y": 640,
-    "wires": [["fn_on_connect", "fn_draw_to_cot"]]
+    "wires": [
+      [
+        "fn_on_connect",
+        "fn_draw_to_cot"
+      ]
+    ]
   },
   {
     "id": "fn_on_connect",
     "type": "function",
     "z": "tab1",
     "name": "Replay on Connect",
-    "func": "if (!msg.payload || msg.payload.action !== 'connected') return null;\nvar sid = msg._sessionid;\nvar msgs = [];\n\n// Branding\nmsgs.push({ payload: { command: { toptitle: 'CrypTAK WebMap' } }, _sessionid: sid });\nmsgs.push({ payload: { command: { toplogo: '/cryptak-logo.png' } }, _sessionid: sid });\nmsgs.push({ payload: { command: { coords: 'mgrs' } }, _sessionid: sid });\nvar legend = flow.get('legendHtml');\nif (legend) msgs.push({ payload: { command: { legend: legend } }, _sessionid: sid });\n\n// GeoJSON overlays\nvar stGeo = flow.get('statesGeoJSON');\nif (stGeo) msgs.push({ payload: { command: { map: { overlay: 'US States', geojson: stGeo, opt: { style: \"function() { return { color: '#444', weight: 1.5, fill: false } }\" }, visible: false, fit: false, clickable: false } } }, _sessionid: sid });\nvar coGeo = flow.get('countiesGeoJSON');\nif (coGeo) msgs.push({ payload: { command: { map: { overlay: 'US Counties', geojson: coGeo, opt: { style: \"function() { return { color: '#888', weight: 0.7, fill: false } }\" }, visible: false, fit: false, clickable: false } } }, _sessionid: sid });\nvar noaaGeo = flow.get('noaaGeoJSON');\n// worldmap's overlay+geojson handler auto-replaces, no clear needed\nif (noaaGeo && noaaGeo.features && noaaGeo.features.length > 0) msgs.push({ payload: { command: { map: { overlay: 'NOAA Alerts', geojson: noaaGeo, visible: true, fit: false } } }, _sessionid: sid });\n\n// TAK markers (skip stale)\nvar takCache = flow.get('takMarkers') || {};\nvar tKeys = Object.keys(takCache);\nvar replayNow = Date.now();\nvar staleCount = 0;\nfor (var i = 0; i < tKeys.length; i++) {\n    var m = takCache[tKeys[i]];\n    if (m && m._staleMs && m._staleMs < replayNow) {\n        staleCount++;\n        continue;\n    }\n    msgs.push({ payload: Object.assign({}, m), _sessionid: sid });\n}\nif (staleCount > 0) node.log('Skipped ' + staleCount + ' stale markers during replay');\n\n// Replay tracker trails\nvar history = flow.get('trackerHistory') || {};\nvar trailDuration = flow.get('trailDuration');\nif (trailDuration === undefined || trailDuration === null) trailDuration = 3600000;\nif (trailDuration > 0) {\n    var displayCutoff = Date.now() - trailDuration;\n    var tKeys2 = Object.keys(history);\n    for (var k = 0; k < tKeys2.length; k++) {\n        var tkName = tKeys2[k];\n        var tkMarker = takCache[tkName];\n        if (!tkMarker) continue;\n        var tTrail = history[tkName].filter(function(p) { return p.ts >= displayCutoff; });\n        if (tTrail.length >= 2) {\n            msgs.push({ payload: {\n                name: 'trail-' + tkName,\n                line: tTrail.map(function(p) { return { lat: p.lat, lng: p.lon }; }),\n                color: tkMarker.iconColor,\n                weight: 3, opacity: 0.6,\n                layer: 'TAK Tracks', ttl: 600\n            }, _sessionid: sid });\n        }\n    }\n}\n\n\n// Mesh topology lines\nvar meshTopology = flow.get('meshTopology') || {};\nvar meshReg = flow.get('meshRegistry') || {};\nvar topoSeen = {};\nvar topoSources = Object.keys(meshTopology);\nfor (var tl = 0; tl < topoSources.length; tl++) {\n    var tlFrom = topoSources[tl];\n    var tlEntry = meshTopology[tlFrom];\n    if (!tlEntry || !tlEntry.neighbors) continue;\n    var tlNbs = Object.keys(tlEntry.neighbors);\n    for (var tn = 0; tn < tlNbs.length; tn++) {\n        var tlTo = tlNbs[tn];\n        var epair = [tlFrom, tlTo].sort();\n        var ename = 'link-' + epair[0].replace('!','') + '-' + epair[1].replace('!','');\n        if (topoSeen[ename]) continue;\n        topoSeen[ename] = true;\n        var fnNode = meshReg[tlFrom];\n        var tnNode = meshReg[tlTo];\n        if (!fnNode || !fnNode.lat || !tnNode || !tnNode.lat) continue;\n        var lsnr = tlEntry.neighbors[tlTo];\n        if (meshTopology[tlTo] && meshTopology[tlTo].neighbors && meshTopology[tlTo].neighbors[tlFrom] !== undefined) {\n            lsnr = Math.max(lsnr, meshTopology[tlTo].neighbors[tlFrom]);\n        }\n        var lcolor, lweight;\n        if (lsnr >= 5)       { lcolor = '#00DD00'; lweight = 3; }\n        else if (lsnr >= 0)  { lcolor = '#AADD00'; lweight = 2; }\n        else if (lsnr >= -7) { lcolor = '#FFAA00'; lweight = 2; }\n        else                 { lcolor = '#FF4444'; lweight = 1; }\n        msgs.push({ payload: {\n            name: ename,\n            line: [{ lat: fnNode.lat, lng: fnNode.lon }, { lat: tnNode.lat, lng: tnNode.lon }],\n            color: lcolor, weight: lweight, opacity: 0.75,\n            layer: 'Mesh Links', ttl: 1800,\n            tooltip: lsnr.toFixed(1) + ' dB'\n        }, _sessionid: sid });\n    }\n}\n\nnode.log('Replaying ' + msgs.length + ' items to session ' + sid);\nreturn [msgs];",
+    "func": "if (!msg.payload || msg.payload.action !== 'connected') return null;\nvar maps = global.get('cotMaps');\nvar sid = msg._sessionid;\nvar msgs = [];\n\n// Branding\nmsgs.push({ payload: { command: { toptitle: 'CrypTAK WebMap' } }, _sessionid: sid });\nmsgs.push({ payload: { command: { toplogo: '/cryptak-logo.png' } }, _sessionid: sid });\nmsgs.push({ payload: { command: { coords: 'mgrs' } }, _sessionid: sid });\nvar legend = flow.get('legendHtml');\nif (legend) msgs.push({ payload: { command: { legend: legend } }, _sessionid: sid });\n\n// GeoJSON overlays\nvar stGeo = flow.get('statesGeoJSON');\nif (stGeo) msgs.push({ payload: { command: { map: { overlay: 'US States', geojson: stGeo, opt: { style: \"function() { return { color: '#444', weight: 1.5, fill: false } }\" }, visible: false, fit: false, clickable: false } } }, _sessionid: sid });\nvar coGeo = flow.get('countiesGeoJSON');\nif (coGeo) msgs.push({ payload: { command: { map: { overlay: 'US Counties', geojson: coGeo, opt: { style: \"function() { return { color: '#888', weight: 0.7, fill: false } }\" }, visible: false, fit: false, clickable: false } } }, _sessionid: sid });\nvar noaaGeo = flow.get('noaaGeoJSON');\n// worldmap's overlay+geojson handler auto-replaces, no clear needed\nif (noaaGeo && noaaGeo.features && noaaGeo.features.length > 0) msgs.push({ payload: { command: { map: { overlay: 'NOAA Alerts', geojson: noaaGeo, visible: true, fit: false } } }, _sessionid: sid });\n\n// TAK markers (skip stale)\nvar takCache = flow.get('takMarkers') || {};\nvar tKeys = Object.keys(takCache);\nvar replayNow = Date.now();\nvar staleCount = 0;\nfor (var i = 0; i < tKeys.length; i++) {\n    var m = takCache[tKeys[i]];\n    if (m && m._staleMs && m._staleMs < replayNow) {\n        staleCount++;\n        continue;\n    }\n    msgs.push({ payload: Object.assign({}, m), _sessionid: sid });\n}\nif (staleCount > 0) node.log('Skipped ' + staleCount + ' stale markers during replay');\n\n// Replay tracker trails\nvar history = flow.get('trackerHistory') || {};\nvar trailDuration = flow.get('trailDuration');\nif (trailDuration === undefined || trailDuration === null) trailDuration = 3600000;\nif (trailDuration > 0) {\n    var displayCutoff = Date.now() - trailDuration;\n    var tKeys2 = Object.keys(history);\n    for (var k = 0; k < tKeys2.length; k++) {\n        var tkName = tKeys2[k];\n        var tkMarker = takCache[tkName];\n        if (!tkMarker) continue;\n        var tTrail = history[tkName].filter(function(p) { return p.ts >= displayCutoff; });\n        if (tTrail.length >= 2) {\n            msgs.push({ payload: {\n                name: 'trail-' + tkName,\n                line: tTrail.map(function(p) { return { lat: p.lat, lng: p.lon }; }),\n                color: tkMarker.iconColor,\n                weight: 3, opacity: 0.6,\n                layer: 'TAK Tracks', ttl: 600\n            }, _sessionid: sid });\n        }\n    }\n}\n\n\n// Mesh topology lines\nvar meshTopology = flow.get('meshTopology') || {};\nvar meshReg = flow.get('meshRegistry') || {};\nvar topoSeen = {};\nvar topoSources = Object.keys(meshTopology);\nfor (var tl = 0; tl < topoSources.length; tl++) {\n    var tlFrom = topoSources[tl];\n    var tlEntry = meshTopology[tlFrom];\n    if (!tlEntry || !tlEntry.neighbors) continue;\n    var tlNbs = Object.keys(tlEntry.neighbors);\n    for (var tn = 0; tn < tlNbs.length; tn++) {\n        var tlTo = tlNbs[tn];\n        var epair = [tlFrom, tlTo].sort();\n        var ename = 'link-' + epair[0].replace('!','') + '-' + epair[1].replace('!','');\n        if (topoSeen[ename]) continue;\n        topoSeen[ename] = true;\n        var fnNode = meshReg[tlFrom];\n        var tnNode = meshReg[tlTo];\n        if (!fnNode || !fnNode.lat || !tnNode || !tnNode.lat) continue;\n        var lsnr = tlEntry.neighbors[tlTo];\n        if (meshTopology[tlTo] && meshTopology[tlTo].neighbors && meshTopology[tlTo].neighbors[tlFrom] !== undefined) {\n            lsnr = Math.max(lsnr, meshTopology[tlTo].neighbors[tlFrom]);\n        }\n        var lStyle = maps.snrToLinkStyle(lsnr);\n        var lcolor = lStyle.color, lweight = lStyle.weight;\n        msgs.push({ payload: {\n            name: ename,\n            line: [{ lat: fnNode.lat, lng: fnNode.lon }, { lat: tnNode.lat, lng: tnNode.lon }],\n            color: lcolor, weight: lweight, opacity: 0.75,\n            layer: 'Mesh Links', ttl: 1800,\n            tooltip: lsnr.toFixed(1) + ' dB'\n        }, _sessionid: sid });\n    }\n}\n\nnode.log('Replaying ' + msgs.length + ' items to session ' + sid);\nreturn [msgs];",
     "outputs": 1,
     "noerr": 0,
     "x": 390,
     "y": 640,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "inj_branding",
@@ -350,7 +421,11 @@
     "payloadType": "date",
     "x": 180,
     "y": 40,
-    "wires": [["fn_branding"]]
+    "wires": [
+      [
+        "fn_branding"
+      ]
+    ]
   },
   {
     "id": "fn_branding",
@@ -362,7 +437,11 @@
     "noerr": 0,
     "x": 430,
     "y": 40,
-    "wires": [["wmap1"]]
+    "wires": [
+      [
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "fn_draw_to_cot",
@@ -374,7 +453,11 @@
     "noerr": 0,
     "x": 390,
     "y": 720,
-    "wires": [["fn_cot"]]
+    "wires": [
+      [
+        "fn_cot"
+      ]
+    ]
   },
   {
     "id": "http_in_clients",
@@ -387,7 +470,11 @@
     "swaggerDoc": "",
     "x": 170,
     "y": 880,
-    "wires": [["fn_serve_clients"]]
+    "wires": [
+      [
+        "fn_serve_clients"
+      ]
+    ]
   },
   {
     "id": "fn_serve_clients",
@@ -399,7 +486,11 @@
     "noerr": 0,
     "x": 390,
     "y": 880,
-    "wires": [["http_out_clients"]]
+    "wires": [
+      [
+        "http_out_clients"
+      ]
+    ]
   },
   {
     "id": "http_out_clients",
@@ -423,19 +514,28 @@
     "swaggerDoc": "",
     "x": 200,
     "y": 960,
-    "wires": [["fn_tracker_aff"]]
+    "wires": [
+      [
+        "fn_tracker_aff"
+      ]
+    ]
   },
   {
     "id": "fn_tracker_aff",
     "type": "function",
     "z": "tab1",
     "name": "Set Tracker Affiliation",
-    "func": "var body = msg.payload;\nvar name = body && body.name;\nvar aff = body && body.affiliation;\nif (!name || !aff || 'fsh'.indexOf(aff) === -1) {\n    msg.payload = { error: 'name and affiliation (f/s/h) required' };\n    msg.statusCode = 400;\n    return msg;\n}\nvar overrides = flow.get('trackerAffiliations') || {};\noverrides[name] = aff;\nflow.set('trackerAffiliations', overrides);\n\n// Re-render the marker with new color immediately\nvar maps = global.get('cotMaps');\nvar cache = flow.get('takMarkers') || {};\nvar marker = cache[name];\nif (marker) {\n    marker.iconColor = maps.colorMap[aff] || marker.iconColor;\n    marker.layer = maps.affiliationNames[aff] || marker.layer;\n    marker._baseColor = marker.iconColor;\n    // Apply existing icon override\n    var iconOverrides = flow.get('trackerIcons') || {};\n    var customIcon = iconOverrides[name];\n    if (customIcon) marker.icon = customIcon;\n    // Rebuild popup with new color\n    var r = maps.parseRemarks('');\n    marker.popup = maps.buildPopup(name, r, marker.iconColor, marker._battery || 0, true);\n    cache[name] = marker;\n    flow.set('takMarkers', cache);\n    node.send({ payload: marker });\n}\nmsg.payload = { ok: true, name: name, affiliation: aff };\nreturn msg;",
+    "func": "var body = msg.payload;\nvar name = body && body.name;\nvar aff = body && body.affiliation;\nif (!name || !aff || 'fsh'.indexOf(aff) === -1) {\n    msg.payload = { error: 'name and affiliation (f/s/h) required' };\n    msg.statusCode = 400;\n    return msg;\n}\nvar overrides = flow.get('trackerAffiliations') || {};\noverrides[name] = aff;\nflow.set('trackerAffiliations', overrides);\n\n// Re-render the marker with new color and SIDC immediately\nvar maps = global.get('cotMaps');\nvar cache = flow.get('takMarkers') || {};\nvar marker = cache[name];\nif (marker) {\n    marker.iconColor = maps.colorMap[aff] || marker.iconColor;\n    marker.layer = maps.affiliationNames[aff] || marker.layer;\n    marker._baseColor = marker.iconColor;\n\n    // Regenerate SIDC with new affiliation\n    var assetTypes = flow.get('trackerAssetTypes') || {};\n    var assetType = assetTypes[name] || 'vehicle';\n    marker.SIDC = maps.buildTrackerSIDC(aff, assetType);\n    delete marker.icon; // use SIDC, not FA icon\n\n    // Rebuild popup with new color\n    var r = maps.parseRemarks('');\n    marker.popup = maps.buildPopup(name, r, marker.iconColor, marker._battery || 0, true);\n    cache[name] = marker;\n    flow.set('takMarkers', cache);\n    node.send({ payload: marker });\n}\nmsg.payload = { ok: true, name: name, affiliation: aff };\nreturn msg;",
     "outputs": 1,
     "noerr": 0,
     "x": 440,
     "y": 960,
-    "wires": [["http_out_tracker", "wmap1"]]
+    "wires": [
+      [
+        "http_out_tracker",
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "http_out_tracker",
@@ -459,7 +559,11 @@
     "swaggerDoc": "",
     "x": 210,
     "y": 1040,
-    "wires": [["fn_tracker_trail"]]
+    "wires": [
+      [
+        "fn_tracker_trail"
+      ]
+    ]
   },
   {
     "id": "fn_tracker_trail",
@@ -471,7 +575,12 @@
     "noerr": 0,
     "x": 440,
     "y": 1040,
-    "wires": [["http_out_tracker", "wmap1"]]
+    "wires": [
+      [
+        "http_out_tracker",
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "http_in_tracker_icon",
@@ -484,7 +593,11 @@
     "swaggerDoc": "",
     "x": 190,
     "y": 1120,
-    "wires": [["fn_tracker_icon"]]
+    "wires": [
+      [
+        "fn_tracker_icon"
+      ]
+    ]
   },
   {
     "id": "fn_tracker_icon",
@@ -496,7 +609,12 @@
     "noerr": 0,
     "x": 430,
     "y": 1120,
-    "wires": [["http_out_tracker", "wmap1"]]
+    "wires": [
+      [
+        "http_out_tracker",
+        "wmap1"
+      ]
+    ]
   },
   {
     "id": "http_in_mesh_nodes",
@@ -509,19 +627,27 @@
     "swaggerDoc": "",
     "x": 170,
     "y": 1120,
-    "wires": [["fn_mesh_nodes"]]
+    "wires": [
+      [
+        "fn_mesh_nodes"
+      ]
+    ]
   },
   {
     "id": "fn_mesh_nodes",
     "type": "function",
     "z": "tab1",
     "name": "Serve Mesh Nodes",
-    "func": "var registry    = flow.get('meshRegistry')    || {};\nvar ownedFlat   = flow.get('meshOwnedNodes')   || {};\nvar ownedConfig = flow.get('meshOwnedConfig')  || {};\nvar nowSec      = Math.floor(Date.now() / 1000);\nvar COMMUNITY_MAX_AGE = 48 * 3600; // prune community nodes not heard in 48h\n\nvar nodes = [];\nvar ids = Object.keys(registry);\nfor (var i = 0; i < ids.length; i++) {\n    var id = ids[i];\n    var n = registry[id];\n    var isOwned = ownedFlat.hasOwnProperty(id);\n\n    // Skip owned nodes that were pre-seeded but never actually heard\n    if (isOwned && !n.lastHeard) continue;\n\n    // Skip community nodes older than threshold\n    if (!isOwned && n.lastHeard && (nowSec - n.lastHeard) > COMMUNITY_MAX_AGE) continue;\n    if (!isOwned && !n.lastHeard) continue;\n\n    // Bridge flag from config (not inferred from missing data)\n    var cfg = ownedConfig[id] || {};\n\n    nodes.push({\n        id:           id,\n        name:         ownedFlat[id] || n.name || id,\n        shortName:    n.shortName   || '',\n        hwModel:      n.hwModel     !== undefined ? n.hwModel      : null,\n        role:         n.role        !== undefined ? n.role         : null,\n        lat:          n.lat         || null,\n        lon:          n.lon         || null,\n        battery:      n.battery     || 0,\n        voltage:      n.voltage     || 0,\n        channelUtil:  n.channelUtil || 0,\n        airUtilTx:    n.airUtilTx   || 0,\n        uptime:       n.uptime      || 0,\n        snrToBridge:  n.snrToBridge  !== undefined ? n.snrToBridge  : null,\n        hopsToBridge: n.hopsToBridge !== undefined ? n.hopsToBridge : null,\n        rssi:         n.rssi         !== undefined ? n.rssi         : null,\n        lastHeard:    n.lastHeard    || 0,\n        hasPosition:  !!(n.lat && n.lon),\n        owned:        isOwned,\n        bridge:       !!cfg.bridge\n    });\n}\n\n// Owned first, then by lastHeard desc within each group\nnodes.sort(function(a, b) {\n    if (a.owned !== b.owned) return a.owned ? -1 : 1;\n    return (b.lastHeard || 0) - (a.lastHeard || 0);\n});\n\nmsg.payload = JSON.stringify({ nodes: nodes, ts: Date.now() });\nmsg.headers = { 'Content-Type': 'application/json' };\nreturn msg;",
+    "func": "var registry    = flow.get('meshRegistry')    || {};\nvar ownedFlat   = flow.get('meshOwnedNodes')   || {};\nvar ownedConfig = flow.get('meshOwnedConfig')  || {};\nvar maps        = global.get('cotMaps');\nvar nowSec      = Math.floor(Date.now() / 1000);\nvar COMMUNITY_MAX_AGE = 48 * 3600; // prune community nodes not heard in 48h\n\nvar nodes = [];\nvar ids = Object.keys(registry);\nfor (var i = 0; i < ids.length; i++) {\n    var id = ids[i];\n    var n = registry[id];\n    var isOwned = ownedFlat.hasOwnProperty(id);\n\n    // Skip owned nodes that were pre-seeded but never actually heard\n    if (isOwned && !n.lastHeard) continue;\n\n    // Skip community nodes older than threshold\n    if (!isOwned && n.lastHeard && (nowSec - n.lastHeard) > COMMUNITY_MAX_AGE) continue;\n    if (!isOwned && !n.lastHeard) continue;\n\n    // Bridge flag and cotType from config\n    var cfg = ownedConfig[id] || {};\n    var cotType = cfg.cotType || 'a-n-G-E-S'; // default: unknown ground equipment sensor\n\n    // Generate SIDC from cotType\n    var sidc = null;\n    if (maps && maps.cotTypeToSIDC) {\n        sidc = maps.cotTypeToSIDC(cotType.split('-'));\n    }\n\n    nodes.push({\n        id:           id,\n        name:         ownedFlat[id] || n.name || id,\n        shortName:    n.shortName   || '',\n        hwModel:      n.hwModel     !== undefined ? n.hwModel      : null,\n        role:         n.role        !== undefined ? n.role         : null,\n        lat:          n.lat         || null,\n        lon:          n.lon         || null,\n        battery:      n.battery     || 0,\n        voltage:      n.voltage     || 0,\n        channelUtil:  n.channelUtil || 0,\n        airUtilTx:    n.airUtilTx   || 0,\n        uptime:       n.uptime      || 0,\n        snrToBridge:  n.snrToBridge  !== undefined ? n.snrToBridge  : null,\n        hopsToBridge: n.hopsToBridge !== undefined ? n.hopsToBridge : null,\n        rssi:         n.rssi         !== undefined ? n.rssi         : null,\n        lastHeard:    n.lastHeard    || 0,\n        hasPosition:  !!(n.lat && n.lon),\n        owned:        isOwned,\n        bridge:       !!cfg.bridge,\n        sidc:         sidc\n    });\n}\n\n// Owned first, then by lastHeard desc within each group\nnodes.sort(function(a, b) {\n    if (a.owned !== b.owned) return a.owned ? -1 : 1;\n    return (b.lastHeard || 0) - (a.lastHeard || 0);\n});\n\nmsg.payload = JSON.stringify({ nodes: nodes, ts: Date.now() });\nmsg.headers = { 'Content-Type': 'application/json' };\nreturn msg;",
     "outputs": 1,
     "noerr": 0,
     "x": 390,
     "y": 1120,
-    "wires": [["http_out_mesh_nodes"]]
+    "wires": [
+      [
+        "http_out_mesh_nodes"
+      ]
+    ]
   },
   {
     "id": "http_out_mesh_nodes",
@@ -533,5 +659,43 @@
     "x": 590,
     "y": 1120,
     "wires": []
+  },
+  {
+    "id": "http_in_tracker_asset",
+    "type": "http in",
+    "z": "tab1",
+    "name": "",
+    "url": "/tak-map/api/tracker/asset-type",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 200,
+    "y": 1080,
+    "wires": [
+      [
+        "fn_tracker_asset"
+      ]
+    ]
+  },
+  {
+    "id": "fn_tracker_asset",
+    "type": "function",
+    "z": "tab1",
+    "name": "Set Tracker Asset Type",
+    "func": "var body = msg.payload;\nvar name = body && body.name;\nvar assetType = body && body.assetType;\nvar validTypes = ['vehicle', 'person', 'cargo', 'sensor', 'infrastructure'];\nif (!name || !assetType || validTypes.indexOf(assetType) === -1) {\n    msg.payload = { error: 'name and assetType (vehicle/person/cargo/sensor/infrastructure) required' };\n    msg.statusCode = 400;\n    return msg;\n}\n\nvar assetTypes = flow.get('trackerAssetTypes') || {};\nassetTypes[name] = assetType;\nflow.set('trackerAssetTypes', assetTypes);\n\n// Re-render the marker with new SIDC immediately\nvar maps = global.get('cotMaps');\nvar cache = flow.get('takMarkers') || {};\nvar marker = cache[name];\nif (marker) {\n    // Get current affiliation\n    var affOverrides = flow.get('trackerAffiliations') || {};\n    var aff = affOverrides[name] || 'f';\n\n    // Regenerate SIDC with current affiliation + new asset type\n    marker.SIDC = maps.buildTrackerSIDC(aff, assetType);\n    delete marker.icon; // use SIDC, not FA icon\n\n    // Update color/layer from affiliation\n    marker.iconColor = maps.colorMap[aff] || marker.iconColor;\n    marker.layer = maps.affiliationNames[aff] || marker.layer;\n    marker._baseColor = marker.iconColor;\n\n    // Rebuild popup\n    var r = maps.parseRemarks('');\n    marker.popup = maps.buildPopup(name, r, marker.iconColor, marker._battery || 0, true);\n    cache[name] = marker;\n    flow.set('takMarkers', cache);\n    node.send({ payload: marker });\n}\nmsg.payload = { ok: true, name: name, assetType: assetType };\nreturn msg;",
+    "outputs": 1,
+    "timeout": "",
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 440,
+    "y": 1080,
+    "wires": [
+      [
+        "http_out_tracker",
+        "wmap1"
+      ]
+    ]
   }
 ]

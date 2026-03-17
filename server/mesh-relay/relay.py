@@ -20,6 +20,7 @@ import socket
 import threading
 import time
 import xml.etree.ElementTree as ET
+import yaml
 from datetime import datetime, timedelta, timezone
 
 from meshtastic import mesh_pb2, portnums_pb2
@@ -50,19 +51,47 @@ POSITION_POLL_SECS = int(os.environ.get("POSITION_POLL_SECS", "120"))
 # offline nodes expire naturally via the CoT stale timeout.
 NODEDB_SEED_MAX_AGE_SECS = int(os.environ.get("NODEDB_SEED_MAX_AGE_SECS", "7200"))  # 2h
 
-# Known node IDs (without '!' prefix) treated as friendly (blue).
-# All other mesh nodes appear as neutral (green).
+# Load node registry from nodes.yaml (single source of truth).
+# Falls back to env vars for backward compatibility.
+_NODES_YAML = os.environ.get("NODES_YAML", "/app/firmware/nodes.yaml")
+
+def _load_node_registry(path: str) -> tuple[set[str], set[str]]:
+    """Parse nodes.yaml and return (friendly_ids, tracker_ids)."""
+    friendly: set[str] = set()
+    trackers: set[str] = set()
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f)
+        nodes = (data or {}).get("nodes", {})
+        for name, cfg in nodes.items():
+            node_id = (cfg.get("id") or "").lstrip("!")
+            if not node_id:
+                continue
+            friendly.add(node_id)  # all owned nodes are friendly
+            if cfg.get("tracker"):
+                trackers.add(node_id)
+        if friendly:
+            logger.info("Loaded %d nodes from %s (%d trackers)", len(friendly), path, len(trackers))
+    except FileNotFoundError:
+        logger.warning("nodes.yaml not found at %s — falling back to env vars", path)
+    except Exception as exc:
+        logger.warning("Failed to parse %s: %s — falling back to env vars", path, exc)
+    return friendly, trackers
+
+_yaml_friendly, _yaml_trackers = _load_node_registry(_NODES_YAML)
+
+# Env var fallback (backward compat — used if nodes.yaml not found/empty)
 _friendly_raw = os.environ.get("FRIENDLY_NODES", "")
-FRIENDLY_NODES: set[str] = {
+_env_friendly: set[str] = {
     n.strip().lstrip("!") for n in _friendly_raw.split(",") if n.strip()
 }
-
-# Tracker node IDs — these are GPS asset tags whose affiliation is
-# controlled from the WebMap (default: suspect/orange).
 _tracker_raw = os.environ.get("TRACKER_NODES", "")
-TRACKER_NODES: set[str] = {
+_env_trackers: set[str] = {
     n.strip().lstrip("!") for n in _tracker_raw.split(",") if n.strip()
 }
+
+FRIENDLY_NODES: set[str] = _yaml_friendly if _yaml_friendly else _env_friendly
+TRACKER_NODES: set[str] = _yaml_trackers if _yaml_trackers else _env_trackers
 
 # Telemetry cache — updated by telemetry handler, read during nodedb seed.
 _telemetry_cache: dict[str, dict] = {}

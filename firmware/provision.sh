@@ -45,6 +45,7 @@ die()  { err "$1"; exit 1; }
 mesh_cmd() {
     local output
     if output=$(meshtastic --port "$PORT" "$@" 2>&1); then
+        echo "$output"
         return 0
     fi
     # Serial ports can be flaky after rapid reconnects — wait and retry
@@ -286,47 +287,24 @@ role_label() {
 
 # ---------------------------------------------------------------------------
 # GPS hardware probe
-# Enables GPS mode, waits for firmware init, checks locationSource.
-# Sets HAS_GPS="true" if GPS module detected, "false" if not.
-# Reverts to NOT_PRESENT and sets fixed_position if no hardware found.
+# Checks if the firmware reports a GPS-capable hardware model.
+# If the board supports GPS, assume it's present — don't wait for a fix.
+# Sets HAS_GPS="true" or "false".
 # ---------------------------------------------------------------------------
 detect_gps() {
-    warn "GPS not specified in nodes.yaml — probing hardware..."
-    mesh_cmd --set position.gps_mode ENABLED >/dev/null 2>&1
-    sleep 10
+    warn "GPS not specified in nodes.yaml — checking hardware capability..."
 
-    local probe_info node_num hex_id
-    probe_info=$(mesh_cmd --info 2>&1)
+    # GPS-capable hardware families (boards that ship with or support GPS modules)
+    # RAK4631 on WisBlock base with GPS slot, T-Beam (built-in GPS), T-Echo, etc.
+    # Conservative: assume GPS-capable unless we know the board can't have one.
+    local no_gps_models="PORTDUINO|ANDROID_SIM|HELTEC_V3|HELTEC_V2|HELTEC_V1|HELTEC_WSL_V3|HELTEC_HT62|STATION_G1|STATION_G2|NRF52_UNKNOWN|RP2040_LORA|RPI_PICO|RPI_PICO2"
 
-    # Extract own node number from My info
-    node_num=$(echo "$probe_info" | grep -oP '"myNodeNum":\s*\K\d+' | head -1)
-    if [[ -z "$node_num" ]]; then
-        warn "GPS probe: could not read node info — assuming no GPS"
+    if echo "$HARDWARE" | grep -qEi "$no_gps_models"; then
         HAS_GPS="false"
-        mesh_cmd --set position.gps_mode NOT_PRESENT --set position.fixed_position true >/dev/null 2>&1
-        return
-    fi
-
-    # Convert to hex node ID (e.g. !3db00f2c)
-    hex_id=$(python3 -c "print('!' + format($node_num, '08x'))")
-
-    # Check if our node's position block shows LOC_INTERNAL (GPS hardware initialized)
-    if echo "$probe_info" | python3 -c "
-import sys, re
-raw = sys.stdin.read()
-hex_id = sys.argv[1]
-# Find our node's block and look for LOC_INTERNAL
-pattern = re.escape(hex_id) + r'.*?\"locationSource\":\s*\"LOC_INTERNAL\"'
-if re.search(pattern, raw, re.DOTALL):
-    sys.exit(0)
-sys.exit(1)
-" "$hex_id" 2>/dev/null; then
-        HAS_GPS="true"
-        ok "GPS: hardware detected (auto-probe)"
+        ok "GPS: hardware model $HARDWARE — no GPS expected"
     else
-        HAS_GPS="false"
-        mesh_cmd --set position.gps_mode NOT_PRESENT --set position.fixed_position true >/dev/null 2>&1
-        ok "GPS: no hardware detected (auto-probe) — set to NOT_PRESENT"
+        HAS_GPS="true"
+        ok "GPS: hardware model $HARDWARE — GPS assumed present"
     fi
 }
 

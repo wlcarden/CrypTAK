@@ -4,6 +4,18 @@
 // Only settings that differ from defaults are listed here.
 // See https://nodered.org/docs/user-guide/runtime/configuration
 
+const fs = require('fs');
+const yaml = require('js-yaml');
+
+// Load nodes registry — single source of truth for owned mesh nodes
+let nodesRegistry = {};
+try {
+  const raw = fs.readFileSync('/opt/cot-maps/nodes.yaml', 'utf8');
+  nodesRegistry = yaml.load(raw);
+} catch (e) {
+  console.warn('Could not load nodes.yaml:', e.message);
+}
+
 module.exports = {
   flowFile: "flows.json",
   flowFilePretty: true,
@@ -37,6 +49,7 @@ module.exports = {
   functionGlobalContext: {
     net: require("net"),
     cotMaps: require("/opt/cot-maps/cot-maps"),
+    nodesRegistry: nodesRegistry,
   },
 
   // Allow function nodes to require() external npm packages

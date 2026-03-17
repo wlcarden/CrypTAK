@@ -787,15 +787,33 @@
     // ── Mesh network status panel ─────────────────────────────
     // HW_MODELS and ROLES now live in cot-maps.js (server-side).
     // The mesh API resolves names server-side; these are kept as fallback only.
+    // Generated from meshtastic protobuf enums (v2.7.x)
     var HW_MODELS = {
-        0:'?', 4:'T-Beam', 6:'Heltec', 8:'Heltec', 9:'NanoG1',
-        10:'RAK4631', 17:'Heltec V3', 24:'NanoG1', 37:'RAK',
-        43:'RAK', 57:'T-Echo', 65:'RAK', 68:'T-Beam S3',
-        113:'Heltec V3'
+        0:'?', 1:'T-Lora V2', 2:'T-Lora V1', 3:'T-Lora V2.1', 4:'T-Beam',
+        5:'Heltec V2', 6:'T-Beam v0.7', 7:'T-Echo', 8:'T-Lora V1.3',
+        9:'RAK4631', 10:'Heltec V2.1', 11:'Heltec V1', 12:'T-Beam S3',
+        13:'RAK11200', 14:'Nano G1', 16:'T-Lora T3 S3', 17:'Nano G1 Exp',
+        21:'Wio WM1110', 22:'RAK2560', 24:'Heltec Bridge', 25:'Station G1',
+        26:'RAK11310', 31:'Station G2', 33:'T-Echo+', 36:'nRF52',
+        37:'Linux Native', 42:'M5Stack', 43:'Heltec V3', 44:'Heltec WSL V3',
+        48:'Heltec Tracker', 49:'Heltec Paper', 50:'T-Deck', 51:'T-Watch S3',
+        57:'Heltec Paper v1', 58:'Heltec Tracker v1', 63:'nRF52 ProMicro',
+        65:'Heltec Capsule', 69:'Heltec T114', 70:'SenseCAP Indicator',
+        71:'T1000-E', 72:'RAK3172', 73:'Wio-E5', 77:'M5Stack Core',
+        78:'M5Stack Core2', 80:'M5Stack CoreS3', 81:'Xiao S3',
+        84:'WisMesh Tap', 85:'Routastic', 86:'MeshTab', 87:'MeshLink',
+        89:'ThinkNode M1', 90:'ThinkNode M2', 91:'T-ETH Elite',
+        94:'Heltec Pocket', 95:'SenseCAP Solar', 97:'CrowPanel',
+        99:'Wio Tracker L1', 100:'Wio Tracker eInk', 102:'T-Deck Pro',
+        105:'WisMesh Tag', 106:'RAK3312', 107:'ThinkNode M5',
+        108:'Heltec Solar', 109:'T-Echo Lite', 110:'Heltec V4',
+        113:'Heltec Tracker v2', 114:'T-Watch Ultra', 115:'ThinkNode M3',
+        116:'WisMesh Tap v2', 117:'RAK3401', 122:'T-Beam 1W', 255:'Custom'
     };
     var ROLES = {
         0:'CLIENT', 1:'MUTE', 2:'ROUTER', 3:'RTR+CLI',
-        4:'TRACKER', 5:'RPTR', 6:'TAK'
+        4:'RPTR', 5:'TRACKER', 6:'SENSOR', 7:'TAK',
+        8:'HIDDEN', 9:'LOST+FOUND', 10:'TAK+TRK', 11:'RTR_LATE', 12:'BASE'
     };
     var sbMeshNodes         = document.getElementById('sb-mesh-nodes');
     var sbMeshCommToggle    = document.getElementById('sb-mesh-community-toggle');
@@ -899,11 +917,20 @@
 
         var shortTag = n.shortName ? ' <span style="color:#555;font-size:10px">' + esc(n.shortName) + '</span>' : '';
 
+        // Render SIDC milsymbol icon if available
+        var sidcHtml = '';
+        if (n.sidc && typeof ms !== 'undefined') {
+            try {
+                var sym = new ms.Symbol(n.sidc, { size: 20 });
+                sidcHtml = '<span style="display:inline-block;vertical-align:middle;margin-right:4px;">' + sym.asSVG() + '</span>';
+            } catch(e) {}
+        }
+
         return '<div class="sb-mesh-node"' + tipAttr + '>' +
             '<div class="sb-mesh-node-dot ' + stCls + '">' + stDot + '</div>' +
             '<div class="sb-mesh-node-info">' +
             '<div class="sb-mesh-node-name' + (n.owned ? ' owned' : '') + '">' +
-            esc(n.name) + shortTag + rebootFlag + '</div>' +
+            sidcHtml + esc(n.name) + shortTag + rebootFlag + '</div>' +
             '<div class="sb-mesh-node-meta">' + metaHtml + '</div></div>' +
             '<div class="sb-mesh-node-age">' + ageStr + '</div></div>';
     }

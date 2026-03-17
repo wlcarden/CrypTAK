@@ -331,27 +331,29 @@ function buildPopup(callsign, r, color, battery, isTracker, mesh) {
         "</a>";
     }
     html += "</div>";
-    var icons = [
-      { cls: "fa-crosshairs", label: "Crosshairs" },
-      { cls: "fa-car", label: "Vehicle" },
-      { cls: "fa-user", label: "Person" },
-      { cls: "fa-cube", label: "Cargo" },
+    var assets = [
+      { type: "vehicle", emoji: "\uD83D\uDE97", label: "Vehicle" },
+      { type: "person", emoji: "\uD83D\uDC64", label: "Person" },
+      { type: "cargo", emoji: "\uD83D\uDCE6", label: "Cargo" },
+      { type: "sensor", emoji: "\uD83D\uDCE1", label: "Sensor" },
     ];
-    html += '<div style="margin-top:4px;font-size:11px;"><b>Icon:</b> ';
-    for (var ic = 0; ic < icons.length; ic++) {
+    html += '<div style="margin-top:4px;font-size:11px;"><b>Asset:</b> ';
+    for (var at = 0; at < assets.length; at++) {
       html +=
-        "<a href=\"#\" onclick=\"fetch('api/tracker/icon',{method:'POST'," +
+        "<a href=\"#\" onclick=\"fetch('api/tracker/asset-type',{method:'POST'," +
         "headers:{'Content-Type':'application/json'}," +
         "body:JSON.stringify({name:'" +
         safeCs +
-        "',icon:'" +
-        icons[ic].cls +
+        "',assetType:'" +
+        assets[at].type +
         "'})}).then(function(){location.reload()});return false;\" " +
-        'style="color:#aaa;margin:0 5px;" title="' +
-        icons[ic].label +
-        '"><i class="fa ' +
-        icons[ic].cls +
-        '"></i></a>';
+        'style="color:#aaa;margin:0 4px;text-decoration:none;" title="' +
+        assets[at].label +
+        '">' +
+        assets[at].emoji +
+        " " +
+        assets[at].label +
+        "</a>";
     }
     html += "</div>";
   }
@@ -672,39 +674,144 @@ function refreshMarkerColors(cache) {
   return { updated: updated, expired: expired };
 }
 
+// Asset type → CoT function suffix mapping (for tracker classification)
+var assetTypeToCotSuffix = {
+  vehicle: "G-E-V",
+  person: "G-U-C",
+  cargo: "G-U-C",
+  sensor: "G-E-S",
+  infrastructure: "G-E-X",
+};
+
+/**
+ * Build a 15-char SIDC for a tracker given its affiliation and asset type.
+ * @param {string} affiliation - CoT affiliation code (f/s/h/u etc.)
+ * @param {string} assetType - asset type key (vehicle/person/cargo/sensor/infrastructure)
+ * @returns {string} 15-char SIDC code
+ */
+function buildTrackerSIDC(affiliation, assetType) {
+  var suffix = assetTypeToCotSuffix[assetType] || "G-E-V";
+  var cotType = "a-" + (affiliation || "f") + "-" + suffix;
+  return cotTypeToSIDC(cotType.split("-"));
+}
+
 // Meshtastic hardware model IDs → display names
+// Generated from meshtastic protobuf HardwareModel enum (v2.7.x)
 var HW_MODELS = {
   0: "?",
+  1: "T-Lora V2",
+  2: "T-Lora V1",
+  3: "T-Lora V2.1",
   4: "T-Beam",
-  6: "Heltec",
-  8: "Heltec",
-  9: "NanoG1",
-  10: "RAK4631",
-  17: "Heltec V3",
-  24: "NanoG1",
-  37: "RAK",
-  43: "RAK",
-  57: "T-Echo",
-  65: "RAK",
-  68: "T-Beam S3",
-  113: "Heltec V3",
+  5: "Heltec V2",
+  6: "T-Beam v0.7",
+  7: "T-Echo",
+  8: "T-Lora V1.3",
+  9: "RAK4631",
+  10: "Heltec V2.1",
+  11: "Heltec V1",
+  12: "T-Beam S3",
+  13: "RAK11200",
+  14: "Nano G1",
+  15: "T-Lora V2.1",
+  16: "T-Lora T3 S3",
+  17: "Nano G1 Exp",
+  18: "Nano G2 Ultra",
+  21: "Wio WM1110",
+  22: "RAK2560",
+  23: "Heltec HRU",
+  24: "Heltec Bridge",
+  25: "Station G1",
+  26: "RAK11310",
+  31: "Station G2",
+  33: "T-Echo+",
+  36: "nRF52",
+  37: "Linux Native",
+  40: "nRF52840 Dongle",
+  42: "M5Stack",
+  43: "Heltec V3",
+  44: "Heltec WSL V3",
+  47: "RPi Pico",
+  48: "Heltec Tracker",
+  49: "Heltec Paper",
+  50: "T-Deck",
+  51: "T-Watch S3",
+  53: "Heltec HT62",
+  57: "Heltec Paper v1",
+  58: "Heltec Tracker v1",
+  63: "nRF52 ProMicro",
+  65: "Heltec Capsule",
+  66: "Heltec VM T190",
+  67: "Heltec VM E213",
+  68: "Heltec VM E290",
+  69: "Heltec T114",
+  70: "SenseCAP Indicator",
+  71: "T1000-E",
+  72: "RAK3172",
+  73: "Wio-E5",
+  77: "M5Stack Core",
+  78: "M5Stack Core2",
+  79: "RPi Pico2",
+  80: "M5Stack CoreS3",
+  81: "Xiao S3",
+  84: "WisMesh Tap",
+  85: "Routastic",
+  86: "MeshTab",
+  87: "MeshLink",
+  88: "Xiao nRF52 Kit",
+  89: "ThinkNode M1",
+  90: "ThinkNode M2",
+  91: "T-ETH Elite",
+  92: "Heltec Sensor Hub",
+  94: "Heltec Pocket",
+  95: "SenseCAP Solar",
+  97: "CrowPanel",
+  99: "Wio Tracker L1",
+  100: "Wio Tracker eInk",
+  102: "T-Deck Pro",
+  103: "T-Lora Pager",
+  105: "WisMesh Tag",
+  106: "RAK3312",
+  107: "ThinkNode M5",
+  108: "Heltec Solar",
+  109: "T-Echo Lite",
+  110: "Heltec V4",
+  113: "Heltec Tracker v2",
+  114: "T-Watch Ultra",
+  115: "ThinkNode M3",
+  116: "WisMesh Tap v2",
+  117: "RAK3401",
+  118: "RAK6421",
+  119: "ThinkNode M4",
+  120: "ThinkNode M6",
+  121: "MeshStick",
+  122: "T-Beam 1W",
+  255: "Custom",
 };
 
 // Meshtastic device role IDs → display names
+// Generated from meshtastic protobuf Config.DeviceConfig.Role enum (v2.7.x)
 var ROLES = {
   0: "CLIENT",
   1: "MUTE",
   2: "ROUTER",
   3: "RTR+CLI",
-  4: "TRACKER",
-  5: "RPTR",
-  6: "TAK",
+  4: "RPTR",
+  5: "TRACKER",
+  6: "SENSOR",
+  7: "TAK",
+  8: "HIDDEN",
+  9: "LOST+FOUND",
+  10: "TAK+TRK",
+  11: "RTR_LATE",
+  12: "BASE",
 };
 
 module.exports = {
   colorMap: colorMap,
   iconMap: iconMap,
   affiliationNames: affiliationNames,
+  assetTypeToCotSuffix: assetTypeToCotSuffix,
   fadeColor: fadeColor,
   getIcon: getIcon,
   calcOpacity: calcOpacity,
@@ -719,6 +826,7 @@ module.exports = {
   makeSA: makeSA,
   snrToLinkStyle: snrToLinkStyle,
   cotTypeToSIDC: cotTypeToSIDC,
+  buildTrackerSIDC: buildTrackerSIDC,
   sidcAffiliation: sidcAffiliation,
   HW_MODELS: HW_MODELS,
   ROLES: ROLES,

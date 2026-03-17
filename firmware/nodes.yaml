@@ -1,23 +1,42 @@
 nodes:
   CrypTAK-BRG01:
+    id: "!55c6ddbc"
     profile: bridge
     short_name: CG01
+    cot_type: "a-f-G-E-X"
+    bridge: true
   CrypTAK-BSE01:
+    id: "!a51e2838"
     profile: relay
     short_name: CB01
     gps: false
     latitude: 38.84191827
     longitude: -77.29344941
     altitude: 155
+    cot_type: "a-f-G-E-S"
   CrypTAK-SOL01:
+    id: "!c6eadff0"
     profile: relay
     short_name: CS01
+    cot_type: "a-f-G-E-S"
   CrypTAK-VHC01:
+    id: "!9aa4baf0"
     profile: vehicle
     short_name: CV01
+    cot_type: "a-f-G-E-V"
   CrypTAK-TRK01:
+    id: "!dce7b97d"
     profile: tracker
     short_name: CT01
+    cot_type: "a-f-G-E-V"
+    tracker: true
   CrypTAK-SOL02:
+    id: "!3db00f2c"
     profile: prototype-solar
     short_name: CS02
+    cot_type: "a-f-G-E-S"
+  CrypTAK-RPT01:
+    id: "!4ad09103"
+    profile: relay
+    short_name: CR01
+    cot_type: "a-f-G-E-S"

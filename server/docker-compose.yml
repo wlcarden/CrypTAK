@@ -152,6 +152,7 @@ services:
       - /mnt/user/appdata/nodered/data:/data
       - ./nodered/settings.js:/data/settings.js:ro  # functionGlobalContext (net, cotMaps)
       - ./nodered/lib:/opt/cot-maps:ro               # cot-maps.js module
+      - ./firmware/nodes.yaml:/opt/cot-maps/nodes.yaml:ro  # node registry
       - ./nodered/public:/data/public:ro              # favicon.ico, cryptak-logo.png
       - /mnt/cache/appdata/tak-server/nodered/webmap/index.html:/data/node_modules/node-red-contrib-web-worldmap/worldmap/index.html:ro
       # worldmap.js patch: don't auto-set uniqueDesignation on SIDC markers.
@@ -206,6 +207,8 @@ services:
       - taknet
     devices:
       - /dev/ttyACM0:/dev/ttyACM0    # T-Beam USB serial (more reliable than WiFi TCP)
+    volumes:
+      - ./firmware/nodes.yaml:/app/firmware/nodes.yaml:ro  # node registry
     environment:
       MESH_SERIAL: /dev/ttyACM0       # Preferred — no WiFi dependency, no idle timeout
       MESH_HOST: ${MESH_HOST:-192.168.50.198}  # TCP fallback if serial device unavailable
