@@ -67,6 +67,9 @@ TRACKER_NODES: set[str] = {
 # Telemetry cache — updated by telemetry handler, read during nodedb seed.
 _telemetry_cache: dict[str, dict] = {}
 _uptime_cache: dict[str, int] = {}
+# Tracks when we last received a real GPS position per node (epoch seconds).
+# Updated only by on_position callback — NOT by nodedb cache reads.
+_last_position_ts: dict[str, float] = {}
 
 _DT_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
@@ -411,6 +414,17 @@ def _seed_from_nodedb(iface, queue, loop, max_age_secs: int = 0):
                 lon = lon_i / 1e7
         if lat == 0.0 and lon == 0.0:
             continue
+
+        # Skip nodes whose last real GPS position is older than max_age.
+        # The nodedb caches positions indefinitely, but we only want to
+        # re-emit CoT for nodes with recent GPS fixes. Without this,
+        # a node that lost GPS lock keeps its marker fresh forever.
+        node_id_raw = nid.replace("!", "")
+        if max_age_secs > 0 and not is_bridge:
+            last_pos = _last_position_ts.get(node_id_raw, 0)
+            if last_pos and (now_epoch - last_pos) > max_age_secs:
+                continue
+
         user = node.get("user", {})
         callsign = user.get("longName") or user.get("shortName") or nid
         node_id = nid.replace("!", "")
@@ -558,6 +572,7 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
                 "snr": snr_val if snr_val is not None else None,
                 "hops_away": hops_val if hops_val is not None else None,
             }
+            _last_position_ts[node_id] = time.time()
             _enqueue(queue, loop, data)
             bat_str = " bat=%d%%" % battery if battery else ""
             snr_str = " snr=%.1fdB" % snr_val if snr_val is not None else ""
