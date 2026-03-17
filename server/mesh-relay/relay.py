@@ -99,6 +99,10 @@ _uptime_cache: dict[str, int] = {}
 # Tracks when we last received a real GPS position per node (epoch seconds).
 # Updated only by on_position callback — NOT by nodedb cache reads.
 _last_position_ts: dict[str, float] = {}
+# Tracks the last emitted CoT per node: (lat, lon, epoch_seconds).
+# Used by nodedb seed to avoid refreshing stale markers when position hasn't
+# changed.  Live on_position packets always emit (the node actively reported).
+_last_emitted: dict[str, tuple[float, float, float]] = {}
 
 _DT_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
 
@@ -483,6 +487,18 @@ def _seed_from_nodedb(iface, queue, loop, max_age_secs: int = 0):
             uptime_s = telem["uptime"]
         snr_val = node.get("snr")
         hops_val = node.get("hopsAway")
+        # Skip re-emission if we recently emitted the same position.
+        # Only refresh when the previous CoT is about to go stale
+        # (80% of STALE_MINUTES) or the position actually changed.
+        prev = _last_emitted.get(node_id)
+        if prev:
+            prev_lat, prev_lon, prev_ts = prev
+            age_secs = now_epoch - prev_ts
+            refresh_threshold = STALE_MINUTES * 60 * 0.8
+            pos_changed = abs(lat - prev_lat) > 1e-7 or abs(lon - prev_lon) > 1e-7
+            if not pos_changed and age_secs < refresh_threshold:
+                continue  # CoT still fresh in TAK, no need to re-emit
+
         data = {
             "node_id": node_id,
             "callsign": callsign,
@@ -502,6 +518,7 @@ def _seed_from_nodedb(iface, queue, loop, max_age_secs: int = 0):
             "snr": snr_val if snr_val is not None else None,
             "hops_away": hops_val if hops_val is not None else None,
         }
+        _last_emitted[node_id] = (lat, lon, float(now_epoch))
         _enqueue(queue, loop, data)
         seeded += 1
         snr_str = " snr=%.1fdB" % snr_val if snr_val is not None else ""
@@ -602,6 +619,7 @@ def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
                 "hops_away": hops_val if hops_val is not None else None,
             }
             _last_position_ts[node_id] = time.time()
+            _last_emitted[node_id] = (lat, lon, time.time())
             _enqueue(queue, loop, data)
             bat_str = " bat=%d%%" % battery if battery else ""
             snr_str = " snr=%.1fdB" % snr_val if snr_val is not None else ""
