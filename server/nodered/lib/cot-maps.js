@@ -51,8 +51,16 @@ var affiliationNames = {
 
 // CoT affiliation code → SIDC affiliation character (MIL-STD-2525B)
 var sidcAffiliation = {
-  f: 'F', a: 'A', h: 'H', s: 'S', n: 'N', u: 'U',
-  p: 'P', j: 'J', k: 'K', o: 'O'
+  f: "F",
+  a: "A",
+  h: "H",
+  s: "S",
+  n: "N",
+  u: "U",
+  p: "P",
+  j: "J",
+  k: "K",
+  o: "O",
 };
 
 /**
@@ -67,23 +75,23 @@ var sidcAffiliation = {
  * @returns {string|null} 15-char SIDC code, or null if conversion not possible
  */
 function cotTypeToSIDC(parts) {
-  if (!parts || parts.length < 3 || parts[0] !== 'a') return null;
+  if (!parts || parts.length < 3 || parts[0] !== "a") return null;
 
-  var affil = sidcAffiliation[parts[1]] || 'U';
+  var affil = sidcAffiliation[parts[1]] || "U";
 
   // Map CoT dimension to SIDC battle dimension
   // Valid SIDC: P(space) A(air) G(ground) S(sea) U(subsurface) F(SOF)
   var dim = parts[2];
-  if ('PAGSUF'.indexOf(dim) === -1) dim = 'G';
+  if ("PAGSUF".indexOf(dim) === -1) dim = "G";
 
   // Function ID: parts[3..n] concatenated, padded to 6 chars with dashes
-  var funcId = parts.slice(3).join('');
-  while (funcId.length < 6) funcId += '-';
+  var funcId = parts.slice(3).join("");
+  while (funcId.length < 6) funcId += "-";
   funcId = funcId.substring(0, 6);
 
   // 15-char SIDC: scheme(S) + affiliation + dimension + status(P=present)
   //               + functionId(6) + size/mod(2) + country(2) + OB(1)
-  return 'S' + affil + dim + 'P' + funcId + '-----';
+  return "S" + affil + dim + "P" + funcId + "-----";
 }
 
 /**
@@ -97,10 +105,10 @@ function cotTypeToSIDC(parts) {
  * @returns {{ color: string, weight: number }}
  */
 function snrToLinkStyle(snr) {
-  if (snr >= 5)  return { color: '#00DD00', weight: 3 };
-  if (snr >= 0)  return { color: '#AADD00', weight: 2 };
-  if (snr >= -7) return { color: '#FFAA00', weight: 2 };
-  return { color: '#FF4444', weight: 1 };
+  if (snr >= 5) return { color: "#00DD00", weight: 3 };
+  if (snr >= 0) return { color: "#AADD00", weight: 2 };
+  if (snr >= -7) return { color: "#FFAA00", weight: 2 };
+  return { color: "#FF4444", weight: 1 };
 }
 
 /**
@@ -359,14 +367,14 @@ function buildPopup(callsign, r, color, battery, isTracker, mesh) {
  */
 function argbToCSS(argb) {
   var v = parseInt(argb, 10);
-  if (isNaN(v)) return { hex: '#FFFF00', alpha: 1 };
+  if (isNaN(v)) return { hex: "#FFFF00", alpha: 1 };
   // Convert to unsigned 32-bit
   var u = v >>> 0;
-  var a = (u >>> 24) & 0xFF;
-  var r = (u >>> 16) & 0xFF;
-  var g = (u >>> 8) & 0xFF;
-  var b = u & 0xFF;
-  var hex = '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+  var a = (u >>> 24) & 0xff;
+  var r = (u >>> 16) & 0xff;
+  var g = (u >>> 8) & 0xff;
+  var b = u & 0xff;
+  var hex = "#" + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
   return { hex: hex, alpha: a / 255 };
 }
 
@@ -380,10 +388,10 @@ function argbToCSS(argb) {
  */
 function parseCotDrawing(xml) {
   var typeM = xml.match(/\btype="([^"]+)"/);
-  if (!typeM || !typeM[1].startsWith('u-d-')) return null;
+  if (!typeM || !typeM[1].startsWith("u-d-")) return null;
 
   var uidM = xml.match(/\buid="([^"]+)"/);
-  if (!uidM || uidM[1].startsWith('CrypTAK-NR-')) return null;
+  if (!uidM || uidM[1].startsWith("CrypTAK-NR-")) return null;
 
   var type = typeM[1];
   var uid = uidM[1];
@@ -392,7 +400,7 @@ function parseCotDrawing(xml) {
   var callsign = csM ? csM[1] : uid;
 
   // Check for force-delete
-  if (xml.indexOf('<__forcedelete') !== -1) {
+  if (xml.indexOf("<__forcedelete") !== -1) {
     return { name: callsign, deleted: true };
   }
 
@@ -401,8 +409,8 @@ function parseCotDrawing(xml) {
   var fillM = xml.match(/<fillColor[^>]+value="([^"]+)"/);
   var weightM = xml.match(/<strokeWeight[^>]+value="([^"]+)"/);
 
-  var stroke = strokeM ? argbToCSS(strokeM[1]) : { hex: '#FFFF00', alpha: 1 };
-  var fill = fillM ? argbToCSS(fillM[1]) : { hex: '#FFFF00', alpha: 0.3 };
+  var stroke = strokeM ? argbToCSS(strokeM[1]) : { hex: "#FFFF00", alpha: 1 };
+  var fill = fillM ? argbToCSS(fillM[1]) : { hex: "#FFFF00", alpha: 0.3 };
   var weight = weightM ? parseFloat(weightM[1]) : 3;
 
   // Parse stale time for TTL
@@ -410,11 +418,12 @@ function parseCotDrawing(xml) {
   var ttl = 86400; // default 24h
   if (staleM && staleM[1]) {
     var stMs = new Date(staleM[1]).getTime();
-    if (!isNaN(stMs)) ttl = Math.max(60, Math.round((stMs - Date.now()) / 1000));
+    if (!isNaN(stMs))
+      ttl = Math.max(60, Math.round((stMs - Date.now()) / 1000));
   }
 
   // Circle/ellipse: u-d-c-c
-  if (type.startsWith('u-d-c')) {
+  if (type.startsWith("u-d-c")) {
     var latM = xml.match(/\blat="([^"]+)"/);
     var lonM = xml.match(/\blon="([^"]+)"/);
     if (!latM || !lonM) return null;
@@ -434,9 +443,9 @@ function parseCotDrawing(xml) {
       fillColor: fill.hex,
       fillOpacity: fill.alpha,
       weight: weight,
-      layer: 'TAK Drawings',
+      layer: "TAK Drawings",
       popup: callsign,
-      ttl: ttl
+      ttl: ttl,
     };
   }
 
@@ -445,7 +454,7 @@ function parseCotDrawing(xml) {
   var points = [];
   var linkMatch;
   while ((linkMatch = linkRegex.exec(xml)) !== null) {
-    var coords = linkMatch[1].split(',');
+    var coords = linkMatch[1].split(",");
     if (coords.length >= 2) {
       var pLat = parseFloat(coords[0]);
       var pLon = parseFloat(coords[1]);
@@ -459,10 +468,11 @@ function parseCotDrawing(xml) {
 
   // Determine if filled polygon or polyline
   // Filled if: fillColor has meaningful alpha, or it's a rectangle, or first==last point (closed)
-  var isClosed = (points.length >= 3 &&
+  var isClosed =
+    points.length >= 3 &&
     Math.abs(points[0].lat - points[points.length - 1].lat) < 0.00001 &&
-    Math.abs(points[0].lng - points[points.length - 1].lng) < 0.00001);
-  var isFilled = type === 'u-d-r' || isClosed || fill.alpha > 0.05;
+    Math.abs(points[0].lng - points[points.length - 1].lng) < 0.00001;
+  var isFilled = type === "u-d-r" || isClosed || fill.alpha > 0.05;
 
   var shape = {
     name: callsign,
@@ -470,9 +480,9 @@ function parseCotDrawing(xml) {
     fillColor: fill.hex,
     fillOpacity: fill.alpha,
     weight: weight,
-    layer: 'TAK Drawings',
+    layer: "TAK Drawings",
     popup: callsign,
-    ttl: ttl
+    ttl: ttl,
   };
 
   if (isFilled) {
@@ -619,11 +629,11 @@ function makeSA(uid) {
     stale +
     '" how="m-g">' +
     '<point lat="0" lon="0" hae="0" ce="9999999" le="9999999"/>' +
-    '<detail>' +
-    '<contact endpoint="127.0.0.1:4242:tcp" callsign="CrypTAK-WebMap"/>' +
+    "<detail>" +
+    '<contact endpoint="*:-1:stcp" callsign="CrypTAK-WebMap"/>' +
     '<__group name="Cyan" role="Team Member"/>' +
     '<uid Droid="CrypTAK-WebMap"/>' +
-    '</detail>' +
+    "</detail>" +
     "</event>"
   );
 }
@@ -664,16 +674,31 @@ function refreshMarkerColors(cache) {
 
 // Meshtastic hardware model IDs → display names
 var HW_MODELS = {
-  0:'?', 4:'T-Beam', 6:'Heltec', 8:'Heltec', 9:'NanoG1',
-  10:'RAK4631', 17:'Heltec V3', 24:'NanoG1', 37:'RAK',
-  43:'RAK', 57:'T-Echo', 65:'RAK', 68:'T-Beam S3',
-  113:'Heltec V3'
+  0: "?",
+  4: "T-Beam",
+  6: "Heltec",
+  8: "Heltec",
+  9: "NanoG1",
+  10: "RAK4631",
+  17: "Heltec V3",
+  24: "NanoG1",
+  37: "RAK",
+  43: "RAK",
+  57: "T-Echo",
+  65: "RAK",
+  68: "T-Beam S3",
+  113: "Heltec V3",
 };
 
 // Meshtastic device role IDs → display names
 var ROLES = {
-  0:'CLIENT', 1:'MUTE', 2:'ROUTER', 3:'RTR+CLI',
-  4:'TRACKER', 5:'RPTR', 6:'TAK'
+  0: "CLIENT",
+  1: "MUTE",
+  2: "ROUTER",
+  3: "RTR+CLI",
+  4: "TRACKER",
+  5: "RPTR",
+  6: "TAK",
 };
 
 module.exports = {
