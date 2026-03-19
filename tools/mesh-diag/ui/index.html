@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1280, height=720, initial-scale=1.0, user-scalable=no">
+  <title>mesh-diag</title>
+  <link rel="stylesheet" href="/ui/style.css">
+</head>
+<body>
+  <!-- Tab bar -->
+  <nav id="tab-bar">
+    <button class="tab active" data-tab="status">Status</button>
+    <button class="tab" data-tab="diagnose">Diagnose</button>
+    <button class="tab" data-tab="modify">Modify</button>
+    <button class="tab" data-tab="log">Log</button>
+  </nav>
+
+  <!-- Main content area -->
+  <main id="content">
+
+    <!-- ── Status tab ──────────────────────────── -->
+    <section id="tab-status" class="tab-panel active">
+      <div id="status-disconnected" class="empty-state">
+        <div class="empty-icon">⏚</div>
+        <div class="empty-title">No Radio Connected</div>
+        <div class="empty-desc">Plug in a Meshtastic radio via USB</div>
+        <div class="pulse-dot"></div>
+      </div>
+      <div id="status-content" class="cards hidden">
+        <!-- Identity card -->
+        <div class="card" id="card-identity">
+          <div class="card-header">Identity</div>
+          <div class="card-body">
+            <div class="kv"><span class="k">Name</span><span class="v" id="s-longname">—</span></div>
+            <div class="kv"><span class="k">Short</span><span class="v" id="s-shortname">—</span></div>
+            <div class="kv"><span class="k">Node ID</span><span class="v mono" id="s-nodeid">—</span></div>
+            <div class="kv"><span class="k">Hardware</span><span class="v" id="s-hwmodel">—</span></div>
+            <div class="kv"><span class="k">Firmware</span><span class="v" id="s-firmware">—</span></div>
+            <div class="kv"><span class="k">Role</span><span class="v" id="s-role">—</span></div>
+          </div>
+        </div>
+        <!-- RF card -->
+        <div class="card" id="card-rf">
+          <div class="card-header">RF Config</div>
+          <div class="card-body">
+            <div class="kv"><span class="k">Region</span><span class="v" id="s-region">—</span></div>
+            <div class="kv"><span class="k">Modem</span><span class="v" id="s-modem">—</span></div>
+            <div class="kv"><span class="k">Hop Limit</span><span class="v" id="s-hoplimit">—</span></div>
+            <div class="kv"><span class="k">Ch Util</span><span class="v" id="s-chutil">—</span></div>
+            <div class="kv"><span class="k">Air TX</span><span class="v" id="s-airtx">—</span></div>
+          </div>
+        </div>
+        <!-- GPS card -->
+        <div class="card" id="card-gps">
+          <div class="card-header">GPS</div>
+          <div class="card-body">
+            <div class="kv"><span class="k">Fix</span><span class="v" id="s-gpsfix">—</span></div>
+            <div class="kv"><span class="k">Sats</span><span class="v" id="s-gpssats">—</span></div>
+            <div class="kv"><span class="k">Lat</span><span class="v mono" id="s-gpslat">—</span></div>
+            <div class="kv"><span class="k">Lon</span><span class="v mono" id="s-gpslon">—</span></div>
+            <div class="kv"><span class="k">Alt</span><span class="v" id="s-gpsalt">—</span></div>
+          </div>
+        </div>
+        <!-- Power card -->
+        <div class="card" id="card-power">
+          <div class="card-header">Power</div>
+          <div class="card-body">
+            <div class="kv"><span class="k">Battery</span><span class="v" id="s-battery">—</span></div>
+            <div class="kv"><span class="k">Voltage</span><span class="v" id="s-voltage">—</span></div>
+            <div class="kv"><span class="k">Uptime</span><span class="v" id="s-uptime">—</span></div>
+            <div class="kv"><span class="k">Reboots</span><span class="v" id="s-reboots">—</span></div>
+          </div>
+        </div>
+        <!-- Channels card -->
+        <div class="card card-wide" id="card-channels">
+          <div class="card-header">Channels</div>
+          <div class="card-body" id="s-channels">—</div>
+        </div>
+        <!-- Security card -->
+        <div class="card" id="card-security">
+          <div class="card-header">Security</div>
+          <div class="card-body">
+            <div class="kv"><span class="k">Managed</span><span class="v" id="s-managed">—</span></div>
+            <div class="kv"><span class="k">Serial</span><span class="v" id="s-serial">—</span></div>
+            <div class="kv"><span class="k">Admin Key</span><span class="v" id="s-adminkey">—</span></div>
+          </div>
+        </div>
+        <!-- Mesh card -->
+        <div class="card" id="card-mesh">
+          <div class="card-header">Mesh</div>
+          <div class="card-body">
+            <div class="kv"><span class="k">Nodes</span><span class="v" id="s-nodecount">—</span></div>
+            <div id="s-neighbors"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Diagnose tab ────────────────────────── -->
+    <section id="tab-diagnose" class="tab-panel">
+      <div id="diag-disconnected" class="empty-state">
+        <div class="empty-icon">⏚</div>
+        <div class="empty-title">No Radio Connected</div>
+        <div class="empty-desc">Connect a radio to run diagnostics</div>
+      </div>
+      <div id="diag-content" class="hidden">
+        <button id="btn-diagnose" class="action-btn">Run Diagnostics</button>
+        <div id="diag-results"></div>
+      </div>
+    </section>
+
+    <!-- ── Modify tab ──────────────────────────── -->
+    <section id="tab-modify" class="tab-panel">
+      <div id="modify-disconnected" class="empty-state">
+        <div class="empty-icon">⏚</div>
+        <div class="empty-title">No Radio Connected</div>
+        <div class="empty-desc">Connect a radio to modify settings</div>
+      </div>
+      <div id="modify-content" class="hidden">
+        <!-- Quick Actions -->
+        <div class="card card-wide">
+          <div class="card-header">Quick Actions</div>
+          <div class="card-body modify-grid">
+            <button class="modify-btn" data-action="export_backup_only" data-params='{}'>💾 Backup Config</button>
+            <button class="modify-btn" data-action="reboot" data-params='{}' data-confirm="Reboot the radio?">🔄 Reboot</button>
+            <button class="modify-btn danger" data-action="factory_reset" data-params='{}' data-confirm="FACTORY RESET? This erases all settings!">⚠️ Factory Reset</button>
+          </div>
+        </div>
+        <!-- Owner -->
+        <div class="card card-wide">
+          <div class="card-header">Identity</div>
+          <div class="card-body">
+            <div class="input-row">
+              <label>Long Name</label>
+              <input type="text" id="mod-longname" placeholder="Node name">
+            </div>
+            <div class="input-row">
+              <label>Short Name</label>
+              <input type="text" id="mod-shortname" maxlength="4" placeholder="4 char">
+            </div>
+            <button class="modify-btn" id="btn-set-owner">Set Owner</button>
+          </div>
+        </div>
+        <!-- All Settings Browser -->
+        <div class="card card-wide">
+          <div class="card-header">All Settings <button id="btn-load-settings" class="small-btn">Load</button></div>
+          <div class="card-body">
+            <div id="settings-filter-row" class="input-row">
+              <input type="text" id="settings-filter" placeholder="Filter settings...">
+            </div>
+            <div id="settings-list" class="settings-list"></div>
+          </div>
+        </div>
+        <!-- Backups -->
+        <div class="card card-wide">
+          <div class="card-header">Backups</div>
+          <div class="card-body">
+            <div id="backup-list"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Log tab ─────────────────────────────── -->
+    <section id="tab-log" class="tab-panel">
+      <div id="log-content">
+        <div class="log-toolbar">
+          <button id="btn-refresh-log" class="action-btn">Refresh</button>
+          <button id="btn-export-log" class="action-btn">Export JSON</button>
+        </div>
+        <div id="log-entries" class="log-list"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Status bar (bottom) -->
+  <footer id="status-bar">
+    <span id="sb-status" class="sb-disconnected">Disconnected</span>
+    <span id="sb-node">—</span>
+    <span id="sb-port">—</span>
+    <button id="btn-eject" class="sb-btn hidden" title="Disconnect radio">Eject</button>
+  </footer>
+
+  <!-- Confirm dialog (modal) -->
+  <div id="confirm-overlay" class="overlay hidden">
+    <div class="dialog">
+      <div class="dialog-title" id="confirm-title">Confirm Action</div>
+      <div class="dialog-body" id="confirm-body"></div>
+      <div class="dialog-buttons">
+        <button id="confirm-cancel" class="dialog-btn cancel">Cancel</button>
+        <button id="confirm-ok" class="dialog-btn ok">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/ui/app.js"></script>
+</body>
+</html>

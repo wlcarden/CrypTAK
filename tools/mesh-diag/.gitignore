@@ -1,0 +1,4 @@
+backups/*.json
+logs/*.json
+__pycache__/
+*.pyc
