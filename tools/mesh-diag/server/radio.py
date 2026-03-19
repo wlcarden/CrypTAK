@@ -30,6 +30,31 @@ logger = logging.getLogger(__name__)
 SERIAL_PATTERNS = ["/dev/ttyACM*", "/dev/ttyUSB*"]
 POLL_INTERVAL = 2.0
 
+# Ports to skip — known non-Meshtastic devices (e.g. cellular modems)
+# Detected by checking if a port belongs to a known USB VID:PID
+SKIP_VID_PIDS = {
+    "2c7c",  # Quectel (EC25, EG25, etc.)
+    "12d1",  # Huawei modems
+    "1199",  # Sierra Wireless
+}
+
+def _is_modem_port(port: str) -> bool:
+    """Check if a serial port belongs to a known cellular modem."""
+    import subprocess
+    try:
+        out = subprocess.check_output(
+            ["udevadm", "info", "--query=property", port],
+            timeout=3, stderr=subprocess.DEVNULL, text=True,
+        )
+        for line in out.splitlines():
+            if line.startswith("ID_VENDOR_ID="):
+                vid = line.split("=", 1)[1].strip()
+                if vid in SKIP_VID_PIDS:
+                    return True
+    except Exception:
+        pass
+    return False
+
 
 def _classify_psk(psk_bytes: bytes) -> tuple[str, str]:
     """Classify a PSK and return (type, hash_prefix)."""
@@ -93,7 +118,12 @@ class RadioManager:
         ports = []
         for pattern in SERIAL_PATTERNS:
             ports.extend(sorted(glob.glob(pattern)))
-        return ports
+        # Filter out known non-Meshtastic ports (cellular modems, etc.)
+        filtered = [p for p in ports if not _is_modem_port(p)]
+        if len(filtered) < len(ports):
+            skipped = set(ports) - set(filtered)
+            logger.debug("Skipping non-Meshtastic ports: %s", skipped)
+        return filtered
 
     def _check_connection(self) -> None:
         with self._lock:

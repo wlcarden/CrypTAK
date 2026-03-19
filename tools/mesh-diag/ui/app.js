@@ -65,12 +65,15 @@
       });
     });
 
-    // Physical button mapping (F1-F3, O)
+    // Physical button mapping
+    // Desktop: F1-F3, O
+    // reTerminal hardware buttons: F1=KEY_A, F2=KEY_S, F3=KEY_D, O=KEY_F
     document.addEventListener("keydown", function (e) {
-      if (e.key === "F1") switchTab("status");
-      else if (e.key === "F2") switchTab("diagnose");
-      else if (e.key === "F3") switchTab("modify");
-      else if (e.key === "o" || e.key === "O") switchTab("log");
+      if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA") return;
+      if (e.key === "F1" || e.key === "a") switchTab("status");
+      else if (e.key === "F2" || e.key === "s") switchTab("diagnose");
+      else if (e.key === "F3" || e.key === "d") switchTab("modify");
+      else if (e.key === "o" || e.key === "O" || e.key === "f") switchTab("log");
     });
   }
 

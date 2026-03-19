@@ -95,6 +95,8 @@ body {
   overflow-x: hidden;
   padding: 12px;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
 }
 
 .tab-panel.active {
@@ -355,6 +357,8 @@ body {
 .settings-list {
   max-height: 400px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 .setting-item {
   display: flex;
@@ -744,6 +748,8 @@ body {
   color: var(--text);
   max-height: 300px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 .dialog-buttons {
