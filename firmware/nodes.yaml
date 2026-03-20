@@ -5,6 +5,8 @@ nodes:
     short_name: CG01
     cot_type: "a-f-G-E-X"
     bridge: true
+    public_key: "FVmX/5EbFDNF8D1IB5rT6UaDil6dacMR9vpjOqoy0Eo="
+    iff: true
   CrypTAK-BSE01:
     id: "!a51e2838"
     profile: relay
@@ -14,16 +16,20 @@ nodes:
     longitude: -77.29344941
     altitude: 155
     cot_type: "a-f-G-E-S"
+    iff: false
   CrypTAK-SOL01:
     id: "!c6eadff0"
     profile: relay
     short_name: CS01
     cot_type: "a-f-G-E-S"
+    iff: false
   CrypTAK-VHC01:
     id: "!9aa4baf0"
     profile: vehicle
     short_name: CV01
     cot_type: "a-f-G-E-V"
+    public_key: "SJS1Wzkeb0Pp2RiTUIyX09RSRpv+GUeLrNIpjnh633U="
+    iff: false
   CrypTAK-TRK01:
     id: "!dce7b97d"
     profile: tracker
@@ -31,25 +37,32 @@ nodes:
     cot_type: "a-f-G-E-V"
     tracker: true
     position_precision: 32
+    iff: false
   CrypTAK-SOL02:
     id: "!3db00f2c"
     profile: prototype-solar
     short_name: CS02
     cot_type: "a-f-G-E-S"
+    iff: false
   CrypTAK-RPT01:
     id: "!4ad09103"
     profile: relay
     short_name: CR01
     cot_type: "a-f-G-E-S"
+    iff: false
   CrypTAK-TBS01:
     id: "!435bab94"
     profile: prototype
     short_name: TB01
     cot_type: "a-f-G-E-X"
+    public_key: "GL6iPPbP407noXSZ8/kCvMseaRWCqZDi8Tbg2/hIOU4="
+    iff: false
     notes: "T-Beam Supreme S3, L76K GPS, MAC 48:CA:43:5B:AB:94"
   CrypTAK-TBS02:
     id: "!435ae49c"
     profile: prototype
     short_name: TB02
     cot_type: "a-f-G-E-X"
+    public_key: "UyXTpOpz1toRl/1ao++ZmtY1oA7Ty0k4ldG2miRKBCE="
+    iff: true
     notes: "T-Beam Supreme S3, UBLOX MAX-M10S GPS, MAC 48:CA:43:5A:E4:9C"

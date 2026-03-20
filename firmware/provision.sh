@@ -428,19 +428,19 @@ main() {
     # Admin channel: add channel 1 "admin" with shared PSK for remote management
     # ESP32-S3 boards need longer delays between channel writes (25s+)
     if [[ -n "${ADMIN_CHANNEL_PSK:-}" ]]; then
-        mesh_cmd --ch-add admin >/dev/null 2>&1
-        ok "Admin channel: created (index 1)"
+        mesh_cmd --ch-add cryptak >/dev/null 2>&1
+        ok "IFF channel 'cryptak': created (index 1)"
         sleep 15
 
         mesh_cmd --ch-set psk "$ADMIN_CHANNEL_PSK" --ch-index 1 >/dev/null 2>&1
-        ok "Admin channel: PSK set"
+        ok "IFF channel 'cryptak': PSK set"
         sleep 15
 
         mesh_cmd --set security.admin_channel_enabled true >/dev/null 2>&1
-        ok "Admin channel: enabled for remote admin"
+        ok "IFF channel: admin routing enabled"
         sleep 10
     else
-        warn "Admin channel: ADMIN_CHANNEL_PSK not set in secrets.sh — skipping"
+        warn "IFF channel: ADMIN_CHANNEL_PSK not set in secrets.sh — skipping"
     fi
 
     # GPS: probe if not explicitly set, override if confirmed absent
@@ -492,9 +492,9 @@ main() {
         echo "  Admin:     T-Beam PKC remote admin enabled"
     fi
     if [[ -n "${ADMIN_CHANNEL_PSK:-}" ]]; then
-        echo "  Admin Ch:  Channel 1 (admin) — remote admin over LoRa"
+        echo "  IFF Ch:    Channel 1 (cryptak) — fleet IFF + remote admin"
     else
-        echo "  Admin Ch:  NOT CONFIGURED (add ADMIN_CHANNEL_PSK to secrets.sh)"
+        echo "  IFF Ch:    NOT CONFIGURED (add ADMIN_CHANNEL_PSK to secrets.sh)"
     fi
     echo ""
 }
