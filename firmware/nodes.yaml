@@ -17,12 +17,14 @@ nodes:
     altitude: 155
     cot_type: "a-f-G-E-S"
     iff: false
+    status: burned_out
   CrypTAK-SOL01:
     id: "!c6eadff0"
     profile: relay
     short_name: CS01
     cot_type: "a-f-G-E-S"
     iff: false
+    status: disassembled
   CrypTAK-VHC01:
     id: "!9aa4baf0"
     profile: vehicle
@@ -37,19 +39,22 @@ nodes:
     cot_type: "a-f-G-E-V"
     tracker: true
     position_precision: 32
-    iff: false
+    public_key: "wdzDxfNFdG9vg81+sZcNMfpJAAPV5eyKT4BBF1RnzRA="
+    iff: true
+    notes: "T1000-E card tracker, BT-only provisioning (no USB serial), provisioned via Meshtastic app"
   CrypTAK-SOL02:
     id: "!3db00f2c"
     profile: prototype-solar
     short_name: CS02
     cot_type: "a-f-G-E-S"
     iff: false
+    status: disassembled
   CrypTAK-RPT01:
     id: "!4ad09103"
     profile: relay
     short_name: CR01
     cot_type: "a-f-G-E-S"
-    iff: false
+    iff: true
   CrypTAK-TBS01:
     id: "!435bab94"
     profile: prototype
