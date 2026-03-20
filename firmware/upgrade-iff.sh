@@ -38,8 +38,8 @@ fi
 [[ -n "${ADMIN_CHANNEL_PSK:-}" ]] || die "ADMIN_CHANNEL_PSK not set in secrets.sh"
 [[ -n "${ADMIN_KEY:-}" ]] || die "ADMIN_KEY not set in secrets.sh"
 
-# BRG01 public key — the admin controller node
-BRG01_PUBKEY="base64:FVmX/5EbFDNF8D1IB5rT6UaDil6dacMR9vpjOqoy0Eo="
+# BRG01 public key — the admin controller node (derived from ADMIN_KEY_PRIVATE)
+BRG01_PUBKEY="base64:tFD1EtntZR3uHquuPAf/TvNfY5QBBVg7FlmP5Rsf1Eo="
 
 # Port detection
 if [[ -n "${1:-}" ]]; then
@@ -121,7 +121,7 @@ sleep 15
 echo ""
 echo -e "${CYAN}[4/5]${NC} ${BOLD}Adding BRG01 admin key...${NC}"
 # Check if already present
-if echo "$INFO" | grep -q "FVmX"; then
+if echo "$INFO" | grep -q "tFD1"; then
     ok "BRG01 key already trusted"
 else
     meshtastic --port "$PORT" --set security.admin_key "$BRG01_PUBKEY" >/dev/null 2>&1

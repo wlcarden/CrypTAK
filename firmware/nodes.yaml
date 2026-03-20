@@ -5,7 +5,7 @@ nodes:
     short_name: CG01
     cot_type: "a-f-G-E-X"
     bridge: true
-    public_key: "FVmX/5EbFDNF8D1IB5rT6UaDil6dacMR9vpjOqoy0Eo="
+    public_key: "tFD1EtntZR3uHquuPAf/TvNfY5QBBVg7FlmP5Rsf1Eo="
     iff: true
   CrypTAK-BSE01:
     id: "!a51e2838"
