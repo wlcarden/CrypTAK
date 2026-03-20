@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- PLI Reporting Rates -->
+    <string-array name="rates">
+        <item>30 seconds</item>
+        <item>1 minute</item>
+        <item>5 minutes</item>
+        <item>10 minutes</item>
+        <item>20 minutes</item>
+        <item>30 minutes</item>
+    </string-array>
+    <string-array name="rate_values">
+        <item>30</item>
+        <item>60</item>
+        <item>300</item>
+        <item>600</item>
+        <item>1200</item>
+        <item>1800</item>
+    </string-array>
+
+    <!-- Meshtastic Channel Index (0-7) -->
+    <string-array name="channel_names">
+        <item>Channel 0 (Primary)</item>
+        <item>Channel 1</item>
+        <item>Channel 2</item>
+        <item>Channel 3</item>
+        <item>Channel 4</item>
+        <item>Channel 5</item>
+        <item>Channel 6</item>
+        <item>Channel 7</item>
+    </string-array>
+    <string-array name="channel_values">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+    </string-array>
+
+    <!-- Hop Limit (1-7) -->
+    <string-array name="hop_limit_names">
+        <item>1 hop (Direct only)</item>
+        <item>2 hops</item>
+        <item>3 hops (Default)</item>
+        <item>4 hops</item>
+        <item>5 hops</item>
+        <item>6 hops</item>
+        <item>7 hops (Maximum)</item>
+    </string-array>
+    <string-array name="hop_limit_values">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>4</item>
+        <item>5</item>
+        <item>6</item>
+        <item>7</item>
+    </string-array>
+
+    <!-- Codec2 Modes -->
+    <string-array name="codec2_modes">
+        <item>700C bps (Recommended)</item>
+        <item>700B bps</item>
+        <item>700 bps</item>
+        <item>1200 bps</item>
+        <item>1300 bps</item>
+        <item>1400 bps</item>
+        <item>1600 bps</item>
+    </string-array>
+    <string-array name="codec2_mode_values">
+        <item>8</item>
+        <item>7</item>
+        <item>6</item>
+        <item>5</item>
+        <item>4</item>
+        <item>3</item>
+        <item>2</item>
+    </string-array>
+
+    <!-- Epoch Rotation Interval (hours) -->
+    <string-array name="epoch_interval_names">
+        <item>1 hour</item>
+        <item>2 hours</item>
+        <item>4 hours</item>
+        <item>6 hours (Default)</item>
+        <item>12 hours</item>
+        <item>24 hours</item>
+    </string-array>
+    <string-array name="epoch_interval_values">
+        <item>1</item>
+        <item>2</item>
+        <item>4</item>
+        <item>6</item>
+        <item>12</item>
+        <item>24</item>
+    </string-array>
+
+    <!-- Time Out Timer (TOT) -->
+    <string-array name="tot_names">
+        <item>Off (No limit)</item>
+        <item>30 seconds</item>
+        <item>60 seconds</item>
+        <item>120 seconds</item>
+        <item>240 seconds</item>
+    </string-array>
+    <string-array name="tot_values">
+        <item>0</item>
+        <item>30</item>
+        <item>60</item>
+        <item>120</item>
+        <item>240</item>
+    </string-array>
+</resources>

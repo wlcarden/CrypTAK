@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Mesh Settings -->
+    <PreferenceCategory android:title="Mesh Settings" />
+
+    <com.atakmap.android.gui.PanListPreference
+        android:key="plugin_meshtastic_channel"
+        android:title="Meshtastic Channel Index"
+        android:summary="Select the Meshtastic channel to use for ATAK traffic"
+        android:dialogTitle="Meshtastic Channel"
+        android:entries="@array/channel_names"
+        android:entryValues="@array/channel_values"
+        android:defaultValue="0" />
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_channel_filter"
+        android:title="Filter by Channel Index"
+        android:summary="Only receive messages from the specified channel"
+        android:defaultValue="false"/>
+
+    <com.atakmap.android.gui.PanListPreference
+        android:key="plugin_meshtastic_hop_limit"
+        android:title="Hop Limit"
+        android:summary="Maximum number of hops for outgoing messages"
+        android:dialogTitle="Hop Limit"
+        android:entries="@array/hop_limit_names"
+        android:entryValues="@array/hop_limit_values"
+        android:defaultValue="3" />
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_wantAck"
+        android:title="Request ACK"
+        android:summary="Request delivery acknowledgment (increases channel usage)"
+        android:defaultValue="false"/>
+
+    <!-- PLI & Reporting -->
+    <PreferenceCategory android:title="PLI &amp; Reporting" />
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_pli_rate_limit"
+        android:title="Limit PLI Reporting Rate"
+        android:summary="Reduce PLI frequency to conserve mesh bandwidth"
+        android:defaultValue="true"/>
+
+    <com.atakmap.android.gui.PanListPreference
+        android:key="plugin_meshtastic_pli_rate_limit_value"
+        android:title="PLI Reporting Interval"
+        android:summary="How often to send position updates (requires rate limit enabled)"
+        android:dialogTitle="PLI Interval"
+        android:entries="@array/rates"
+        android:entryValues="@array/rate_values"
+        android:defaultValue="300"/>
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_plichat_only"
+        android:title="Only Send PLI and Chat"
+        android:summary="Use optimized protobuf format (recommended for Meshtastic)"
+        android:defaultValue="false"/>
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_chat_receipts"
+        android:title="Send Read/Delivery Receipts"
+        android:summary="Send delivery and read receipts for chat messages"
+        android:defaultValue="true"/>
+
+    <!-- Display Settings -->
+    <PreferenceCategory android:title="Display Settings" />
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_tracker"
+        android:title="Show Meshtastic Devices"
+        android:summary="Display all Meshtastic nodes as markers on the map"
+        android:defaultValue="true"/>
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_nogps"
+        android:title="Hide Devices Without GPS"
+        android:summary="Don't show nodes reporting 0,0 coordinates (requires Show Meshtastic Devices)"
+        android:defaultValue="false"/>
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_self"
+        android:title="Hide Local Node"
+        android:summary="Don't show your own Meshtastic device (requires Show Meshtastic Devices)"
+        android:defaultValue="false"/>
+
+    <!-- Server Relay -->
+    <PreferenceCategory android:title="Server Relay" />
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_server"
+        android:title="Relay to Server"
+        android:summary="Forward messages from Meshtastic to connected TAK servers"
+        android:defaultValue="false"/>
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_from_server"
+        android:title="Relay from Server"
+        android:summary="Forward PLI and chat from TAK servers to Meshtastic"
+        android:defaultValue="false"/>
+
+    <PreferenceCategory android:title="TAK Server Connection" />
+
+    <com.atakmap.android.gui.PanEditTextPreference
+        android:key="plugin_meshtastic_tak_server_host"
+        android:title="TAK Server Address"
+        android:summary="IP or hostname for the TAK server (included in onboarding package)"
+        android:dialogTitle="TAK Server Address"
+        android:inputType="text"
+        android:defaultValue=""/>
+
+    <com.atakmap.android.gui.PanEditTextPreference
+        android:key="plugin_meshtastic_tak_server_port"
+        android:title="TAK Server Port"
+        android:summary="Port for CoT TCP connections (default: 8087)"
+        android:dialogTitle="TAK Server Port"
+        android:inputType="number"
+        android:defaultValue="8087"/>
+
+    <!-- File Transfer -->
+    <PreferenceCategory android:title="File Transfer" />
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_file_transfer"
+        android:title="Enable File Transfer"
+        android:summary="Allow sending files via Meshtastic (requires Short_Turbo preset, max 56KB)"
+        android:defaultValue="false"/>
+
+    <!-- Audio & Voice -->
+    <PreferenceCategory android:title="Audio &amp; Voice" />
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_voice"
+        android:title="Text to Speech"
+        android:summary="Read incoming Meshtastic text messages aloud"
+        android:defaultValue="false"/>
+
+    <com.atakmap.android.gui.PanEditTextPreference
+        android:key="plugin_meshtastic_ptt"
+        android:title="PTT KeyCode"
+        android:summary="Hardware button code for voice memo recording"
+        android:dialogTitle="PTT KeyCode"
+        android:inputType="number"
+        android:defaultValue="79"/>
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_ptt_momentary"
+        android:title="PTT Momentary Mode"
+        android:summary="Hold button to transmit, release to stop (disable for latching mode)"
+        android:defaultValue="false"/>
+
+    <com.atakmap.android.gui.PanListPreference
+        android:key="plugin_meshtastic_tot"
+        android:title="Time Out Timer (TOT)"
+        android:summary="Maximum transmission length (prevents accidental long transmissions)"
+        android:dialogTitle="Time Out Timer"
+        android:entries="@array/tot_names"
+        android:entryValues="@array/tot_values"
+        android:defaultValue="0"/>
+
+    <!-- GPS Settings -->
+    <PreferenceCategory android:title="GPS Settings" />
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_external_gps"
+        android:title="Use Meshtastic GPS"
+        android:summary="Use Meshtastic device GPS as ATAK's external GPS source"
+        android:defaultValue="false"/>
+
+    <!-- Application-Layer Encryption -->
+    <PreferenceCategory android:title="Application-Layer Encryption" />
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_extra_encryption"
+        android:title="Enable App-Layer Encryption"
+        android:summary="Encrypt CoT payloads with AES-256-GCM before Meshtastic handoff. Keys stored on phone only — radio compromise does not expose message content."
+        android:defaultValue="false"/>
+
+    <android.preference.Preference
+        android:key="plugin_meshtastic_encryption_psk"
+        android:title="Pre-Shared Key (PSK)"
+        android:summary="Tap to configure"/>
+
+    <android.preference.Preference
+        android:key="plugin_meshtastic_scan_key_qr"
+        android:title="Scan Key QR Code"
+        android:summary="Scan a team member's QR code to import their encryption key"/>
+
+    <android.preference.Preference
+        android:key="plugin_meshtastic_show_key_qr"
+        android:title="Show Key QR Code"
+        android:summary="Display the encryption key as a QR code for team distribution"
+        android:dependency="plugin_meshtastic_extra_encryption"/>
+
+    <android.preference.Preference
+        android:key="plugin_meshtastic_export_data_package"
+        android:title="Export Onboarding Package"
+        android:summary="Share a ZIP that fully configures a new team device (keys + server profile)"
+        android:dependency="plugin_meshtastic_extra_encryption"/>
+
+    <android.preference.Preference
+        android:key="plugin_meshtastic_import_data_package"
+        android:title="Import Onboarding Package"
+        android:summary="Apply encryption keys and server settings from a team configuration ZIP"/>
+
+    <com.atakmap.android.gui.PanSwitchPreference
+        android:key="plugin_meshtastic_epoch_rotation"
+        android:title="Enable Epoch Rotation"
+        android:summary="Automatically rotate encryption keys on a schedule. Provides forward secrecy — compromised keys cannot decrypt past traffic."
+        android:defaultValue="false"
+        android:dependency="plugin_meshtastic_extra_encryption"/>
+
+    <com.atakmap.android.gui.PanListPreference
+        android:key="plugin_meshtastic_epoch_interval"
+        android:title="Epoch Rotation Interval"
+        android:summary="How often to rotate encryption keys (all team devices rotate in sync)"
+        android:dialogTitle="Epoch Rotation Interval"
+        android:entries="@array/epoch_interval_names"
+        android:entryValues="@array/epoch_interval_values"
+        android:defaultValue="6"
+        android:dependency="plugin_meshtastic_epoch_rotation"/>
+
+    <android.preference.Preference
+        android:key="plugin_meshtastic_epoch_current"
+        android:title="Current Epoch"
+        android:summary="Not active"
+        android:selectable="false"
+        android:enabled="false"/>
+
+</PreferenceScreen>

@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <name>CrypTAK Relay Site Candidates</name>
+    <Placemark>
+      <name>Base Station</name>
+      <description>CrypTAK mesh base station</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/red-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.29344941,38.84191827,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>#1 — 141m (WNW 3.2km)</name>
+      <description>Elevation: 141m | Prominence: 5m | Distance: 3.17km | LOS: Clear (1m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.32638888888889,38.85444444444445,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #1</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.32638888888889,38.85444444444445,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#2 — 141m (WNW 3.2km)</name>
+      <description>Elevation: 141m | Prominence: 6m | Distance: 3.15km | LOS: Clear (2m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.32611111111112,38.85444444444445,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #2</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.32611111111112,38.85444444444445,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#3 — 140m (NNW 3.8km)</name>
+      <description>Elevation: 140m | Prominence: 7m | Distance: 3.79km | LOS: Clear (4m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.31722222222223,38.870555555555555,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #3</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.31722222222223,38.870555555555555,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#4 — 139m (NW 3.4km)</name>
+      <description>Elevation: 139m | Prominence: 5m | Distance: 3.43km | LOS: Clear (1m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.32055555555556,38.864444444444445,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #4</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.32055555555556,38.864444444444445,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#5 — 139m (NW 3.4km)</name>
+      <description>Elevation: 139m | Prominence: 6m | Distance: 3.42km | LOS: Clear (1m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.32027777777778,38.864444444444445,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #5</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.32027777777778,38.864444444444445,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#6 — 138m (NNW 3.9km)</name>
+      <description>Elevation: 138m | Prominence: 5m | Distance: 3.89km | LOS: Clear (3m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.31333333333333,38.873333333333335,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #6</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.31333333333333,38.873333333333335,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#7 — 138m (NE 0.4km)</name>
+      <description>Elevation: 138m | Prominence: 7m | Distance: 0.40km | LOS: Clear (1m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.29055555555556,38.844722222222224,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #7</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.29055555555556,38.844722222222224,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#8 — 137m (WNW 0.4km)</name>
+      <description>Elevation: 137m | Prominence: 5m | Distance: 0.42km | LOS: Clear (2m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.29777777777778,38.84361111111111,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #8</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.29777777777778,38.84361111111111,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#9 — 136m (NW 3.4km)</name>
+      <description>Elevation: 136m | Prominence: 6m | Distance: 3.45km | LOS: Clear (1m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.31833333333333,38.86611111111111,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #9</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.31833333333333,38.86611111111111,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#10 — 136m (NW 3.4km)</name>
+      <description>Elevation: 136m | Prominence: 6m | Distance: 3.43km | LOS: Clear (1m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.31805555555556,38.86611111111111,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #10</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.31805555555556,38.86611111111111,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#11 — 136m (NW 3.2km)</name>
+      <description>Elevation: 136m | Prominence: 5m | Distance: 3.24km | LOS: Clear (0m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.32055555555556,38.86194444444445,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #11</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.32055555555556,38.86194444444445,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#12 — 136m (NW 3.2km)</name>
+      <description>Elevation: 136m | Prominence: 6m | Distance: 3.22km | LOS: Clear (1m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.32027777777778,38.86194444444445,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #12</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.32027777777778,38.86194444444445,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#13 — 136m (NW 3.2km)</name>
+      <description>Elevation: 136m | Prominence: 5m | Distance: 3.20km | LOS: Clear (1m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.32027777777778,38.861666666666665,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #13</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.32027777777778,38.861666666666665,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#14 — 136m (SSE 3.4km)</name>
+      <description>Elevation: 136m | Prominence: 9m | Distance: 3.40km | LOS: Clear (1m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.2761111111111,38.81444444444445,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #14</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.2761111111111,38.81444444444445,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#15 — 136m (SSE 3.4km)</name>
+      <description>Elevation: 136m | Prominence: 9m | Distance: 3.43km | LOS: Clear (1m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.2761111111111,38.814166666666665,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #15</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.2761111111111,38.814166666666665,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#16 — 134m (NNW 4.5km)</name>
+      <description>Elevation: 134m | Prominence: 6m | Distance: 4.49km | LOS: Clear (2m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.30611111111111,38.88111111111111,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #16</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.30611111111111,38.88111111111111,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#17 — 134m (NNW 0.6km)</name>
+      <description>Elevation: 134m | Prominence: 5m | Distance: 0.64km | LOS: Clear (1m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.29527777777778,38.8475,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #17</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.29527777777778,38.8475,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#18 — 134m (NNW 0.6km)</name>
+      <description>Elevation: 134m | Prominence: 6m | Distance: 0.62km | LOS: Clear (1m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.29555555555555,38.84722222222222,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #18</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.29555555555555,38.84722222222222,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#19 — 134m (NNW 0.6km)</name>
+      <description>Elevation: 134m | Prominence: 6m | Distance: 0.61km | LOS: Clear (1m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.29527777777778,38.84722222222222,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #19</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.29527777777778,38.84722222222222,0</coordinates></LineString>
+    </Placemark>    <Placemark>
+      <name>#20 — 134m (NNW 0.6km)</name>
+      <description>Elevation: 134m | Prominence: 6m | Distance: 0.59km | LOS: Clear (2m)</description>
+      <Style><IconStyle><Icon><href>http://maps.google.com/mapfiles/kml/paddle/grn-circle.png</href></Icon></IconStyle></Style>
+      <Point><coordinates>-77.29555555555555,38.846944444444446,0</coordinates></Point>
+    </Placemark>    <Placemark>
+      <name>LOS #20</name>
+      <Style><LineStyle><color>ff00ff00</color><width>2</width></LineStyle></Style>
+      <LineString><coordinates>-77.29344941,38.84191827,0 -77.29555555555555,38.846944444444446,0</coordinates></LineString>
+    </Placemark>
+</Document>
+</kml>

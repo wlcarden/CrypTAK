@@ -1,0 +1,439 @@
+////////////////////////////////////////////////////////////////////////////////
+//
+// PLUGIN_VERSION is the common version name when describing the plugin.
+// ATAK_VERSION   is for the version of ATAK this plugin should be compatible
+//                with some examples include 3.11.0, 3.11.0.civ 3.11.1.fvey
+//
+////////////////////////////////////////////////////////////////////////////////
+
+buildscript {
+
+
+    ext.PLUGIN_VERSION = "1.1.40"
+    ext.ATAK_VERSION = "5.5.1"
+
+    def takdevVersion = '3.+'
+
+    ext.getValueFromPropertiesFile = { propFile, key ->
+        if(!propFile.isFile() || !propFile.canRead())
+            return null
+        def prop = new Properties()
+        def reader = propFile.newReader()
+        try {
+            prop.load(reader)
+        } finally {
+            reader.close()
+        }
+        return prop.get(key)
+    }
+
+    def getProperty = { name, defValue ->
+        def prop = project.properties[name] ?:
+                getValueFromPropertiesFile(project.rootProject.file('local.properties'), name)
+        return (null == prop) ? defValue : prop
+    }
+
+    def urlKey = 'takrepo.url'
+
+    ext.isDevKitEnabled = { ->
+        return getProperty(urlKey, null) != null
+    }
+
+    ext.takrepoUrl = getProperty(urlKey, 'https://localhost/')
+    ext.takrepoUser = getProperty('takrepo.user', 'invalid')
+    ext.takrepoPassword = getProperty('takrepo.password', 'invalid')
+
+    // SDK resolution order:
+    //   1. Explicit takdev.plugin property (local.properties or -P flag)
+    //   2. Project-local pluginsdk/ directory (auto-downloaded from GitHub)
+    //   3. Legacy ../../atak-gradle-takdev.jar path
+    def localSdkJar = "${rootDir}/pluginsdk/atak-gradle-takdev.jar"
+    def legacySdkJar = "${rootDir}/../../atak-gradle-takdev.jar"
+    ext.takdevPlugin = getProperty('takdev.plugin', null) ?:
+            (file(localSdkJar).exists() ? localSdkJar : legacySdkJar)
+
+    // Auto-download pluginsdk.zip from ATAK CIV GitHub if no JAR is found locally.
+    // The pluginsdk.zip contains atak-gradle-takdev.jar which provides the ATAK build
+    // environment (compile stubs, signing, APK packaging).
+    // Source: https://github.com/deptofdefense/AndroidTacticalAssaultKit-CIV
+    if (!file(ext.takdevPlugin).exists() && !isDevKitEnabled()) {
+        def sdkDir = file("${rootDir}/pluginsdk")
+        def sdkZip = file("${rootDir}/pluginsdk/pluginsdk.zip")
+        def sdkUrl = getProperty('pluginsdk.url',
+                'https://github.com/deptofdefense/AndroidTacticalAssaultKit-CIV/raw/refs/heads/main/pluginsdk.zip')
+
+        logger.lifecycle("ATAK SDK not found at ${ext.takdevPlugin}")
+        logger.lifecycle("Downloading pluginsdk.zip from ${sdkUrl} ...")
+
+        sdkDir.mkdirs()
+        try {
+            new URL(sdkUrl).withInputStream { input ->
+                sdkZip.withOutputStream { output ->
+                    output << input
+                }
+            }
+            logger.lifecycle("Extracting pluginsdk.zip ...")
+            ant.unzip(src: sdkZip, dest: sdkDir)
+
+            // The JAR may be at the root of the zip or in a subdirectory.
+            // Search for it and copy to the expected location.
+            def found = false
+            sdkDir.eachFileRecurse { f ->
+                if (f.name == 'atak-gradle-takdev.jar') {
+                    if (f.parentFile != sdkDir) {
+                        java.nio.file.Files.copy(f.toPath(),
+                                file("${sdkDir}/atak-gradle-takdev.jar").toPath(),
+                                java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+                    }
+                    found = true
+                }
+            }
+
+            if (found) {
+                ext.takdevPlugin = localSdkJar
+                logger.lifecycle("ATAK SDK ready at ${localSdkJar}")
+            } else {
+                logger.error("atak-gradle-takdev.jar not found inside pluginsdk.zip")
+                logger.error("Contents of ${sdkDir}:")
+                sdkDir.eachFileRecurse { logger.error("  ${it}") }
+            }
+        } catch (Exception e) {
+            logger.error("Failed to download ATAK SDK: ${e.message}")
+            logger.error("You can manually download it from:")
+            logger.error("  ${sdkUrl}")
+            logger.error("Extract to: ${sdkDir}/")
+        }
+    }
+
+    repositories {
+        google()
+        mavenCentral()
+        mavenLocal()
+        maven {
+            url "https://jitpack.io"
+        }
+        maven {
+            url = takrepoUrl
+            credentials {
+                username = takrepoUser
+                password = takrepoPassword
+            }
+        }
+    }
+    dependencies {
+        if(isDevKitEnabled()) {
+            classpath "com.atakmap.gradle:atak-gradle-takdev:${takdevVersion}"
+        } else {
+            classpath files(takdevPlugin)
+        }
+    }
+}
+
+plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.parcelize")
+}
+apply {
+    plugin("atak-takdev-plugin")
+    //from("../gradle/typst.gradle")
+}
+
+allprojects {
+    repositories {
+        mavenCentral()
+        google()
+        mavenCentral()
+        mavenLocal()
+        maven { url = uri("https://jitpack.io") }
+    }
+}
+
+// The supportedFlavors list is an example configuration.  FMS variants can be added and defined via an
+// ISO tricode (xyz is an example and not a real country code).   The ISO tricode can be found here
+// Please see the A-3 in https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes
+
+
+def supportedFlavors =
+[
+                [ name : 'civ', default: true ],
+]
+
+android {
+    compileSdk 36
+    namespace 'com.atakmap.android.meshtastic.plugin'
+
+    buildFeatures {
+        buildConfig = true
+        //aidl = true
+    }
+
+    bundle {
+        storeArchive {
+            enable = false
+        }
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlin {
+        jvmToolchain(17)
+    }
+
+    testOptions {
+        unitTests.all {
+            useJUnitPlatform()
+        }
+        unitTests.returnDefaultValues = true
+    }
+
+    lintOptions {
+        checkReleaseBuilds true
+        // Or, if you prefer, you can continue to check for errors in release builds,
+        // but continue the build even when errors are found:
+        abortOnError true
+    }
+
+    signingConfigs {
+        debug {
+            storeFile file("${buildDir}/android_keystore")
+            storePassword "tnttnt"
+            keyAlias "wintec_mapping"
+            keyPassword "tnttnt"
+        }
+        release {
+            storeFile file("${buildDir}/android_keystore")
+            storePassword "tnttnt"
+            keyAlias "wintec_mapping"
+            keyPassword "tnttnt"
+        }
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+            matchingFallbacks = ['sdk']
+        }
+        release {
+            minifyEnabled true
+            proguardFile 'proguard-gradle.txt'
+            signingConfig signingConfigs.release
+            matchingFallbacks = ['odk']
+        }
+    }
+/*
+    proguard {
+        configurations {
+            release {
+                defaultConfiguration 'proguard-android-optimize.txt'
+                configuration 'proguard-gradle.txt'
+            }
+        }
+    }
+*/
+    flavorDimensions "application"
+
+
+    productFlavors {
+        supportedFlavors.each { flav ->
+            "${flav.name}" {
+                getIsDefault().set(flav.default)
+                dimension "application"
+
+                // retain existing application identifiers for civ and mil
+                if (!flav.name.equals("civ") && !flav.name.equals("mil")) {
+                    applicationIdSuffix = ".${flav.name}"
+                }
+                // resolve CIV dependency if flavor specific dependency is not available
+                matchingFallbacks = ['civ']
+
+                // set the api version information
+                def pluginApiFlavor = flav.name.equals('gov') ? 'CIV' : "${flav.name.toUpperCase()}"
+                manifestPlaceholders = [atakApiVersion: "com.atakmap.app@" + ATAK_VERSION + ".${pluginApiFlavor}"]
+
+                // additional variables associated with the flav can be set here once defined above
+                // buildConfigField 'boolean', 'EXAMPLE', "${flav.example}"
+            }
+        }
+        // additional variables associated with all flavors can be set here
+        applicationVariants.all { variant ->
+            variant.resValue "string", "versionName", variant.versionName
+            buildConfigField 'String', 'ATAK_PACKAGE_NAME', '"com.atakmap.app.civ"'
+        }
+    }
+
+    packagingOptions {
+
+        resources {
+            excludes += ['META-INF/INDEX.LIST']
+        }
+
+        // Extract native libraries from the APK - required for plugin loading
+        jniLibs.useLegacyPackaging true
+    }
+
+    sourceSets {
+        main {
+
+	    // aidl is not being compiled when upgrading AGP 8+
+            //aidl.srcDirs = ['src/main/aidl']
+
+            // It is strongly encouraged that plugin developers do not modify the archivesBaseName, version code logic and version
+            // name logic to provide for consistency within the community.
+            setProperty("archivesBaseName", "ATAK-Plugin-" + rootProject.name + "-" + PLUGIN_VERSION + "-" + getVersionName() + "-" + ATAK_VERSION)
+            defaultConfig.versionCode = getVersionCode()
+            defaultConfig.versionName = PLUGIN_VERSION + " (" + getVersionName() + ") - [" + ATAK_VERSION + "]"
+        }
+
+        // Move the build types to build-types/<type>
+        // For instance, build-types/debug/java, build-types/debug/AndroidManifest.xml, ...
+        // This moves them out of them default location under src/<type>/... which would
+        // conflict with src/ being used by the main source set.
+        // Adding new build types or product flavors should be accompanied
+        // by a similar customization.
+        debug.setRoot('build-types/debug')
+        release.setRoot('build-types/release')
+
+    }
+
+    defaultConfig {
+        minSdkVersion 26
+        targetSdkVersion 34
+
+        def runTasks = gradle.startParameter.taskNames
+        if(runTasks.toString().contains('bundle')) {
+            ndk {
+                abiFilters "armeabi-v7a", "arm64-v8a"
+            }
+        } else {
+            ndk {
+                abiFilters "armeabi-v7a", "arm64-v8a", "x86"
+            }
+        }
+    }
+    lint {
+        abortOnError true
+        checkReleaseBuilds true
+    }
+}
+
+afterEvaluate {
+    project.file('proguard-gradle-repackage.txt').text = "-repackageclasses atakplugin.${rootProject.getName()}"
+
+    try {
+        tasks.named("compile" + getCommandFlavor() + "ReleaseKotlin") {
+            println "modifying " + getCommandFlavor().toLowerCase() + " kotlin compile options to include: -Xsam-conversions=class"
+            kotlinOptions {
+                freeCompilerArgs += "-Xsam-conversions=class"
+            }
+        }
+    } catch (Exception ignored) { }
+}
+
+// modified code to find the current flavor in progress
+def getCommandFlavor() {
+    String  tskReqStr = getGradle().getStartParameter().getTaskRequests().toString()
+
+    java.util.regex.Pattern pattern
+    if( tskReqStr.contains( "assemble" ) )
+        pattern = java.util.regex.Pattern.compile("assemble(\\w+)(Release|Debug)")
+    else if( tskReqStr.contains( "install" ) )
+        pattern = java.util.regex.Pattern.compile("install(\\w+)(Release|Debug)")
+    else
+        pattern = java.util.regex.Pattern.compile("generate(\\w+)(Release|Debug)")
+
+    java.util.regex.Matcher matcher = pattern.matcher(tskReqStr)
+
+    if( matcher.find() ) {
+        return matcher.group(1)
+    } else {
+        return "Civ"
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: '*.jar')
+    implementation 'com.google.zxing:core:3.5.3'
+    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
+
+    implementation project(":libcodec2-android")
+
+    // https://mvnrepository.com/artifact/com.siemens.ct.exi/exificient
+    implementation 'com.siemens.ct.exi:exificient:1.0.7'
+
+	implementation "org.jetbrains.kotlinx:kotlinx-serialization-core:1.9.0"
+	implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0"
+
+    implementation 'com.google.ar:core:1.43.0'
+
+    implementation 'net.java.dev.jna:jna:5.13.0@aar'
+    implementation 'com.alphacephei:vosk-android:0.3.47@aar'
+    implementation project(':models')
+
+    def meshtasticVersion = "v2.7.13-internal.6"
+
+    // The underlying Protobuf definitions
+    implementation 'com.github.meshtastic.Meshtastic-Android:meshtastic-android-proto:v2.7.13-internal.6'
+    // The Parcelable data models (DataPacket, MeshUser, NodeInfo, etc.)
+    implementation 'com.github.meshtastic.Meshtastic-Android:meshtastic-android-model:v2.7.13-internal.6'
+    // The core AIDL interface (IMeshService)
+    implementation 'com.github.meshtastic.Meshtastic-Android:meshtastic-android-api:v2.7.13-internal.6'
+
+
+    // Osmdroid & Maps
+    def osmdroid_version = '6.1.14'
+    implementation "org.osmdroid:osmdroid-android:$osmdroid_version"
+    implementation "org.osmdroid:osmdroid-wms:$osmdroid_version"
+    implementation("org.osmdroid:osmdroid-geopackage:$osmdroid_version") {
+        exclude group: 'com.j256.ormlite'
+    }
+    implementation 'com.github.MKergall:osmbonuspack:6.9.0'
+    implementation "mil.nga:mgrs:2.1.3"
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testImplementation 'org.assertj:assertj-core:3.27.3'
+    testImplementation 'org.mockito:mockito-core:5.16.1'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.16.1'
+    // XmlPull implementation required for CotEventProcessor.parseCotEvent() in JVM tests
+    // (XmlPullParserFactory.newInstance() throws if no provider is on the classpath)
+    testImplementation 'net.sf.kxml:kxml2:2.3.0'
+}
+
+configurations.all {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == 'androidx.core' && !details.requested.name.contains('core-viewtree')) {
+            details.useVersion "1.17.0"
+        }
+        if (details.requested.group == 'androidx.lifecycle') {
+            details.useVersion "2.9.4"
+        }
+        if (details.requested.group == 'androidx.fragment') {
+            details.useVersion "1.8.9"
+        }
+        if (details.requested.group == 'com.squareup.okhttp3') {
+            details.useVersion "4.11.0"
+        }
+        if (details.requested.group == 'com.squareup.okio') {
+            details.useVersion "3.2.0"
+        }
+    }
+}
+
+configurations.implementation {
+    exclude group: 'androidx.core', module: 'core-ktx'
+    exclude group: 'androidx.core', module: 'core'
+    exclude group: 'androidx.fragment', module: 'fragment'
+    exclude group: 'androidx.lifecycle', module: 'lifecycle'
+    exclude group: 'androidx.lifecycle', module: 'lifecycle-process'
+    exclude group: 'com.squareup.okhttp3', module: 'okhttp'
+    exclude group: 'com.squareup.okio', module: 'okio'
+}

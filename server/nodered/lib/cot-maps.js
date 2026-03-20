@@ -311,6 +311,8 @@ function buildPopup(callsign, r, color, battery, isTracker, mesh) {
     var safeCs = escHtml(callsign).replace(/'/g, "\\'");
     var affs = [
       { code: "f", label: "Friendly", color: "#0066FF" },
+      { code: "n", label: "Neutral", color: "#00AA00" },
+      { code: "u", label: "Unknown", color: "#CCCC00" },
       { code: "s", label: "Suspect", color: "#FF8C00" },
       { code: "h", label: "Hostile", color: "#FF0000" },
     ];

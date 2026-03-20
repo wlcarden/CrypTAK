@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App -->
+    <string name="app_name">CrypTAK Plugin</string>
+    <!-- description -->
+    <string name="app_desc">AES-256-GCM encrypted messaging over Meshtastic LoRa mesh radio for ATAK</string>
+
+       <string name="preferences_title">CrypTAK Preferences</string>
+        <string name="preferences_summary">summary</string>
+        <string name="preferences_dialogTitle">title</string>
+        <string name="preferences_distanceTitle">title</string>
+        <string name="meshtastic_preferences">meshtastic_preferences</string>
+
+
+</resources>

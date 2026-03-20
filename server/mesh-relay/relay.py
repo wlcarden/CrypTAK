@@ -55,10 +55,15 @@ NODEDB_SEED_MAX_AGE_SECS = int(os.environ.get("NODEDB_SEED_MAX_AGE_SECS", "7200"
 # Falls back to env vars for backward compatibility.
 _NODES_YAML = os.environ.get("NODES_YAML", "/app/firmware/nodes.yaml")
 
-def _load_node_registry(path: str) -> tuple[set[str], set[str]]:
-    """Parse nodes.yaml and return (friendly_ids, tracker_ids)."""
+def _load_node_registry(path: str) -> tuple[set[str], set[str], dict[str, str]]:
+    """Parse nodes.yaml and return (friendly_ids, tracker_ids, cot_types).
+    
+    cot_types maps node_id (without !) to the cot_type string from yaml,
+    e.g. {'55c6ddbc': 'a-f-G-E-X', '9aa4baf0': 'a-f-G-E-V'}.
+    """
     friendly: set[str] = set()
     trackers: set[str] = set()
+    cot_types: dict[str, str] = {}
     try:
         with open(path) as f:
             data = yaml.safe_load(f)
@@ -70,15 +75,18 @@ def _load_node_registry(path: str) -> tuple[set[str], set[str]]:
             friendly.add(node_id)  # all owned nodes are friendly
             if cfg.get("tracker"):
                 trackers.add(node_id)
+            if cfg.get("cot_type"):
+                cot_types[node_id] = cfg["cot_type"]
         if friendly:
-            logger.info("Loaded %d nodes from %s (%d trackers)", len(friendly), path, len(trackers))
+            logger.info("Loaded %d nodes from %s (%d trackers, %d cot_types)", 
+                       len(friendly), path, len(trackers), len(cot_types))
     except FileNotFoundError:
         logger.warning("nodes.yaml not found at %s — falling back to env vars", path)
     except Exception as exc:
         logger.warning("Failed to parse %s: %s — falling back to env vars", path, exc)
-    return friendly, trackers
+    return friendly, trackers, cot_types
 
-_yaml_friendly, _yaml_trackers = _load_node_registry(_NODES_YAML)
+_yaml_friendly, _yaml_trackers, _yaml_cot_types = _load_node_registry(_NODES_YAML)
 
 # Env var fallback (backward compat — used if nodes.yaml not found/empty)
 _friendly_raw = os.environ.get("FRIENDLY_NODES", "")
@@ -92,6 +100,7 @@ _env_trackers: set[str] = {
 
 FRIENDLY_NODES: set[str] = _yaml_friendly if _yaml_friendly else _env_friendly
 TRACKER_NODES: set[str] = _yaml_trackers if _yaml_trackers else _env_trackers
+COT_TYPES: dict[str, str] = _yaml_cot_types  # node_id → cot_type from nodes.yaml
 
 # Telemetry cache — updated by telemetry handler, read during nodedb seed.
 _telemetry_cache: dict[str, dict] = {}
@@ -178,8 +187,19 @@ def build_pli(
     else:
         friendly = node_id in FRIENDLY_NODES
         aff = "f" if friendly else "n"
-        type_suffix = "G-E-S"
-        group_name = "Cyan" if friendly else "Green"
+        # Use cot_type from nodes.yaml if available, otherwise default sensor
+        custom_cot = COT_TYPES.get(node_id, "")
+        if custom_cot:
+            # Parse cot_type like "a-f-G-E-V" → affiliation from char 2, suffix from chars 4+
+            cot_parts = custom_cot.split("-")
+            if len(cot_parts) >= 3:
+                aff = cot_parts[1]  # use yaml-specified affiliation
+                type_suffix = "-".join(cot_parts[2:])
+            else:
+                type_suffix = "G-E-S"
+        else:
+            type_suffix = "G-E-S"
+        group_name = {"f": "Cyan", "n": "Green", "h": "Red", "s": "Yellow", "u": "Yellow"}.get(aff, "Green")
 
     now = datetime.now(timezone.utc)
     stale = now + timedelta(minutes=STALE_MINUTES)

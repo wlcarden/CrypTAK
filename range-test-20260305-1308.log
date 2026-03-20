@@ -1,0 +1,124 @@
+2026-03-05 18:07:44,197 [INFO] mesh-relay: Connected to FTS at freetakserver:8087
+2026-03-05 18:07:44,197 [INFO] mesh-relay: Sent SA to FTS
+2026-03-05 18:07:44,198 [INFO] mesh-relay: Subscribed to mesh position + telemetry packets
+2026-03-05 18:07:44,198 [INFO] mesh-relay: Mesh relay running
+2026-03-05 18:07:44,200 [INFO] mesh-relay: Connecting to Meshtastic via serial: /dev/ttyACM0
+2026-03-05 18:07:45,549 [INFO] mesh-relay: Mesh node connected, heartbeat every 30s, position poll every 120s
+2026-03-05 18:07:45,549 [INFO] mesh-relay: Refreshed 3 positions from nodedb
+2026-03-05 18:07:53,457 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:07:53,457 [WARNING] mesh-relay: FTS send failed (Connection lost), reconnecting
+2026-03-05 18:07:53,458 [INFO] mesh-relay: Connected to FTS at freetakserver:8087
+2026-03-05 18:07:53,458 [INFO] mesh-relay: Sent SA to FTS
+2026-03-05 18:08:31,463 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=43% snr=11.2dB hops=0
+2026-03-05 18:09:08,835 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:09:45,951 [INFO] mesh-relay: Refreshed 3 positions from nodedb
+2026-03-05 18:09:46,849 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=43% snr=11.2dB hops=0
+Telemetry received:
+Battery level: 42.00%
+Voltage: 3.65 V
+Total channel utilization: 4.72%
+Transmit air utilization: 1.17%
+Uptime: 190769 s
+2026-03-05 18:10:28,039 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:11:01,876 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+2026-03-05 18:11:38,967 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:12:08,990 [INFO] mesh-relay: Sent SA to FTS
+2026-03-05 18:12:17,071 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+2026-03-05 18:12:54,651 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:13:32,387 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+2026-03-05 18:14:13,343 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:14:47,501 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+2026-03-05 18:15:27,037 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:16:02,688 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+2026-03-05 18:16:32,689 [INFO] mesh-relay: Sent SA to FTS
+2026-03-05 18:16:39,863 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:17:17,894 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+2026-03-05 18:17:55,020 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:18:33,146 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+2026-03-05 18:19:12,396 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:19:48,305 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+2026-03-05 18:20:20,930 [INFO] mesh-relay: Refreshed 3 positions from nodedb
+2026-03-05 18:20:23,965 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+Telemetry received:
+Battery level: 42.00%
+Voltage: 3.65 V
+Total channel utilization: 3.66%
+Transmit air utilization: 1.22%
+Uptime: 191369 s
+2026-03-05 18:20:32,439 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:21:02,448 [INFO] mesh-relay: Sent SA to FTS
+2026-03-05 18:21:03,511 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+2026-03-05 18:21:40,626 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:22:18,733 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+2026-03-05 18:22:55,909 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:23:34,370 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+2026-03-05 18:23:39,376 [INFO] mesh-relay: Position from Tracker Alpha: 38.841857, -77.293452 alt=0m bat=101% snr=10.0dB hops=0
+2026-03-05 18:24:11,049 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:24:49,127 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+2026-03-05 18:25:19,157 [INFO] mesh-relay: Sent SA to FTS
+2026-03-05 18:25:26,335 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:25:32,474 [INFO] mesh-relay: Position from Tracker Alpha: 38.841857, -77.293452 alt=0m bat=101% snr=11.8dB hops=0
+Telemetry received:
+Battery level: 101.00%
+Voltage: 3.96 V
+Total channel utilization: 1.13%
+Transmit air utilization: 0.00%
+Uptime: 5 s
+2026-03-05 18:25:35,444 [INFO] mesh-relay: Position from Tracker Alpha: 38.841857, -77.293452 alt=0m bat=101% snr=11.8dB hops=0
+2026-03-05 18:26:04,340 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+2026-03-05 18:26:05,079 [INFO] mesh-relay: Refreshed 3 positions from nodedb
+2026-03-05 18:26:09,150 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+Telemetry received:
+Battery level: 42.00%
+Voltage: 3.65 V
+Total channel utilization: 19.26%
+Transmit air utilization: 1.25%
+Uptime: 191729 s
+2026-03-05 18:26:45,236 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:27:19,582 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+2026-03-05 18:27:56,670 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:28:35,096 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=11.2dB hops=0
+2026-03-05 18:29:12,163 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:29:42,193 [INFO] mesh-relay: Sent SA to FTS
+2026-03-05 18:30:27,160 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+Telemetry received:
+Battery level: 72.00%
+Voltage: 3.91 V
+Total channel utilization: 3.79%
+Transmit air utilization: 0.13%
+Uptime: 337 s
+2026-03-05 18:31:45,419 [INFO] mesh-relay: Refreshed 3 positions from nodedb
+2026-03-05 18:31:46,252 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:32:57,499 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:33:57,559 [INFO] mesh-relay: Sent SA to FTS
+2026-03-05 18:34:12,776 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:35:28,015 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:36:45,250 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:36:48,866 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+Telemetry received:
+Battery level: 101.00%
+Voltage: 3.98 V
+Total channel utilization: 3.79%
+Transmit air utilization: 1.73%
+Uptime: 152167 s
+2026-03-05 18:38:00,709 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:38:00,709 [INFO] mesh-relay: Sent SA to FTS
+2026-03-05 18:39:17,132 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:40:33,001 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:41:37,325 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=42% snr=10.0dB hops=0
+2026-03-05 18:41:43,957 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:42:13,987 [INFO] mesh-relay: Sent SA to FTS
+2026-03-05 18:42:20,184 [INFO] mesh-relay: Refreshed 3 positions from nodedb
+Telemetry received:
+Battery level: 101.00%
+Voltage: 3.69 V
+Total channel utilization: 6.66%
+Transmit air utilization: 0.06%
+Uptime: 65 s
+2026-03-05 18:42:29,792 [WARNING] mesh-relay: Node 3db00f2c rebooted (was up 191729s, now 65s)
+2026-03-05 18:42:59,174 [INFO] mesh-relay: Position from CrypTAK Base: 38.841900, -77.293500 alt=155m bat=101% snr=-17.0dB hops=0
+2026-03-05 18:43:26,445 [INFO] mesh-relay: Position from Tracker Alpha: 38.841857, -77.293452 alt=0m bat=72% snr=10.2dB hops=0
+2026-03-05 18:43:34,042 [INFO] mesh-relay: Position from CrypTAK Solar: 38.841900, -77.293500 alt=0m bat=101% snr=13.2dB hops=0
+2026-03-05 18:43:59,172 [INFO] mesh-relay: Shutdown signal received
+2026-03-05 18:44:04,047 [INFO] mesh-relay: FTS client closed
+2026-03-05 18:44:04,047 [INFO] mesh-relay: Mesh relay stopped
