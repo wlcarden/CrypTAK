@@ -1,0 +1,46 @@
+# Prototype Node — CLIENT profile with full diagnostics
+# For new hardware evaluation. Full GPS, fast telemetry, no routing duties.
+# Use during testing before assigning a permanent role.
+
+config:
+  lora:
+    modem_preset: LONG_FAST
+    region: US
+    tx_power: 30
+    hop_limit: 3
+    channel_num: 0
+
+  device:
+    role: CLIENT
+    serial_enabled: true
+    rebroadcast_mode: ALL
+    node_info_broadcast_secs: 600            # 10 min
+
+  position:
+    position_broadcast_smart_enabled: true
+    broadcast_smart_minimum_interval_secs: 30
+    gps_enabled: true
+    gps_update_interval: 15
+    position_broadcast_secs: 60
+    position_precision: 32                    # Full precision
+
+  telemetry:
+    device_update_interval: 60               # 1 min — max diagnostics
+    device_telemetry_enabled: true
+    environment_measurement_enabled: true     # T-Beam Supreme has BME280
+    environment_update_interval: 60
+
+  power:
+    is_power_saving: false
+
+  neighbor_info:
+    enabled: true
+    update_interval: 120                     # 2 min
+
+  bluetooth:
+    enabled: true
+    mode: FIXED_PIN
+    fixed_pin: 123456
+
+  display:
+    auto_screen_carousel_secs: 5

@@ -41,3 +41,15 @@ nodes:
     profile: relay
     short_name: CR01
     cot_type: "a-f-G-E-S"
+  CrypTAK-TBS01:
+    id: "!435bab94"
+    profile: prototype
+    short_name: TB01
+    cot_type: "a-f-G-E-X"
+    notes: "T-Beam Supreme S3, L76K GPS, MAC 48:CA:43:5B:AB:94"
+  CrypTAK-TBS02:
+    id: "!435ae49c"
+    profile: prototype
+    short_name: TB02
+    cot_type: "a-f-G-E-X"
+    notes: "T-Beam Supreme S3, UBLOX MAX-M10S GPS, MAC 48:CA:43:5A:E4:9C"
