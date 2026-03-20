@@ -1,0 +1,27 @@
+services:
+  meshtastic-serial-bridge:
+    image: ghcr.io/yeraze/meshtastic-serial-bridge:latest
+    container_name: meshtastic-serial-bridge
+    devices:
+      - /dev/ttyACM0:/dev/ttyACM0
+    ports:
+      - "4403:4403"
+    restart: unless-stopped
+    environment:
+      - SERIAL_DEVICE=/dev/ttyACM0
+      - BAUD_RATE=115200
+      - TCP_PORT=4403
+
+  meshmonitor:
+    image: ghcr.io/yeraze/meshmonitor:latest
+    container_name: meshmonitor
+    ports:
+      - "8090:3001"
+    volumes:
+      - /mnt/user/appdata/meshmonitor/data:/data
+    environment:
+      - MESHTASTIC_NODE_IP=meshtastic-serial-bridge
+      - MESHTASTIC_NODE_PORT=4403
+    restart: unless-stopped
+    depends_on:
+      - meshtastic-serial-bridge

@@ -44,279 +44,325 @@ directly to the internet.
                       │  │ VPN      │  │ MQTT      │  │ (USB serial)      │  │
                       │  │ :9443    │  │ :1883     │  │                   │  │
                       │  └──────────┘  └──────────┘  └─────────┬─────────┘  │
+                      │     ┌────────────────────┐             │           │
+                      │     │  MeshMonitor       │◄────────────┘           │
+                      │     │  Fleet Monitor     │  (serial bridge)        │
+                      │     │  :8090             │                         │
+                      │     └────────────────────┘                         │
                       └──────────────────────────────────────────┼───────────┘
                                                                  │
                              ┌────────── LoRa 915 MHz ───────────┤
                              │                                   │
-                      ┌──────┴──────┐                     ┌──────┴──────┐
-                      │ Solar Relay │◄── LoRa ──►         │ Base Station│
-                      │ (SOL01)     │            │        │ (BSE01)     │
-                      └─────────────┘     ┌──────┴──────┐ └─────────────┘
-                                          │ Vehicle     │
-┌─────────────────┐                       │ (VHC01)     │
-│  Android Device │──BT/USB──►Meshtastic  └─────────────┘
-│  ATAK-CIV +     │  radio node
-│  CrypTAK Plugin │
-│  (AES-256-GCM)  │──WiFi/VPN──► FreeTAKServer :8087
-└─────────────────┘
-```
 
-**Encryption boundary:** The CrypTAK plugin encrypts all ATAK payloads (chat,
-PLI, CoT events) with AES-256-GCM before they leave the phone. The server
-relays ciphertext — it never sees plaintext. Decryption happens only on devices
-that hold the shared key.
-
-**Data paths (both active simultaneously):**
-
-- **WiFi/VPN:** ATAK devices connect directly to FreeTAKServer over TCP for
-  full-rate CoT exchange with server persistence.
-- **LoRa mesh:** When WiFi is unavailable, CoT events are encrypted and sent
-  over the Meshtastic mesh. The mesh relay service on the server converts mesh
-  positions to CoT and injects them into FTS, so mesh-only nodes appear on
-  every connected client's map.
-- **Detection alerts:** GPIO sensor events from mesh nodes are forwarded as
-  CoT alarm markers with position and alert text.
-
----
-
-## Repository Layout
-
-```
-CrypTAK/
-├── plugin/                    ATAK plugin — AES-256-GCM encryption + Meshtastic bridge
-├── server/                    Self-hosted server stack
-│   ├── docker-compose.yml     Full Unraid deployment (10 services)
-│   ├── docker-compose.field.yml  Field unit (FTS + Mumble + HaLow bridge)
-│   ├── mesh-relay/            Meshtastic → FTS relay service (relay.py)
-│   ├── incident-tracker/      Automated incident monitoring (RSS, NWS, USGS, etc.)
-│   ├── halow-bridge/          Field-to-home CoT bridge with offline buffering
-│   ├── nodered/               Node-RED WebMap + mesh panel + CoT pipeline
-│   ├── field-services/        systemd units for reTerminal (GPS bridge, power button)
-│   ├── scripts/               Server-side scripts (GPS-MQTT bridge, power handler)
-│   ├── fts-patches/           FTS 2.2.1 bug patches (5 files)
-│   ├── headscale/             VPN config (nginx, ACLs)
-│   └── authelia/              OIDC authentication config
-├── firmware/                  Meshtastic node profiles and provisioning
-│   ├── profiles/              Role-based configs (bridge, relay, tracker, field, vehicle)
-│   ├── nodes.yaml             Node registry
-│   └── provision.sh           Auto-provisioning script
-├── docs/                      Deployment, architecture, hardware, security
-└── scripts/                   Dev tools (install, build, SDK setup, field Pi setup)
 ```
 
 ---
 
-## Hardware Requirements
+## Fleet Monitoring (MeshMonitor Integration)
 
-### Home Server
+CrypTAK includes a dedicated fleet monitoring dashboard based on [MeshMonitor](https://meshmonitor.org/) with CrypTAK-specific enhancements:
 
-Any Docker-capable host with 4+ GB RAM. Tested on Unraid (192.168.50.120).
+**Features:**
+- Real-time node positions and telemetry on interactive map
+- Battery levels, environmental sensors, signal strength
+- Message history and channel monitoring
+- **IFF Detection:** Automatic identification of nodes on cryptak private channel (blue markers)
+- **TAK Affiliation Coloring:** MIL-STD-2525 scheme (blue=friendly, yellow=unknown, green=neutral, red=suspect)
+- **Fleet Registry:** Integration with `nodes.yaml` for node metadata and public key verification
+- **Spoof Detection:** Alerts on public key mismatches and name spoofing attempts
+- **Remote Admin:** Secure node management via PKC (reboot, factory reset, channel config)
+- **Bulk Operations:** Deploy IFF channel to multiple nodes simultaneously
 
-- Docker + Docker Compose
-- USB port for T-Beam bridge node (serial connection)
-- Network access for ATAK clients (WiFi/LAN or VPN)
+**Access:**
+- LAN: `http://192.168.50.120:8090` (change admin password on first login!)
+- Tailscale: Available via gateway tunnel (configure in headscale)
+- Future: Protected by Authelia reverse proxy with OIDC
 
-### Meshtastic Nodes
-
-At minimum, one bridge node connected to the server. Additional nodes extend
-mesh coverage. See [docs/node-types.md](docs/node-types.md) for role details.
-
-| Role               | Recommended Hardware                     | Purpose                    |
-| ------------------ | ---------------------------------------- | -------------------------- |
-| Bridge (BRG)       | LilyGo T-Beam / RAK WisMesh WiFi Gateway | Server ↔ mesh gateway      |
-| Base Station (BSE) | Seeed SenseCAP Solar P1-Pro              | Fixed relay, solar powered |
-| Solar Relay (SOL)  | RAK WisMesh Repeater Mini                | Outdoor mesh repeater      |
-| Vehicle (VHC)      | LilyGo T-Beam Supreme                    | Mobile repeater + GPS      |
-| Tracker (TRK)      | Seeed Card Tracker T1000-E               | GPS asset tracking         |
-
-See [docs/hardware-builds.md](docs/hardware-builds.md) for assembly and
-flashing procedures.
-
-### Field Unit (optional)
-
-Seeed reTerminal (CM4) with E10-1 expansion board, or Raspberry Pi 4B. Runs a
-lightweight FTS + Mumble stack for offline field operations. See
-[docs/field-unit.md](docs/field-unit.md).
-
-### ATAK Devices
-
-Android phone or tablet running [ATAK-CIV](https://www.tak.gov/) 5.5.1+ with
-the CrypTAK plugin.
+**Documentation:**
+- See [`DEPLOYMENT.md`](DEPLOYMENT.md) for setup and configuration details
+- See [`MESHMONITOR_FORK_PLAN.md`](MESHMONITOR_FORK_PLAN.md) for CrypTAK-specific enhancements roadmap
 
 ---
 
-## Node Types
+## First Run
 
-CrypTAK uses a profile-based provisioning system. Each node gets a role from
-`firmware/profiles/`:
+If `BOOTSTRAP.md` exists, that's your birth certificate. Follow it, figure out who you are, then delete it. You won't need it again.
 
-| Profile           | Meshtastic Role | GPS                  | Use Case                             |
-| ----------------- | --------------- | -------------------- | ------------------------------------ |
-| `bridge`          | CLIENT          | On                   | T-Beam server bridge (serial + MQTT) |
-| `relay`           | ROUTER          | Off (fixed position) | Solar scatter relay, base station    |
-| `tracker`         | TRACKER         | On (15s updates)     | Vehicle/person GPS tracking          |
-| `field`           | CLIENT          | On                   | General field node                   |
-| `vehicle`         | ROUTER_CLIENT   | On                   | Mobile repeater (vehicle-mounted)    |
-| `prototype-solar` | ROUTER          | Off                  | Enhanced telemetry (probe sensors)   |
+## Every Session
 
-Provision a node with one command:
+Before doing anything else:
 
-```bash
-./firmware/provision.sh "CrypTAK-BSE01"
+1. Read `SOUL.md` — this is who you are
+2. Read `USER.md` — this is who you're helping
+3. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
+4. **If in MAIN SESSION** (direct chat with your human): Also read `MEMORY.md`
+
+Don't ask permission. Just do it.
+
+## Memory
+
+You wake up fresh each session. These files are your continuity:
+
+- **Daily notes:** `memory/YYYY-MM-DD.md` (create `memory/` if needed) — raw logs of what happened
+- **Long-term:** `MEMORY.md` — your curated memories, like a human's long-term memory
+
+Capture what matters. Decisions, context, things to remember. Skip the secrets unless asked to keep them.
+
+### 🧠 MEMORY.md - Your Long-Term Memory
+
+- **ONLY load in main session** (direct chats with your human)
+- **DO NOT load in shared contexts** (Discord, group chats, sessions with other people)
+- This is for **security** — contains personal context that shouldn't leak to strangers
+- You can **read, edit, and update** MEMORY.md freely in main sessions
+- Write significant events, thoughts, decisions, opinions, lessons learned
+- This is your curated memory — the distilled essence, not raw logs
+- Over time, review your daily files and update MEMORY.md with what's worth keeping
+
+### 📝 Write It Down - No "Mental Notes"!
+
+- **Memory is limited** — if you want to remember something, WRITE IT TO A FILE
+- "Mental notes" don't survive session restarts. Files do.
+- When someone says "remember this" → update `memory/YYYY-MM-DD.md` or relevant file
+- When you learn a lesson → update AGENTS.md, TOOLS.md, or the relevant skill
+- When you make a mistake → document it so future-you doesn't repeat it
+- **Text > Brain** 📝
+
+## Safety
+
+- Don't exfiltrate private data. Ever.
+- Don't run destructive commands without asking.
+- `trash` > `rm` (recoverable beats gone forever)
+- When in doubt, ask.
+
+## ⚠️ Config & Service Changes — Hard Rules
+
+**These exist because I broke the gateway on 2026-03-05 by guessing a config value. See incident report in ~/Desktop/Personal Assistant/openclaw-incident-report-2026-03-05.md**
+
+### Before editing ANY config file (openclaw.json, systemd units, etc.):
+1. **READ THE DOCS FIRST.** Check the config reference or schema for valid values. Never guess enum values.
+2. **Use `openclaw config set` when possible** — it validates before writing. Prefer it over raw file edits.
+3. **If you must edit raw JSON**, run `openclaw doctor` after editing and BEFORE restarting to catch validation errors.
+
+### Before restarting any service:
+4. **Validate first.** Run `openclaw doctor` (or equivalent validation) before `openclaw gateway restart`.
+5. **Save a known-good config.** Before making changes, note the current working values so you can revert fast: `cp ~/.openclaw/openclaw.json ~/.openclaw/openclaw.json.pre-change`
+6. **Never chain config edit + restart in one shot.** Edit → validate → then restart as a separate step.
+
+### If something goes wrong:
+7. **Revert to known-good immediately.** Don't debug forward if the service is down — restore the backup config first, get the service running, THEN investigate.
+8. **Log what happened** in the daily memory file so future sessions learn from it.
+
+### General principle:
+- **Read before write. Validate before restart. Backup before change.**
+- A service outage you caused is worse than taking 30 extra seconds to verify.
+
+## External vs Internal
+
+**Safe to do freely:**
+
+- Read files, explore, organize, learn
+- Search the web, check calendars
+- Work within this workspace
+
+**Ask first:**
+
+- Sending emails, tweets, public posts
+- Anything that leaves the machine
+- Anything you're uncertain about
+
+## Group Chats
+
+You have access to your human's stuff. That doesn't mean you _share_ their stuff. In groups, you're a participant — not their voice, not their proxy. Think before you speak.
+
+### 💬 Know When to Speak!
+
+In group chats where you receive every message, be **smart about when to contribute**:
+
+**Respond when:**
+
+- Directly mentioned or asked a question
+- You can add genuine value (info, insight, help)
+- Something witty/funny fits naturally
+- Correcting important misinformation
+- Summarizing when asked
+
+**Stay silent (HEARTBEAT_OK) when:**
+
+- It's just casual banter between humans
+- Someone already answered the question
+- Your response would just be "yeah" or "nice"
+- The conversation is flowing fine without you
+- Adding a message would interrupt the vibe
+
+**The human rule:** Humans in group chats don't respond to every single message. Neither should you. Quality > quantity. If you wouldn't send it in a real group chat with friends, don't send it.
+
+**Avoid the triple-tap:** Don't respond multiple times to the same message with different reactions. One thoughtful response beats three fragments.
+
+Participate, don't dominate.
+
+### 😊 React Like a Human!
+
+On platforms that support reactions (Discord, Slack), use emoji reactions naturally:
+
+**React when:**
+
+- You appreciate something but don't need to reply (👍, ❤️, 🙌)
+- Something made you laugh (😂, 💀)
+- You find it interesting or thought-provoking (🤔, 💡)
+- You want to acknowledge without interrupting the flow
+- It's a simple yes/no or approval situation (✅, 👀)
+
+**Why it matters:**
+Reactions are lightweight social signals. Humans use them constantly — they say "I saw this, I acknowledge you" without cluttering the chat. You should too.
+
+**Don't overdo it:** One reaction per message max. Pick the one that fits best.
+
+## Tools
+
+Skills provide your tools. When you need one, check its `SKILL.md`. Keep local notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
+
+**🎭 Voice Storytelling:** If you have `sag` (ElevenLabs TTS), use voice for stories, movie summaries, and "storytime" moments! Way more engaging than walls of text. Surprise people with funny voices.
+
+**📝 Platform Formatting:**
+
+- **Discord/WhatsApp:** No markdown tables! Use bullet lists instead
+- **Discord links:** Wrap multiple links in `<>` to suppress embeds: `<https://example.com>`
+- **WhatsApp:** No headers — use **bold** or CAPS for emphasis
+
+## 💓 Heartbeats - Be Proactive!
+
+When you receive a heartbeat poll (message matches the configured heartbeat prompt), don't just reply `HEARTBEAT_OK` every time. Use heartbeats productively!
+
+Default heartbeat prompt:
+`Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.`
+
+You are free to edit `HEARTBEAT.md` with a short checklist or reminders. Keep it small to limit token burn.
+
+### Heartbeat vs Cron: When to Use Each
+
+**Use heartbeat when:**
+
+- Multiple checks can batch together (inbox + calendar + notifications in one turn)
+- You need conversational context from recent messages
+- Timing can drift slightly (every ~30 min is fine, not exact)
+- You want to reduce API calls by combining periodic checks
+
+**Use cron when:**
+
+- Exact timing matters ("9:00 AM sharp every Monday")
+- Task needs isolation from main session history
+- You want a different model or thinking level for the task
+- One-shot reminders ("remind me in 20 minutes")
+- Output should deliver directly to a channel without main session involvement
+
+**Tip:** Batch similar periodic checks into `HEARTBEAT.md` instead of creating multiple cron jobs. Use cron for precise schedules and standalone tasks.
+
+**Things to check (rotate through these, 2-4 times per day):**
+
+- **Emails** - Any urgent unread messages?
+- **Calendar** - Upcoming events in next 24-48h?
+- **Mentions** - Twitter/social notifications?
+- **Weather** - Relevant if your human might go out?
+
+**Track your checks** in `memory/heartbeat-state.json`:
+
+```json
+{
+  "lastChecks": {
+    "email": 1703275200,
+    "calendar": 1703260800,
+    "weather": null
+  }
+}
 ```
 
-See [docs/node-types.md](docs/node-types.md) for the full reference and
-[firmware/README.md](firmware/README.md) for provisioning details.
+**When to reach out:**
+
+- Important email arrived
+- Calendar event coming up (&lt;2h)
+- Something interesting you found
+- It's been >8h since you said anything
+
+**When to stay quiet (HEARTBEAT_OK):**
+
+- Late night (23:00-08:00) unless urgent
+- Human is clearly busy
+- Nothing new since last check
+- You just checked &lt;30 minutes ago
+
+**Proactive work you can do without asking:**
+
+- Read and organize memory files
+- Check on projects (git status, etc.)
+- Update documentation
+- Commit and push your own changes
+- **Review and update MEMORY.md** (see below)
+
+### 🔄 Memory Maintenance (During Heartbeats)
+
+Periodically (every few days), use a heartbeat to:
+
+1. Read through recent `memory/YYYY-MM-DD.md` files
+2. Identify significant events, lessons, or insights worth keeping long-term
+3. Update `MEMORY.md` with distilled learnings
+4. Remove outdated info from MEMORY.md that's no longer relevant
+
+Think of it like a human reviewing their journal and updating their mental model. Daily files are raw notes; MEMORY.md is curated wisdom.
+
+The goal: Be helpful without being annoying. Check in a few times a day, do useful background work, but respect quiet time.
+
+## 🚨 Background Agent Tasks — Never Fire and Forget
+
+**This exists because I repeatedly spawned coding agents, told Leighton "I'll update you when it's done," and then went silent. The completion events arrived but I never followed up. This happened multiple times — it's a structural problem, not a one-off.**
+
+### The Problem
+`exec background:true` ends your turn. You have no loop, no watcher, no way to act on completion unless something gives you a new turn. Promising "I'll update you" after a fire-and-forget exec is a lie — you literally can't unless the system event triggers a new turn, which isn't guaranteed.
+
+### Rules for Long-Running Agent Work
+
+**Option A: Stay in your turn (preferred for <10 min tasks)**
+- Use `exec` WITHOUT `background:true`
+- Set a reasonable `timeout` (300-600s for coding agents)
+- Or use `exec` with `yieldMs` + `process poll` with `timeout` to wait in-turn
+- You keep your turn, get the result, and report back directly
+
+**Option B: Use `sessions_spawn` for true async work**
+- `sessions_spawn` with `runtime: "subagent"` has proper completion callbacks
+- Completion is push-based — you automatically get the result as your next turn
+- Use `sessions_yield` after spawning to wait for the result
+- This is what the tool was designed for
+
+**Option C: If you MUST use `exec background:true`**
+- Do NOT promise to follow up — you probably can't
+- Tell the user honestly: "This is running in background. The system will notify when done, but I may not be the one to relay it. Check back or I'll pick it up on next interaction."
+- Better yet, don't use this option for tasks the user is waiting on
+
+### What NOT to Do
+- ❌ `exec background:true` → "I'll update you when it's done" → turn ends → silence
+- ❌ Relying on `openclaw system event` appended to agent prompts as your follow-up mechanism
+- ❌ Treating "agent spawned" as "task complete" — the user needs the RESULT, not the receipt
+
+### The Principle
+**If you promise to follow up, stay in your turn until you can.** Don't make promises your architecture can't keep.
+
+## 🎙️ Discord Voice Sessions — Hard Rules
+
+When you are in a **Discord voice session** (session key contains a voice channel ID, or you receive transcribed speech as input):
+
+1. **DO NOT call the `tts` tool.** OpenClaw handles TTS natively — it takes your text response and plays it as audio in the voice channel automatically. Calling `tts` yourself delivers a voice note attachment, not live voice audio.
+
+2. **DO NOT use exec, web_search, or other slow tools** unless absolutely necessary. Voice responses must be immediate. Think, speak, done. If a task genuinely needs a tool, say "one moment" first, run the tool, then respond.
+
+3. **Respond with plain text only.** Short sentences. No markdown. No bullet points. No headers. The listener is hearing this — structure it for ears, not eyes.
+
+4. **Keep responses brief.** 1-3 sentences for simple questions. Voice chat is conversational, not a briefing.
+
+5. **DO NOT reply with NO_REPLY in voice sessions.** Always speak something, even if it's just "Got it" or "On it."
+
+These rules exist because calling `tts` or returning NO_REPLY in a voice session causes `[discord] No reply from agent.` and the user hears nothing.
 
 ---
 
-## Quick Start
+## Make It Yours
 
-### 1. Server
-
-```bash
-cd server/
-cp .env.example .env
-# Edit .env: set UNRAID_IP, generate secrets for all FTS_* variables
-docker compose up -d freetakserver    # start FTS first (needs ~60s to init)
-docker compose up -d                  # start remaining services
-```
-
-### 2. Meshtastic Nodes
-
-```bash
-# Provision a registered node (plug in USB, run one command)
-./firmware/provision.sh "CrypTAK-BRG01"
-```
-
-See [firmware/README.md](firmware/README.md) for per-device procedures.
-
-### 3. ATAK Plugin
-
-> **Note:** CrypTAK Plugin replaces the upstream
-> [Meshtastic ATAK Plugin](https://github.com/meshtastic/ATAK-Plugin). They
-> share the same package name and cannot coexist.
-
-```bash
-cd plugin/
-# Place ATAK Plugin SDK files in plugin/sdk/ first
-./gradlew assembleCivDebug
-../scripts/install-plugin.sh
-```
-
-See [plugin/README.md](plugin/README.md) for encryption setup and key
-distribution.
-
-### 4. Mesh Relay (optional)
-
-Bridges mesh node positions to the TAK map. Enable with:
-
-```bash
-docker compose --profile mesh-relay up -d
-```
-
-Configure `FRIENDLY_NODES` and `TRACKER_NODES` in `.env` to control marker
-affiliation (blue vs. green vs. orange on the map).
-
-### 5. Incident Tracker (optional)
-
-Polls RSS/NWS/USGS/Waze/etc., filters by area and keywords, injects CoT
-markers into FTS:
-
-```bash
-cd server/incident-tracker/
-cp config.yaml config.local.yaml
-# Edit config.local.yaml — set geo_filter, enable sources
-docker compose --profile incident-tracker up -d
-```
-
-See [server/incident-tracker/README.md](server/incident-tracker/README.md).
-
-### 6. Field Unit (optional)
-
-Deploy a portable FTS + voice server on a reTerminal or Pi 4:
-
-```bash
-cd server/
-cp .env.field.example .env.field
-# Edit .env.field — change all passwords
-docker compose -f docker-compose.field.yml --env-file .env.field up -d
-```
-
-See [docs/field-unit.md](docs/field-unit.md) and
-[docs/deployment-runbook.md](docs/deployment-runbook.md).
-
----
-
-## Key Distribution
-
-The shared AES-256 key is provisioned to each device via one of:
-
-- **QR code** — display on one device, scan on another (in-app camera scanner)
-- **Data Package** — export a `.zip` to share via file transfer or side-channel
-- **Manual entry** — paste a Base64-encoded key directly
-
-All methods are accessible from the plugin's encryption settings screen.
-
----
-
-## Documentation
-
-| Document                                                     | Description                             |
-| ------------------------------------------------------------ | --------------------------------------- |
-| [docs/architecture.md](docs/architecture.md)                 | System architecture and data flows      |
-| [docs/node-types.md](docs/node-types.md)                     | Node roles, hardware, provisioning      |
-| [docs/field-unit.md](docs/field-unit.md)                     | reTerminal field unit setup             |
-| [docs/deployment-runbook.md](docs/deployment-runbook.md)     | 17-step deployment checklist            |
-| [docs/hardware-builds.md](docs/hardware-builds.md)           | Device assembly and flashing            |
-| [docs/network-architecture.md](docs/network-architecture.md) | Network topology and encryption layers  |
-| [docs/halow-field-kit.md](docs/halow-field-kit.md)           | HaLow 802.11ah field kit (experimental) |
-| [docs/security.md](docs/security.md)                         | Security model and hardening guide      |
-| [CHANGELOG.md](CHANGELOG.md)                                 | Version history                         |
-| [CONTRIBUTING.md](CONTRIBUTING.md)                           | Contributor guide                       |
-
----
-
-## Prerequisites
-
-| Requirement                       | Source                                                                                                 |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| ATAK-CIV APK                      | [tak.gov](https://www.tak.gov/) or [ATAK.app](https://www.atak.app/)                                   |
-| ATAK Plugin SDK (`pluginsdk.zip`) | [TAK Product Center GitHub](https://github.com/TAK-Product-Center/atak-civ) — extract to `plugin/sdk/` |
-| Android SDK                       | Standard Android development install                                                                   |
-| Docker + Docker Compose           | For the server stack                                                                                   |
-| Meshtastic hardware               | RAK WisBlock, LilyGo T-Beam, or Seeed SenseCAP — 868/915 MHz                                           |
-| Python 3.10+                      | For `meshtastic` CLI and relay service                                                                 |
-
-The ATAK SDK is subject to TAK Product Center terms and is not included in this
-repository.
-
----
-
-## Components
-
-| Component                                                     | Role                         | License                    |
-| ------------------------------------------------------------- | ---------------------------- | -------------------------- |
-| [Meshtastic](https://meshtastic.org/)                         | LoRa mesh radio firmware     | Apache 2.0                 |
-| [ATAK-CIV](https://www.tak.gov/)                              | Tactical awareness platform  | TAK Product Center terms   |
-| [FreeTAKServer](https://github.com/FreeTAKTeam/FreeTAKServer) | CoT relay server             | Eclipse Public License 2.0 |
-| [headscale](https://headscale.net/)                           | Self-hosted WireGuard VPN    | BSD 3-Clause               |
-| [Authelia](https://www.authelia.com/)                         | OIDC authentication          | Apache 2.0                 |
-| [Node-RED](https://nodered.org/)                              | WebMap + CoT pipeline        | Apache 2.0                 |
-| [Mosquitto](https://mosquitto.org/)                           | MQTT broker                  | Eclipse Public License 2.0 |
-| [Mumble](https://www.mumble.info/)                            | Encrypted voice (field unit) | BSD 3-Clause               |
-
----
-
-## License
-
-Apache 2.0 — see [LICENSE](LICENSE).
-
----
-
-## Export Notice
-
-This project implements AES-256 encryption. Encryption software may be subject
-to U.S. Export Administration Regulations (EAR). Open-source encryption is
-generally authorized under EAR §740.13(e). Review applicable regulations before
-distributing outside the United States.
+This is a starting point. Add your own conventions, style, and rules as you figure out what works.
