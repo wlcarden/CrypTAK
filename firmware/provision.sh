@@ -34,7 +34,7 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-STEPS=6
+STEPS=7
 step() { echo -e "\n${CYAN}[$1/$STEPS]${NC} ${BOLD}$2${NC}"; }
 ok()   { echo -e "  ${GREEN}✓${NC} $1"; }
 warn() { echo -e "  ${YELLOW}!${NC} $1"; }
@@ -425,6 +425,24 @@ main() {
     ok "Owner: $NODE_NAME ($SHORT_NAME)"
     sleep 1
 
+    # Admin channel: add channel 1 "admin" with shared PSK for remote management
+    # ESP32-S3 boards need longer delays between channel writes (25s+)
+    if [[ -n "${ADMIN_CHANNEL_PSK:-}" ]]; then
+        mesh_cmd --ch-add admin >/dev/null 2>&1
+        ok "Admin channel: created (index 1)"
+        sleep 15
+
+        mesh_cmd --ch-set psk "$ADMIN_CHANNEL_PSK" --ch-index 1 >/dev/null 2>&1
+        ok "Admin channel: PSK set"
+        sleep 15
+
+        mesh_cmd --set security.admin_channel_enabled true >/dev/null 2>&1
+        ok "Admin channel: enabled for remote admin"
+        sleep 10
+    else
+        warn "Admin channel: ADMIN_CHANNEL_PSK not set in secrets.sh — skipping"
+    fi
+
     # GPS: probe if not explicitly set, override if confirmed absent
     if [[ "$HAS_GPS" == "probe" ]]; then
         detect_gps
@@ -448,8 +466,8 @@ main() {
         ok "GPS: enabled"
     fi
 
-    # Step 6: Verify
-    step 6 "Verifying configuration..."
+    # Step 7: Verify
+    step 7 "Verifying configuration..."
     sleep 2
     local info
     info=$(mesh_cmd --info 2>&1) || warn "Could not read back config (device may be rebooting)"
@@ -472,6 +490,11 @@ main() {
         echo "  Admin:     This is the admin node"
     else
         echo "  Admin:     T-Beam PKC remote admin enabled"
+    fi
+    if [[ -n "${ADMIN_CHANNEL_PSK:-}" ]]; then
+        echo "  Admin Ch:  Channel 1 (admin) — remote admin over LoRa"
+    else
+        echo "  Admin Ch:  NOT CONFIGURED (add ADMIN_CHANNEL_PSK to secrets.sh)"
     fi
     echo ""
 }
