@@ -13,6 +13,7 @@ markers if the node has a known position, or logged only if not.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import signal
@@ -34,8 +35,15 @@ logger = logging.getLogger("mesh-relay")
 
 # --- Configuration ---
 
-MESH_HOST = os.environ.get("MESH_HOST", "192.168.50.198")
+MESH_HOST = os.environ.get("MESH_HOST", "")
 MESH_SERIAL = os.environ.get("MESH_SERIAL", "")
+MQTT_ENABLED = os.environ.get("MQTT_ENABLED", "false").lower() == "true"
+MQTT_HOST = os.environ.get("MQTT_HOST", "mosquitto")
+MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))
+MQTT_USERNAME = os.environ.get("MQTT_USERNAME", "")
+MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD", "")
+MQTT_TOPIC = os.environ.get("MQTT_TOPIC", "msh/US/2/2/json/LongFast/#")
+MQTT_TOPICS = os.environ.get("MQTT_TOPICS", "")
 FTS_HOST = os.environ.get("FTS_HOST", "freetakserver")
 FTS_PORT = int(os.environ.get("FTS_PORT", "8087"))
 CLIENT_UID = "CrypTAK-MeshRelay"
@@ -551,13 +559,200 @@ def _seed_from_nodedb(iface, queue, loop, max_age_secs: int = 0):
         logger.info("Refreshed %d positions from nodedb", seeded)
 
 
+def _mqtt_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
+    """Background thread: subscribe to Meshtastic MQTT broker with auto-reconnect.
+
+    Parses JSON position and telemetry messages published by the WisMesh
+    Gateway and enqueues position data in the same format as _mesh_thread.
+    Logs with [MQTT] prefix throughout.
+    """
+    try:
+        import paho.mqtt.client as mqtt
+    except ImportError:
+        logger.error("[MQTT] paho-mqtt not installed — cannot start MQTT thread. "
+                     "Add paho-mqtt>=2.0.0 to requirements.txt")
+        return
+
+    # Determine topic list: MQTT_TOPICS (comma-sep) takes precedence over MQTT_TOPIC.
+    if MQTT_TOPICS:
+        topics = [t.strip() for t in MQTT_TOPICS.split(",") if t.strip()]
+    elif MQTT_TOPIC:
+        topics = [MQTT_TOPIC]
+    else:
+        topics = ["msh/US/2/2/json/LongFast/#"]
+
+    logger.info("[MQTT] Topics: %s", topics)
+
+    def _resolve_callsign(sender: str) -> str:
+        """Resolve callsign from sender hex ID via nodes.yaml, fallback to hex ID."""
+        node_id = sender.lstrip("!")
+        # Walk the raw nodes.yaml data to look up by id → get longName/shortName
+        try:
+            with open(_NODES_YAML) as f:
+                data = yaml.safe_load(f)
+            nodes = (data or {}).get("nodes", {})
+            for name, cfg in nodes.items():
+                cfg_id = (cfg.get("id") or "").lstrip("!")
+                if cfg_id == node_id:
+                    return cfg.get("longName") or cfg.get("shortName") or name or sender
+        except Exception:
+            pass
+        return sender  # fallback: use hex ID as-is
+
+    def on_connect(client, userdata, flags, reason_code, properties):
+        if reason_code == 0:
+            logger.info("[MQTT] Connected to %s:%d", MQTT_HOST, MQTT_PORT)
+            for topic in topics:
+                client.subscribe(topic)
+                logger.info("[MQTT] Subscribed to %s", topic)
+        else:
+            logger.warning("[MQTT] Connect failed, reason_code=%s", reason_code)
+
+    def on_disconnect(client, userdata, disconnect_flags, reason_code, properties):
+        logger.warning("[MQTT] Disconnected (reason_code=%s), will auto-reconnect", reason_code)
+
+    def on_message(client, userdata, msg):
+        try:
+            payload_str = msg.payload.decode("utf-8", errors="replace")
+            data = json.loads(payload_str)
+        except Exception as exc:
+            logger.debug("[MQTT] Could not decode message on %s: %s", msg.topic, exc)
+            return
+
+        msg_type = data.get("type", "")
+
+        # --- Telemetry ---
+        if msg_type == "telemetry":
+            try:
+                sender = data.get("sender", "")
+                node_id = sender.lstrip("!")
+                payload = data.get("payload", {})
+                battery_level = int(payload.get("battery_level", 0) or 0)
+                voltage = float(payload.get("voltage", 0) or 0)
+                channel_util = float(payload.get("channel_utilization", 0) or 0)
+                air_util_tx = float(payload.get("air_util_tx", 0) or 0)
+                uptime_s = int(payload.get("uptime_seconds", 0) or 0)
+                if uptime_s > 0:
+                    prev = _uptime_cache.get(node_id, 0)
+                    if prev > 0 and uptime_s < prev:
+                        logger.warning(
+                            "[MQTT] Node %s rebooted (was up %ds, now %ds)",
+                            node_id, prev, uptime_s,
+                        )
+                    _uptime_cache[node_id] = uptime_s
+                _telemetry_cache[node_id] = {
+                    "voltage": voltage,
+                    "battery": battery_level,
+                    "channelUtil": channel_util,
+                    "airUtilTx": air_util_tx,
+                    "uptime": uptime_s,
+                }
+                logger.debug(
+                    "[MQTT] Telemetry from %s: %.2fV bat=%d%% ch=%.1f%% tx=%.1f%% up=%ds",
+                    node_id, voltage, battery_level, channel_util, air_util_tx, uptime_s,
+                )
+            except Exception:
+                logger.exception("[MQTT] Error processing telemetry message")
+            return
+
+        # --- Position ---
+        if msg_type == "position":
+            try:
+                sender = data.get("sender", "")
+                node_id = sender.lstrip("!")
+                payload = data.get("payload", {})
+
+                lat_i = payload.get("latitude_i", 0) or 0
+                lon_i = payload.get("longitude_i", 0) or 0
+                if lat_i == 0 and lon_i == 0:
+                    logger.debug("[MQTT] Position from %s has no GPS fix, skipping", sender)
+                    return
+                lat = lat_i / 1e7
+                lon = lon_i / 1e7
+
+                alt = float(payload.get("altitude", 0) or 0)
+                speed = float(payload.get("ground_speed", 0) or 0)
+                course = float(payload.get("ground_track", 0) or 0)
+
+                callsign = _resolve_callsign(sender)
+
+                # Pull latest telemetry for this node
+                telem = _telemetry_cache.get(node_id, {})
+                battery = telem.get("battery", 0)
+                voltage = telem.get("voltage", 0.0)
+                channel_util = telem.get("channelUtil", 0.0)
+                air_util_tx = telem.get("airUtilTx", 0.0)
+                uptime_s = telem.get("uptime", 0)
+
+                position_data = {
+                    "node_id": node_id,
+                    "callsign": callsign,
+                    "lat": lat,
+                    "lon": lon,
+                    "alt": alt,
+                    "speed": speed,
+                    "course": course,
+                    "battery": battery,
+                    "hw_model": "",
+                    "tracker": node_id in TRACKER_NODES,
+                    "bridge": False,
+                    "voltage": voltage,
+                    "channel_util": channel_util,
+                    "air_util_tx": air_util_tx,
+                    "uptime": uptime_s,
+                    "snr": None,
+                    "hops_away": None,
+                }
+                _last_position_ts[node_id] = time.time()
+                _last_emitted[node_id] = (lat, lon, time.time())
+                _enqueue(queue, loop, position_data)
+                bat_str = " bat=%d%%" % battery if battery else ""
+                logger.info(
+                    "[MQTT] Position from %s (%s): %.6f, %.6f alt=%dm%s",
+                    sender, callsign, lat, lon, int(alt), bat_str,
+                )
+            except Exception:
+                logger.exception("[MQTT] Error processing position message")
+            return
+
+        # Ignore all other message types silently
+        logger.debug("[MQTT] Ignored message type=%r on %s", msg_type, msg.topic)
+
+    while True:
+        try:
+            client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+            client.on_connect = on_connect
+            client.on_disconnect = on_disconnect
+            client.on_message = on_message
+
+            if MQTT_USERNAME:
+                client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+
+            client.reconnect_delay_set(min_delay=1, max_delay=RECONNECT_DELAY)
+
+            logger.info("[MQTT] Connecting to %s:%d", MQTT_HOST, MQTT_PORT)
+            client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
+            client.loop_forever()  # blocks; handles reconnect automatically
+        except Exception as exc:
+            logger.warning("[MQTT] Connection error: %s — retrying in %ds", exc, RECONNECT_DELAY)
+            time.sleep(RECONNECT_DELAY)
+
+
 def _mesh_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
     """Background thread: connect to mesh node with auto-reconnect.
 
     Subscribes to position packets and pushes them onto the asyncio
     queue. Automatically reconnects when the mesh node reboots or
     the TCP/serial connection drops.
+
+    If MQTT_ENABLED is true and no explicit serial/TCP target is set,
+    the thread exits immediately — MQTT is the primary data source.
     """
+    if MQTT_ENABLED and not MESH_SERIAL and not MESH_HOST:
+        logger.info(
+            "Serial/TCP mesh thread skipped (MQTT_ENABLED=true with no MESH_HOST/MESH_SERIAL)"
+        )
+        return
 
     def on_position(packet, interface):
         try:
@@ -888,10 +1083,22 @@ async def main() -> None:
     queue: asyncio.Queue = asyncio.Queue(maxsize=100)
     loop = asyncio.get_running_loop()
 
-    # Daemon thread auto-reconnects to mesh node independently
-    mesh = threading.Thread(
-        target=_mesh_thread, args=(queue, loop), daemon=True,
-    )
+    if MQTT_ENABLED:
+        if MESH_SERIAL or MESH_HOST:
+            logger.info(
+                "MQTT_ENABLED=true: serial/TCP target also set (%s%s) — "
+                "MQTT is primary, serial/TCP thread will be skipped",
+                MESH_SERIAL or "", MESH_HOST or "",
+            )
+        logger.info("Starting MQTT listener thread")
+        mesh = threading.Thread(
+            target=_mqtt_thread, args=(queue, loop), daemon=True,
+        )
+    else:
+        logger.info("Starting serial/TCP mesh listener thread")
+        mesh = threading.Thread(
+            target=_mesh_thread, args=(queue, loop), daemon=True,
+        )
     mesh.start()
 
     stop = asyncio.Event()
