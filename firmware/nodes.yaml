@@ -1,14 +1,11 @@
 nodes:
-  CrypTAK-BRG01:
+  CrypTAK-FLD01:
     id: "!55c6ddbc"
-    profile: bridge
-    short_name: CG01
+    profile: field
+    short_name: CF01
     cot_type: "a-f-G-E-X"
-    bridge: true
-    public_key: "tFD1EtntZR3uHquuPAf/TvNfY5QBBVg7FlmP5Rsf1Eo="
-    iff: true
   CrypTAK-BSE01:
-    id: "!a51e2838"
+    id: "!01f94ec0"
     profile: relay
     short_name: CB01
     gps: false
@@ -16,58 +13,45 @@ nodes:
     longitude: -77.29344941
     altitude: 155
     cot_type: "a-f-G-E-S"
-    iff: false
-    status: burned_out
   CrypTAK-SOL01:
     id: "!c6eadff0"
     profile: relay
     short_name: CS01
     cot_type: "a-f-G-E-S"
-    iff: false
-    status: disassembled
   CrypTAK-VHC01:
     id: "!9aa4baf0"
     profile: vehicle
     short_name: CV01
     cot_type: "a-f-G-E-V"
-    public_key: "SJS1Wzkeb0Pp2RiTUIyX09RSRpv+GUeLrNIpjnh633U="
-    iff: false
   CrypTAK-TRK01:
     id: "!dce7b97d"
     profile: tracker
     short_name: CT01
     cot_type: "a-f-G-E-V"
     tracker: true
-    position_precision: 32
-    public_key: "wdzDxfNFdG9vg81+sZcNMfpJAAPV5eyKT4BBF1RnzRA="
-    iff: true
-    notes: "T1000-E card tracker, BT-only provisioning (no USB serial), provisioned via Meshtastic app"
   CrypTAK-SOL02:
     id: "!3db00f2c"
     profile: prototype-solar
     short_name: CS02
     cot_type: "a-f-G-E-S"
-    iff: false
-    status: disassembled
   CrypTAK-RPT01:
     id: "!4ad09103"
     profile: relay
     short_name: CR01
     cot_type: "a-f-G-E-S"
-    iff: true
-  CrypTAK-TBS01:
-    id: "!435bab94"
-    profile: prototype
-    short_name: TB01
+  CrypTAK-GW01:
+    id: "!087a29a4"
+    profile: gateway
+    short_name: CW01
     cot_type: "a-f-G-E-X"
-    public_key: "GL6iPPbP407noXSZ8/kCvMseaRWCqZDi8Tbg2/hIOU4="
-    iff: false
-    notes: "T-Beam Supreme S3, L76K GPS, MAC 48:CA:43:5B:AB:94"
-  CrypTAK-TBS02:
+    gateway: true
+  CrypTAK-FLD02:
     id: "!435ae49c"
-    profile: prototype
-    short_name: TB02
+    profile: field
+    short_name: CF02
     cot_type: "a-f-G-E-X"
-    public_key: "UyXTpOpz1toRl/1ao++ZmtY1oA7Ty0k4ldG2miRKBCE="
-    iff: true
-    notes: "T-Beam Supreme S3, UBLOX MAX-M10S GPS, MAC 48:CA:43:5A:E4:9C"
+  CrypTAK-FLD03:
+    id: "!435bab94"
+    profile: field
+    short_name: CF03
+    cot_type: "a-f-G-E-X"
