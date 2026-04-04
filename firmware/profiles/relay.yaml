@@ -17,7 +17,7 @@ config:
 
   device:
     role: ROUTER
-    serial_enabled: false
+    serial_enabled: true              # Must stay true — only way to reprovision T-Beam S3 Core boards
     rebroadcast_mode: ALL
     node_info_broadcast_secs: 900            # 15 min — frequent enough for diagnostics
 
