@@ -15,7 +15,7 @@ config:
 
   device:
     role: ROUTER
-    serial_enabled: false
+    serial_enabled: true              # Must stay true — only way to reprovision (see LEARNINGS.md)
     rebroadcast_mode: ALL
     node_info_broadcast_secs: 1800      # 30 min — more visible during testing
 

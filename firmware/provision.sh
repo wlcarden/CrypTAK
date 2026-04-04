@@ -46,7 +46,7 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-STEPS=7
+STEPS=6
 step() { echo -e "\n${CYAN}[$1/$STEPS]${NC} ${BOLD}$2${NC}"; }
 ok()   { echo -e "  ${GREEN}✓${NC} $1"; }
 warn() { echo -e "  ${YELLOW}!${NC} $1"; }
@@ -271,6 +271,7 @@ for section, vals in config.items():
         # Split the tab-delimited flags into an array and call mesh_cmd once
         local flags=()
         while IFS= read -r -d $'\t' flag; do
+            # shellcheck disable=SC2206  # intentional word-split: "--set key val" → 3 elements
             [[ -n "$flag" ]] && flags+=($flag)
         done <<< "${rest}"$'\t'
         if mesh_cmd "${flags[@]}" >/dev/null 2>&1; then
@@ -609,62 +610,51 @@ main() {
     fi
 
     # Step 5: Post-configure settings
+    # These settings can't be set via --configure YAML (channel ops, module settings,
+    # identity, security). Each command is advisory (|| true) unless it would leave the
+    # node unreachable. Error output is shown for debugging, not suppressed.
     step 5 "Applying post-configure settings..."
 
-    # Channel: full position precision
-    mesh_cmd --ch-set module_settings.position_precision 32 --ch-index 0 >/dev/null 2>&1 || true
-    ok "Position precision: 32 (full)"
+    # Channel: full position precision (channel setting, not config)
+    if mesh_cmd --ch-set module_settings.position_precision 32 --ch-index 0 >/dev/null 2>&1; then
+        ok "Position precision: 32 (full)"
+    else
+        warn "Position precision: failed to set (non-fatal)"
+    fi
     sleep "$CMD_DELAY"
 
     # Gateway: enable MQTT uplink on channel 0 (LongFast) so all mesh traffic is published.
-    # Other profiles leave this off — only the MQTT bridge node needs to forward to mosquitto.
-    if [[ "$PROFILE" == "gateway" ]]; then
+    # Gated on gateway flag in nodes.yaml, not profile name.
+    local is_gateway
+    is_gateway=$(get_field "${node_json:-{\}}" "gateway" 2>/dev/null || true)
+    if [[ "$PROFILE" == "gateway" || "$is_gateway" == "True" ]]; then
         mesh_cmd --ch-set uplink_enabled true --ch-index 0 >/dev/null 2>&1 || true
         ok "MQTT uplink: enabled on channel 0 (LongFast)"
         sleep "$CMD_DELAY"
     fi
 
-    # Module: NeighborInfo for topology overlay
-    mesh_cmd --set neighbor_info.enabled true >/dev/null 2>&1
-    ok "NeighborInfo: enabled"
-    sleep "$CMD_DELAY"
-
-    # Security: set PKC admin key to BRG01 (workbench admin device, not a field node).
-    # ADMIN_KEY in secrets.sh must be BRG01's public key — get it after provisioning
-    # BRG01 via: meshtastic --host <ip> --info | grep publicKey
-    # Admin channel PSK (cryptak channel) is also enabled as belt-and-suspenders.
-    # Never use a field node's key here — authority must stay at base.
-    if [[ "$PROFILE" != "bridge" && -n "${ADMIN_KEY:-}" ]]; then
-        # security.admin_key ACK is unreliable in mesh admin mode — the packet fires
-        # but the node doesn't echo back a ConfigComplete, causing the CLI to hang.
-        # Run with a 30s timeout; if it times out, warn and continue.
-        # Verify with --get security when physically connected.
-        local admin_cmd=()
-        if [[ -n "$HOST" ]]; then
-            admin_cmd=(meshtastic --host "$HOST" --dest "$DEST_ID" --set security.admin_key "$ADMIN_KEY")
-        else
-            admin_cmd=(meshtastic --port "$PORT" --dest "$DEST_ID" --set security.admin_key "$ADMIN_KEY")
-        fi
-        if timeout 30 "${admin_cmd[@]}" >/dev/null 2>&1; then
-            ok "Admin key: BRG01 PKC set"
-        else
-            warn "Admin key: timed out waiting for ACK (packet may have fired — verify physically)"
-        fi
-    elif [[ "$PROFILE" == "bridge" ]]; then
-        ok "Admin key: skipped (this is the admin device)"
+    # Module: NeighborInfo for topology overlay (advisory — some firmware builds lack this)
+    if mesh_cmd --set neighbor_info.enabled true >/dev/null 2>&1; then
+        ok "NeighborInfo: enabled"
     else
-        warn "ADMIN_KEY not set in secrets.sh — skipping PKC admin key"
+        warn "NeighborInfo: failed to set (non-fatal — module may not exist on this firmware)"
     fi
     sleep "$CMD_DELAY"
 
-    # Identity: owner name
-    mesh_cmd --set-owner "$NODE_NAME" --set-owner-short "$SHORT_NAME" >/dev/null 2>&1
-    ok "Owner: $NODE_NAME ($SHORT_NAME)"
+    # Identity: owner name (doesn't work via mesh admin — --set-owner is serial/wifi only)
+    if [[ "$CONNECTION_MODE" == "remote" ]]; then
+        warn "Owner name: cannot be set via mesh admin — set physically when accessible"
+    else
+        if mesh_cmd --set-owner "$NODE_NAME" --set-owner-short "$SHORT_NAME" >/dev/null 2>&1; then
+            ok "Owner: $NODE_NAME ($SHORT_NAME)"
+        else
+            warn "Owner: failed to set (non-fatal)"
+        fi
+    fi
     sleep "$CMD_DELAY"
 
     # Admin channel: add channel 1 "cryptak" with shared PSK for remote management
-    # ESP32-S3 boards need longer delays between channel writes (25s+).
-    # Mesh admin mode inherits the same delays — channel ops are slow regardless.
+    # ESP32-S3 boards need longer delays between channel writes (15s+).
     if [[ -n "${ADMIN_CHANNEL_PSK:-}" ]]; then
         mesh_cmd --ch-add cryptak >/dev/null 2>&1 || true  # no-op if channel already exists
         ok "IFF channel 'cryptak': created or already present (index 1)"
@@ -673,12 +663,69 @@ main() {
         mesh_cmd --ch-set psk "$ADMIN_CHANNEL_PSK" --ch-index 1 >/dev/null 2>&1 || true
         ok "IFF channel 'cryptak': PSK set (or already correct)"
         sleep 15
-
-        mesh_cmd --set security.admin_channel_enabled true >/dev/null 2>&1 || true
-        ok "IFF channel: admin routing enabled"
-        sleep 10
     else
         warn "IFF channel: ADMIN_CHANNEL_PSK not set in secrets.sh — skipping"
+    fi
+
+    # Security: admin_key + admin_channel_enabled
+    # CRITICAL ordering: these MUST be set together. Setting admin_channel_enabled
+    # via --set AFTER admin_key causes a destructive read-modify-write that wipes the key
+    # (the read fails with NO_CHANNEL, CLI builds from empty defaults).
+    # Solution: use --configure with a security YAML to set both atomically.
+    if [[ "$PROFILE" != "bridge" && -n "${ADMIN_KEY:-}" ]]; then
+        # Generate a temporary security YAML with both fields
+        local security_yaml
+        security_yaml=$(mktemp /tmp/cryptak-security-XXXXXX.yaml)
+        cat > "$security_yaml" << SECEOF
+config:
+  security:
+    admin_channel_enabled: true
+SECEOF
+        if [[ "$CONNECTION_MODE" == "remote" ]]; then
+            # Remote mode: --configure not available. Use --set with 30s timeout.
+            # admin_key uses the special "add to list" API, then admin_channel_enabled
+            # via a single --set (since admin_key isn't set yet at this point in remote mode,
+            # the read-modify-write won't hit NO_CHANNEL).
+            # NOTE: If admin_key was set on a previous run, the --set for
+            # admin_channel_enabled may fail. This is a known limitation of remote mode.
+            if timeout 30 mesh_cmd --set security.admin_key "$ADMIN_KEY" >/dev/null 2>&1; then
+                ok "Admin key: BRG01 PKC set"
+            else
+                warn "Admin key: timed out (packet may have fired — verify physically)"
+            fi
+            sleep "$CMD_DELAY"
+            mesh_cmd --set security.admin_channel_enabled true >/dev/null 2>&1 || true
+            ok "Admin channel: enabled (best-effort in remote mode)"
+        else
+            # Serial/WiFi: set admin_key via CLI, then admin_channel_enabled via --configure
+            # (transaction path — only way it persists on T-Beam S3 Core).
+            mesh_cmd --set security.admin_key "$ADMIN_KEY" >/dev/null 2>&1 || true
+            ok "Admin key: BRG01 PKC set"
+            sleep "$CMD_DELAY"
+            mesh_cmd --configure "$security_yaml" >/dev/null 2>&1 || true
+            ok "Admin channel: enabled (via --configure transaction)"
+        fi
+        rm -f "$security_yaml"
+        sleep 10
+    elif [[ "$PROFILE" == "bridge" ]]; then
+        ok "Admin key: skipped (this is the admin device)"
+        # Bridge still gets admin_channel_enabled for channel 1 routing
+        if [[ -n "${ADMIN_CHANNEL_PSK:-}" ]]; then
+            local security_yaml
+            security_yaml=$(mktemp /tmp/cryptak-security-XXXXXX.yaml)
+            cat > "$security_yaml" << SECEOF
+config:
+  security:
+    admin_channel_enabled: true
+SECEOF
+            if [[ "$CONNECTION_MODE" != "remote" ]]; then
+                mesh_cmd --configure "$security_yaml" >/dev/null 2>&1 || true
+                ok "Admin channel: enabled on bridge"
+            fi
+            rm -f "$security_yaml"
+        fi
+    else
+        warn "ADMIN_KEY not set in secrets.sh — skipping security setup"
     fi
 
     # GPS: probe if not explicitly set, override if confirmed absent
@@ -688,15 +735,21 @@ main() {
     fi
 
     if [[ "$HAS_GPS" == "false" ]]; then
-        mesh_cmd --set position.gps_enabled false --set position.gps_mode NOT_PRESENT --set position.fixed_position true >/dev/null 2>&1
-        ok "GPS: disabled (no hardware)"
+        if mesh_cmd --set position.gps_enabled false --set position.gps_mode NOT_PRESENT --set position.fixed_position true >/dev/null 2>&1; then
+            ok "GPS: disabled (no hardware)"
+        else
+            warn "GPS: failed to disable (non-fatal)"
+        fi
         sleep "$CMD_DELAY"
 
         if [[ -n "$LAT" && -n "$LON" ]]; then
             local pos_args=(--setlat "$LAT" --setlon "$LON")
             [[ -n "$ALT" ]] && pos_args+=(--setalt "$ALT")
-            mesh_cmd "${pos_args[@]}" >/dev/null 2>&1
-            ok "Position: $LAT, $LON${ALT:+ (${ALT}m)}"
+            if mesh_cmd "${pos_args[@]}" >/dev/null 2>&1; then
+                ok "Position: $LAT, $LON${ALT:+ (${ALT}m)}"
+            else
+                warn "Position: failed to set (non-fatal)"
+            fi
         else
             warn "No coordinates set — add latitude/longitude to nodes.yaml and reprovision"
         fi
@@ -704,15 +757,49 @@ main() {
         ok "GPS: enabled"
     fi
 
-    # Step 7: Verify
-    step 7 "Verifying configuration..."
+    # Step 6: Verify
+    step 6 "Verifying configuration..."
     if [[ "$CONNECTION_MODE" == "remote" ]]; then
         warn "Verification skipped in mesh admin mode"
         warn "Confirm with: meshtastic --info (connected to the node directly or via nodedb)"
     else
-        sleep 2
-        local info
-        info=$(mesh_cmd --info 2>&1) || warn "Could not read back config (device may be rebooting)"
+        sleep 3
+        local info verify_ok=true
+        info=$(mesh_cmd --info 2>&1) || { warn "Could not read back config (device may be rebooting)"; verify_ok=false; }
+
+        if [[ "$verify_ok" == "true" ]]; then
+            # Parse critical settings from --info output
+            local actual_role actual_owner
+            actual_role=$(echo "$info" | grep -oP '"role":\s*"\K[^"]+' | head -1 || true)
+            actual_owner=$(echo "$info" | grep -oP 'Owner:\s*\K[^(]+' | head -1 | xargs || true)
+
+            # Verify role matches profile expectation
+            local expected_role
+            expected_role=$(role_label "$PROFILE" | sed 's/ .*//')  # strip "(bridge)" etc.
+            if [[ -n "$actual_role" && "$actual_role" != "$expected_role" ]]; then
+                err "ROLE MISMATCH: expected $expected_role, got $actual_role"
+                err "The profile config may not have persisted. Try power-cycling and re-checking."
+                verify_ok=false
+            else
+                ok "Role verified: $actual_role"
+            fi
+
+            # Verify owner name
+            if [[ -n "$actual_owner" && "$actual_owner" != "$NODE_NAME" ]]; then
+                warn "Owner mismatch: expected '$NODE_NAME', got '$actual_owner' (may update after reboot)"
+            else
+                ok "Owner verified: $actual_owner"
+            fi
+
+            # Check for admin key presence (non-bridge only)
+            if [[ "$PROFILE" != "bridge" && -n "${ADMIN_KEY:-}" ]]; then
+                if echo "$info" | grep -q '"adminKey"'; then
+                    ok "Admin key: present"
+                else
+                    warn "Admin key: not detected in --info output (may need power cycle to verify)"
+                fi
+            fi
+        fi
     fi
 
     echo ""

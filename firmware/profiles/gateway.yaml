@@ -17,7 +17,12 @@ config:
   device:
     role: CLIENT
     serial_enabled: true               # Connected to Unraid via USB — needed for mesh-relay
+    rebroadcast_mode: ALL
     node_info_broadcast_secs: 3600     # 1 hour — gateway position is fixed
+
+  telemetry:
+    device_update_interval: 60         # 1 min — gateway is infrastructure, health visibility critical
+    device_telemetry_enabled: true
 
   position:
     position_broadcast_smart_enabled: true
