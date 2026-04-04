@@ -1,8 +1,8 @@
 nodes:
-  CrypTAK-FLD01:
+  CrypTAK-BRG01:
     id: "!55c6ddbc"
-    profile: field
-    short_name: CF01
+    profile: bridge
+    short_name: CG01
     cot_type: "a-f-G-E-X"
   CrypTAK-BSE01:
     id: "!01f94ec0"
@@ -45,13 +45,13 @@ nodes:
     short_name: CW01
     cot_type: "a-f-G-E-X"
     gateway: true
-  CrypTAK-FLD02:
+  CrypTAK-RPT02:
     id: "!435ae49c"
-    profile: field
-    short_name: CF02
-    cot_type: "a-f-G-E-X"
-  CrypTAK-FLD03:
+    profile: relay
+    short_name: CR02
+    cot_type: "a-f-G-E-S"
+  CrypTAK-RPT03:
     id: "!435bab94"
-    profile: field
-    short_name: CF03
-    cot_type: "a-f-G-E-X"
+    profile: relay
+    short_name: CR03
+    cot_type: "a-f-G-E-S"

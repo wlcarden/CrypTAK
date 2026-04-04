@@ -36,3 +36,7 @@ config:
 
   display:
     auto_screen_carousel_secs: 0
+
+  bluetooth:
+    enabled: false                 # Relay nodes are unattended — BT is an attack surface
+                                   # Field config via: remote admin (cryptak PSK) or serial retrieval
