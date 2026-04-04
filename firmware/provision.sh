@@ -616,6 +616,14 @@ main() {
     ok "Position precision: 32 (full)"
     sleep "$CMD_DELAY"
 
+    # Gateway: enable MQTT uplink on channel 0 (LongFast) so all mesh traffic is published.
+    # Other profiles leave this off — only the MQTT bridge node needs to forward to mosquitto.
+    if [[ "$PROFILE" == "gateway" ]]; then
+        mesh_cmd --ch-set uplink_enabled true --ch-index 0 >/dev/null 2>&1 || true
+        ok "MQTT uplink: enabled on channel 0 (LongFast)"
+        sleep "$CMD_DELAY"
+    fi
+
     # Module: NeighborInfo for topology overlay
     mesh_cmd --set neighbor_info.enabled true >/dev/null 2>&1
     ok "NeighborInfo: enabled"

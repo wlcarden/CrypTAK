@@ -1,0 +1,35 @@
+# MQTT Gateway — CLIENT profile
+# WisMesh TAK/MQTT bridge node. Connected to Unraid via USB serial and WiFi.
+# Publishes all LongFast mesh traffic to local mosquitto broker.
+# Provision: ./firmware/provision.sh --host 192.168.50.127 "CrypTAK-GW01"
+#
+# After provisioning, verify MQTT uplink:
+#   mosquitto_sub -h 192.168.50.120 -u meshtastic -P '<psk>' -t 'msh/#' -v
+
+config:
+  lora:
+    modem_preset: LONG_FAST
+    region: US
+    tx_power: 30
+    hop_limit: 3
+    channel_num: 0
+
+  device:
+    role: CLIENT
+    serial_enabled: true               # Connected to Unraid via USB — needed for mesh-relay
+    node_info_broadcast_secs: 3600     # 1 hour — gateway position is fixed
+
+  position:
+    position_broadcast_smart_enabled: true
+    gps_enabled: true
+    gps_update_interval: 120
+    position_broadcast_secs: 900       # 15 min
+
+  power:
+    is_power_saving: false
+
+  display:
+    auto_screen_carousel_secs: 0
+
+  bluetooth:
+    enabled: false                     # Fixed indoor node — BT is unnecessary attack surface
