@@ -29,11 +29,6 @@ nodes:
     short_name: CT01
     cot_type: "a-f-G-E-V"
     tracker: true
-  CrypTAK-SOL02:
-    id: "!3db00f2c"
-    profile: prototype-solar
-    short_name: CS02
-    cot_type: "a-f-G-E-S"
   CrypTAK-RPT01:
     id: "!4ad09103"
     profile: relay
