@@ -601,12 +601,26 @@ main() {
     # Step 4: Apply profile
     step 4 "Applying $PROFILE profile..."
     apply_profile "$profile_file"
-    # Remote: node may reboot after a role/config change — wait for it to come back
+    # --configure triggers a firmware reboot. Wait for the device to come back
+    # before step 5. Fixed sleeps are unreliable (RAK4631 takes 10-15s, T-Beam S3
+    # takes 5-10s). Poll the port until the device responds.
     if [[ "$CONNECTION_MODE" == "remote" ]]; then
-        ok "Waiting for node to stabilize after config (20s)..."
-        sleep 20
+        ok "Waiting for node to stabilize after config (25s)..."
+        sleep 25
     else
-        sleep "$CMD_DELAY"
+        ok "Waiting for device reboot..."
+        local wait_tries=0
+        while (( wait_tries < 12 )); do
+            sleep 5
+            if mesh_cmd --info >/dev/null 2>&1; then
+                ok "Device ready"
+                break
+            fi
+            (( wait_tries++ )) || true
+        done
+        if (( wait_tries >= 12 )); then
+            warn "Device did not respond after 60s — proceeding anyway"
+        fi
     fi
 
     # Step 5: Post-configure settings
