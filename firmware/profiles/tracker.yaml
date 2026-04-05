@@ -15,7 +15,7 @@ config:
 
   device:
     role: TRACKER
-    serial_enabled: false
+    serial_enabled: true              # Must stay true — only way to reprovision (see LEARNINGS.md)
     rebroadcast_mode: ALL
     node_info_broadcast_secs: 900            # 15 min — frequent enough for diagnostics
 
