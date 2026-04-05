@@ -1,14 +1,30 @@
 #!/bin/bash
 # CrypTAK Mission Device Provisioning Script
-# Usage: ./provision-phone.sh TAK-01 | TAK-02 | TAK-03
+# Usage: ./provision-phone.sh <CALLSIGN> <PREAUTH_KEY>
+# Example: ./provision-phone.sh TAK-02 hskey-auth-LBHNqGbNGYBA-...
 set -euo pipefail
 
 DEVICE_ID="${1:-}"
+PREAUTH_KEY="${2:-}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APK_DIR="$SCRIPT_DIR/apks"
 
-if [ -z "$DEVICE_ID" ]; then
-  echo "Usage: $0 TAK-01 | TAK-02 | TAK-03"
+if [ -z "$DEVICE_ID" ] || [ -z "$PREAUTH_KEY" ]; then
+  echo "Usage: $0 <CALLSIGN> <PREAUTH_KEY>"
+  echo "Example: $0 TAK-02 hskey-auth-LBHNqGbNGYBA-srCQiz4lg_..."
+  echo ""
+  echo "Generate a key on Unraid:"
+  echo "  ssh unraid \"docker exec headscale headscale preauthkeys create --user 1 --expiration 72h\""
+  exit 1
+fi
+
+if [[ ! "$DEVICE_ID" =~ ^TAK-[0-9]+$ ]]; then
+  echo "ERROR: Callsign must match TAK-NN format (e.g. TAK-02)"
+  exit 1
+fi
+
+if [[ ! "$PREAUTH_KEY" =~ ^hskey-auth- ]]; then
+  echo "ERROR: Pre-auth key must start with 'hskey-auth-'"
   exit 1
 fi
 
@@ -37,20 +53,20 @@ echo "Connected: $DEVICE_MODEL"
 
 # --- Install apps ---
 echo ""
-echo "[1/5] Installing F-Droid..."
+echo "[1/7] Installing F-Droid..."
 if ! adb install -r "$APK_DIR/FDroid.apk"; then
   echo "ERROR: F-Droid install failed"
   exit 1
 fi
 
-echo "[2/5] Installing ATAK-CIV..."
+echo "[2/7] Installing ATAK-CIV..."
 if ! adb install -r "$APK_DIR/ATAK-CIV.apk"; then
   echo "ERROR: ATAK-CIV install failed"
   exit 1
 fi
 
 # Install Tailscale if APK present
-echo "[3/5] Installing Tailscale..."
+echo "[3/7] Installing Tailscale..."
 if [ ! -f "$APK_DIR/Tailscale.apk" ]; then
   echo "ERROR: Tailscale.apk not found at $APK_DIR/Tailscale.apk"
   exit 1
@@ -60,8 +76,28 @@ if ! adb install -r "$APK_DIR/Tailscale.apk"; then
   exit 1
 fi
 
+# Install Meshtastic companion app (optional but useful for node config)
+echo "[4/7] Installing Meshtastic..."
+if [ -f "$APK_DIR/Meshtastic.apk" ]; then
+  if ! adb install -r "$APK_DIR/Meshtastic.apk"; then
+    echo "  WARNING: Meshtastic install failed — non-fatal, continuing"
+  fi
+else
+  echo "  Skipping Meshtastic (APK not found)"
+fi
+
+# Install CrypTAK ATAK Plugin
+echo "[5/7] Installing CrypTAK Plugin..."
+if [ -f "$APK_DIR/CrypTAK-Plugin.apk" ]; then
+  if ! adb install -r "$APK_DIR/CrypTAK-Plugin.apk"; then
+    echo "  WARNING: CrypTAK Plugin install failed — non-fatal, continuing"
+  fi
+else
+  echo "  Skipping CrypTAK Plugin (APK not found)"
+fi
+
 # Configure data policy — WiFi-only for large downloads, cellular only for ops traffic
-echo "[4/5] Configuring cellular data policy..."
+echo "[6/7] Configuring cellular data policy..."
 
 # Enable Data Saver — blocks background cellular for unlisted apps (covers F-Droid updates, etc.)
 if ! adb shell settings put global data_saver_enabled 1; then
@@ -69,8 +105,8 @@ if ! adb shell settings put global data_saver_enabled 1; then
   exit 1
 fi
 
-# Whitelist apps that legitimately need cellular: Tailscale (VPN), ATAK (CoT), Termux (SSH)
-for PKG in com.tailscale.ipn com.atakmap.app.civ com.termux; do
+# Whitelist apps that legitimately need cellular: Tailscale (VPN), ATAK (CoT), Termux (SSH), Meshtastic
+for PKG in com.tailscale.ipn com.atakmap.app.civ com.termux com.geeksville.mesh; do
   PKG_UID=$(adb shell pm list packages -U "$PKG" 2>/dev/null | grep -oP 'uid:\K[0-9]+')
   if [ -n "$PKG_UID" ]; then
     if ! adb shell cmd netpolicy add restrict-background-whitelist "$PKG_UID"; then
@@ -93,7 +129,7 @@ fi
 echo "  Data Saver enabled — large downloads WiFi-only"
 
 # Push ATAK preferences
-echo "[5/6] Pushing ATAK server configuration..."
+echo "[7/7] Pushing ATAK server configuration..."
 adb shell mkdir -p /sdcard/atak/tools 2>/dev/null || true
 cat > /tmp/atak_servers.pref << PREFEOF
 <?xml version='1.0' standalone='yes'?>
@@ -124,7 +160,7 @@ fi
 rm /tmp/atak_servers.pref
 
 # Push Termux setup script
-echo "[6/6] Pushing Termux SSH setup script..."
+echo "Pushing Termux SSH setup script..."
 cat > /tmp/termux_setup.sh << 'TERMUXEOF'
 #!/data/data/com.termux/files/usr/bin/bash
 # Run this inside Termux after opening it
@@ -145,10 +181,9 @@ PasswordAuthentication no
 AuthorizedKeysFile .ssh/authorized_keys
 SSHDEOF
 
-# Add desktop's public key
-# REPLACE THIS with the actual desktop public key:
+# Add desktop's public key (idempotent — skip if already present)
 DESKTOP_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHzLTikGXhZQfdkyXelIvALwZCugO7PH0xaQbh8D9Kig wlcarden@gmail.com"
-echo "$DESKTOP_PUBKEY" >> ~/.ssh/authorized_keys
+grep -qF "$DESKTOP_PUBKEY" ~/.ssh/authorized_keys 2>/dev/null || echo "$DESKTOP_PUBKEY" >> ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys
 
 # Enable sshd as persistent service
@@ -167,13 +202,12 @@ if ! adb push /tmp/termux_setup.sh /sdcard/termux_setup.sh; then
   echo "ERROR: Failed to push Termux setup script"
   exit 1
 fi
-chmod +x /tmp/termux_setup.sh
 rm /tmp/termux_setup.sh
 
 echo ""
 echo "========================================="
 # Push ATAK offline maps
-echo "[6a] Pushing ATAK offline map sources..."
+echo "Pushing ATAK offline map sources..."
 adb shell mkdir -p /sdcard/atak/imagery
 for XML in "$SCRIPT_DIR/atak-maps/"*.xml; do
   [ -f "$XML" ] || continue
@@ -185,7 +219,7 @@ for XML in "$SCRIPT_DIR/atak-maps/"*.xml; do
   fi
 done
 
-echo "[6b] Pushing NoVA offline tile cache..."
+echo "Pushing NoVA offline tile cache..."
 if [ -f "$SCRIPT_DIR/atak-maps/nova-streets.sqlite" ]; then
   if ! adb push "$SCRIPT_DIR/atak-maps/nova-streets.sqlite" "/sdcard/atak/imagery/nova-streets.sqlite"; then
     echo "ERROR: Failed to push offline map cache"
@@ -196,7 +230,7 @@ else
   echo "  WARNING: nova-streets.sqlite not found — skip offline map push"
 fi
 
-echo "[7] Installing Headwind MDM launcher..."
+echo "Installing Headwind MDM launcher..."
 if [ ! -f "$APK_DIR/HeadwindMDM.apk" ]; then
   echo "  ERROR: HeadwindMDM.apk not found at $APK_DIR/HeadwindMDM.apk"
   echo "  Download from: https://h-mdm.com/files/hmdm-6.31-os.apk"
@@ -207,6 +241,30 @@ if ! adb install -r "$APK_DIR/HeadwindMDM.apk"; then
   exit 1
 fi
 
+echo "Ensuring HMDM wallpaper is on server..."
+if [ -f "$SCRIPT_DIR/cryptak-wallpaper.png" ]; then
+  scp "$SCRIPT_DIR/cryptak-wallpaper.png" unraid:/mnt/user/appdata/tak-server/mdm/volumes/files/cryptak-wallpaper.png 2>/dev/null && \
+    echo "  Wallpaper uploaded to HMDM server" || \
+    echo "  WARNING: Failed to upload wallpaper (may already exist)"
+else
+  echo "  WARNING: cryptak-wallpaper.png not found — run generate-wallpaper.py first"
+fi
+
+echo "Generating HMDM enrollment QR code..."
+HMDM_SERVER="http://100.64.0.1:8095"
+QR_PAYLOAD="{\"android.app.extra.PROVISIONING_ADMIN_EXTRAS_BUNDLE\":{\"com.hmdm.BASE_URL\":\"${HMDM_SERVER}\",\"com.hmdm.DEVICE_ID\":\"${DEVICE_ID}\"}}"
+QR_FILE="/tmp/hmdm_enroll_${DEVICE_ID}.png"
+if command -v qrencode &>/dev/null; then
+  echo "$QR_PAYLOAD" | qrencode -o "$QR_FILE" -s 10 -m 2
+  echo "  QR saved: $QR_FILE"
+  echo "  Payload: $QR_PAYLOAD"
+else
+  echo "  WARNING: qrencode not installed (apt install qrencode)"
+  echo "  Manual QR payload: $QR_PAYLOAD"
+fi
+
+echo ""
+echo "========================================="
 echo "AUTOMATED STEPS COMPLETE for $DEVICE_ID"
 echo "========================================="
 echo ""
@@ -217,11 +275,7 @@ echo "   Settings → System → System Update → Download updates → Wi-Fi on
 echo ""
 echo "2. TAILSCALE: Open Tailscale app → 'Log in with auth key'"
 echo "   Key for $DEVICE_ID:"
-case "$DEVICE_ID" in
-  TAK-01) echo "   hskey-auth--Za8CoDgmdob-M5Pziy1Yxxi7z-P1d9w_O9kEuzcgbAr_DDMCde8eLTaKWtkYbkvZFzjNQq8hJ-FW" ;;
-  TAK-02) echo "   hskey-auth-10qyNNg4aRQD-OzNUAtUAypNfbkhmR54gM-X-YHaHPqAylDkIUWesYvg_rHx04J54oyV0-75tn8nr" ;;
-  TAK-03) echo "   hskey-auth-xF3iS1g1sl8p-W-0SIM_OUvVpxnsWh6wybyezBJcF6F_X191qvA74yDY57PdPjiQdxvpYnGUaXaZ3" ;;
-esac
+echo "   $PREAUTH_KEY"
 echo ""
 echo "3. VPN LOCK: Settings → Network → VPN → Tailscale → Always-on + Block without VPN"
 echo ""
@@ -230,13 +284,23 @@ echo ""
 echo "5. ATAK: Open ATAK → Server preferences should be pre-loaded"
 echo "   Verify callsign = $DEVICE_ID, team = Cyan"
 echo ""
-echo "6. HEADWIND MDM: Open 'Headwind MDM' launcher app"
-echo "   This will trigger permission setup wizard (install unknown sources, device admin, storage access)"
-echo "   → Grant all requested permissions when prompted"
-echo "   → When enrollment screen appears:"
-echo "   Server URL: http://192.168.50.120:8095"
-echo "   Device Code: $DEVICE_ID"
-echo "   → Device will register with HMDM and pull configuration"
+echo "6. HEADWIND MDM ENROLLMENT (QR method — preferred):"
+echo "   → Factory reset the phone (if not already done)"
+echo "   → Connect to WiFi + Tailscale during setup wizard"
+echo "   → Scan QR: $QR_FILE"
+echo "   → Phone downloads launcher and enrolls automatically"
+echo ""
+echo "   ALTERNATIVE (manual method — if QR doesn't work):"
+echo "   → Open 'Headwind MDM' launcher app on phone"
+echo "   → Grant all requested permissions"
+echo "   → Server URL: $HMDM_SERVER"
+echo "   → Device Code: $DEVICE_ID"
+echo ""
+echo "   POST-ENROLLMENT NOTES (see HMDM-SETUP.md for details):"
+echo "   - If launcher download fails: place hmdm-latest-os.apk in server files dir"
+echo "   - If install loops: remove launcher from its own config in DB"
+echo "   - If new apps don't appear: need applicationversions + applicationversionid link"
+echo "   - Force config refresh: adb shell am force-stop com.hmdm.launcher && adb shell am start com.hmdm.launcher/.ui.MainActivity"
 echo ""
 echo "7. SECURITY: Settings → Developer Options → USB Debugging → OFF"
 echo ""
