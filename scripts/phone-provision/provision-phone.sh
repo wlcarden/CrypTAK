@@ -53,20 +53,20 @@ echo "Connected: $DEVICE_MODEL"
 
 # --- Install apps ---
 echo ""
-echo "[1/7] Installing F-Droid..."
+echo "[1/8] Installing F-Droid..."
 if ! adb install -r "$APK_DIR/FDroid.apk"; then
   echo "ERROR: F-Droid install failed"
   exit 1
 fi
 
-echo "[2/7] Installing ATAK-CIV..."
+echo "[2/8] Installing ATAK-CIV..."
 if ! adb install -r "$APK_DIR/ATAK-CIV.apk"; then
   echo "ERROR: ATAK-CIV install failed"
   exit 1
 fi
 
 # Install Tailscale if APK present
-echo "[3/7] Installing Tailscale..."
+echo "[3/8] Installing Tailscale..."
 if [ ! -f "$APK_DIR/Tailscale.apk" ]; then
   echo "ERROR: Tailscale.apk not found at $APK_DIR/Tailscale.apk"
   exit 1
@@ -76,8 +76,15 @@ if ! adb install -r "$APK_DIR/Tailscale.apk"; then
   exit 1
 fi
 
+# Install Termux
+echo "[4/8] Installing Termux..."
+if ! adb install -r "$APK_DIR/Termux.apk"; then
+  echo "ERROR: Termux install failed"
+  exit 1
+fi
+
 # Install Meshtastic companion app (optional but useful for node config)
-echo "[4/7] Installing Meshtastic..."
+echo "[5/8] Installing Meshtastic..."
 if [ -f "$APK_DIR/Meshtastic.apk" ]; then
   if ! adb install -r "$APK_DIR/Meshtastic.apk"; then
     echo "  WARNING: Meshtastic install failed — non-fatal, continuing"
@@ -87,7 +94,7 @@ else
 fi
 
 # Install CrypTAK ATAK Plugin
-echo "[5/7] Installing CrypTAK Plugin..."
+echo "[6/8] Installing CrypTAK Plugin..."
 if [ -f "$APK_DIR/CrypTAK-Plugin.apk" ]; then
   if ! adb install -r "$APK_DIR/CrypTAK-Plugin.apk"; then
     echo "  WARNING: CrypTAK Plugin install failed — non-fatal, continuing"
@@ -97,7 +104,7 @@ else
 fi
 
 # Configure data policy — WiFi-only for large downloads, cellular only for ops traffic
-echo "[6/7] Configuring cellular data policy..."
+echo "[7/8] Configuring cellular data policy..."
 
 # Enable Data Saver — blocks background cellular for unlisted apps (covers F-Droid updates, etc.)
 if ! adb shell settings put global data_saver_enabled 1; then
@@ -107,7 +114,7 @@ fi
 
 # Whitelist apps that legitimately need cellular: Tailscale (VPN), ATAK (CoT), Termux (SSH), Meshtastic
 for PKG in com.tailscale.ipn com.atakmap.app.civ com.termux com.geeksville.mesh; do
-  PKG_UID=$(adb shell pm list packages -U "$PKG" 2>/dev/null | grep -oP 'uid:\K[0-9]+')
+  PKG_UID=$(adb shell pm list packages -U "$PKG" 2>/dev/null | grep -oP 'uid:\K[0-9]+' || true)
   if [ -n "$PKG_UID" ]; then
     if ! adb shell cmd netpolicy add restrict-background-whitelist "$PKG_UID"; then
       echo "  WARNING: Failed to whitelist $PKG — apply manually"
@@ -120,7 +127,7 @@ for PKG in com.tailscale.ipn com.atakmap.app.civ com.termux com.geeksville.mesh;
 done
 
 # Explicitly restrict F-Droid from background cellular (belt + suspenders)
-FDROID_UID=$(adb shell pm list packages -U org.fdroid.fdroid 2>/dev/null | grep -oP 'uid:\K[0-9]+')
+FDROID_UID=$(adb shell pm list packages -U org.fdroid.fdroid 2>/dev/null | grep -oP 'uid:\K[0-9]+' || true)
 if [ -n "$FDROID_UID" ]; then
   adb shell cmd netpolicy set restrict-background "$FDROID_UID" true
   echo "  Restricted cellular: F-Droid (uid $FDROID_UID)"
@@ -129,7 +136,7 @@ fi
 echo "  Data Saver enabled — large downloads WiFi-only"
 
 # Push ATAK preferences
-echo "[7/7] Pushing ATAK server configuration..."
+echo "[7/8] Pushing ATAK server configuration..."
 adb shell mkdir -p /sdcard/atak/tools 2>/dev/null || true
 cat > /tmp/atak_servers.pref << PREFEOF
 <?xml version='1.0' standalone='yes'?>
