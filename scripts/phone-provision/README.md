@@ -21,11 +21,11 @@ Before touching any phone:
 
 ## Device Assignments
 
-| Device  | Model               | Callsign | Headscale IP | Status                          |
-| ------- | ------------------- | -------- | ------------ | ------------------------------- |
-| Phone 1 | Pixel 6 Pro (raven) | TAK-01   | 100.64.0.4   | Enrolled (offline since Mar 16) |
-| Phone 2 | Pixel 6             | TAK-02   | TBD          | Pending provisioning            |
-| Phone 3 | Pixel 6             | TAK-03   | TBD          | Pending provisioning            |
+| Device  | Model               | Callsign | Headscale IP | Status                                     |
+| ------- | ------------------- | -------- | ------------ | ------------------------------------------ |
+| Phone 1 | Pixel 6 Pro (raven) | TAK-01   | 100.64.0.4   | Enrolled, online                           |
+| Phone 2 | Pixel 6 (oriole)    | TAK-02   | 100.64.0.5   | Provisioned 2026-04-05                     |
+| Phone 3 | Pixel 6 (oriole)    | TAK-03   | —            | USB-C fastboot HW fault, needs replacement |
 
 Pre-auth keys are generated per-session (72h expiry) and passed to the provisioning script.
 Do NOT hardcode keys — generate fresh ones on provisioning day.
