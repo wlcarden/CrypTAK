@@ -194,17 +194,27 @@ rm /tmp/atak_servers.pref
 echo "Pushing Termux SSH setup script..."
 cat > /tmp/termux_setup.sh << 'TERMUXEOF'
 #!/data/data/com.termux/files/usr/bin/bash
-# Run this inside Termux after opening it
+# CrypTAK Termux SSH setup — run inside Termux
+# Uses $HOME explicitly (~ may not expand correctly via ADB input)
 
-pkg update -y
-pkg install -y openssh termux-services termux-boot
+echo "=== CrypTAK Termux Setup ==="
+
+# Install packages (requires internet — run BEFORE VPN lockdown)
+echo "[1/4] Installing packages..."
+if ! pkg install -y openssh termux-services 2>&1; then
+  echo "WARNING: pkg install failed — check internet connectivity"
+  echo "VPN kill-switch may be blocking Termux mirror access"
+  echo "Disable VPN lockdown, run this script, then re-enable"
+  exit 1
+fi
 
 # Generate SSH key
-[ -f ~/.ssh/id_ed25519 ] || ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N ""
+echo "[2/4] Configuring SSH..."
+mkdir -p "$HOME/.ssh"
+[ -f "$HOME/.ssh/id_ed25519" ] || ssh-keygen -t ed25519 -f "$HOME/.ssh/id_ed25519" -N ""
 
 # Configure sshd
-mkdir -p ~/.ssh
-cat > $PREFIX/etc/ssh/sshd_config << 'SSHDEOF'
+cat > "$PREFIX/etc/ssh/sshd_config" << 'SSHDEOF'
 Port 8022
 ListenAddress 0.0.0.0
 PubkeyAuthentication yes
@@ -212,22 +222,25 @@ PasswordAuthentication no
 AuthorizedKeysFile .ssh/authorized_keys
 SSHDEOF
 
-# Add desktop's public key (idempotent — skip if already present)
+# Add desktop's public key (idempotent)
+echo "[3/4] Adding desktop public key..."
 DESKTOP_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHzLTikGXhZQfdkyXelIvALwZCugO7PH0xaQbh8D9Kig wlcarden@gmail.com"
-grep -qF "$DESKTOP_PUBKEY" ~/.ssh/authorized_keys 2>/dev/null || echo "$DESKTOP_PUBKEY" >> ~/.ssh/authorized_keys
-chmod 600 ~/.ssh/authorized_keys
+grep -qF "$DESKTOP_PUBKEY" "$HOME/.ssh/authorized_keys" 2>/dev/null || echo "$DESKTOP_PUBKEY" >> "$HOME/.ssh/authorized_keys"
+chmod 600 "$HOME/.ssh/authorized_keys"
 
-# Enable sshd as persistent service
-sv-enable sshd
+# Start sshd — direct start first (always works), then sv-enable for persistence
+# sv-enable requires a Termux restart after installing termux-services, so it may
+# fail on first run. That's OK — sshd is already running from the direct start.
+echo "[4/4] Starting SSH server..."
+sshd 2>/dev/null && echo "  sshd started" || echo "  WARNING: sshd start failed"
+sv-enable sshd 2>/dev/null && echo "  sshd persistence enabled" || echo "  NOTE: sv-enable failed (restart Termux to fix — sshd is running anyway)"
 
-# Print phone's public key for desktop to add
 echo ""
-echo "===== THIS PHONE'S PUBLIC KEY (send to admin) ====="
-cat ~/.ssh/id_ed25519.pub
-echo "==================================================="
-echo ""
-echo "SSH server running on port 8022"
-echo "Connect with: ssh -p 8022 \$(whoami)@<tailscale-ip>"
+echo "===== THIS PHONE'S PUBLIC KEY ====="
+cat "$HOME/.ssh/id_ed25519.pub"
+echo "===================================="
+echo "SSH on port 8022"
+echo "=== Setup complete ==="
 TERMUXEOF
 if ! adb push /tmp/termux_setup.sh /sdcard/termux_setup.sh; then
   echo "ERROR: Failed to push Termux setup script"
