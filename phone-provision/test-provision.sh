@@ -256,8 +256,13 @@ else
   pass "No Termux SSH references (replaced by ADB TCP)"
 fi
 
-# Check ADB TCP is present
-grep -q "tcpip 5555" "$SCRIPT" && pass "ADB TCP (port 5555) enabled" || fail "Missing ADB TCP setup"
+# Check ADB is disabled after provisioning (security hardening)
+grep -q "development_settings_enabled 0" "$SCRIPT" && pass "Developer options disabled after provisioning" || fail "Missing developer options disable"
+if grep -q "tcpip 5555" "$SCRIPT"; then
+  fail "ADB TCP still enabled (security risk — should be disabled)"
+else
+  pass "No ADB TCP (unauthenticated remote shell removed)"
+fi
 
 # Check single-argument interface (no pre-auth key arg)
 if head -15 "$SCRIPT" | grep -q 'PREAUTH_KEY="\${2:-}"'; then

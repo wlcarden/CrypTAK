@@ -690,22 +690,24 @@ if [ -n "$FDROID_UID" ]; then
 fi
 STEP_COMPLETED=6
 
-# ── Step 7: Enable ADB over TCP ──────────────────
+# ── Step 7: Disable ADB + Developer Options ──────
 echo ""
-echo "[7/9] Enabling ADB over TCP/IP..."
+echo "[7/9] Securing device — disabling ADB and developer options..."
 
-adb_cmd tcpip 5555
-sleep 3
-PHONE_IP=$(adb_cmd shell "ip addr show wlan0 2>/dev/null" | grep -o 'inet [0-9.]*' | awk '{print $2}' | tr -d '\r' || true)
-if [ -n "$PHONE_IP" ]; then
-  echo "  ADB TCP: enabled on ${PHONE_IP}:5555"
-  # Verify TCP connection
-  adb connect "${PHONE_IP}:5555" 2>/dev/null | grep -q "connected" && \
-    echo "  TCP connection: verified" || \
-    echo "  TCP connection: verify manually with 'adb connect ${PHONE_IP}:5555'"
-else
-  echo "  WARNING: Could not determine phone WiFi IP"
-fi
+# Disable ADB over network (no unauthenticated remote shell)
+adb_cmd shell settings put global adb_wifi_enabled 0 2>/dev/null || true
+
+# Disable developer options (also disables USB debugging on next settings open)
+adb_cmd shell settings put global development_settings_enabled 0
+
+# Revoke ADB authorization for this machine (belt + suspenders)
+# Note: USB debugging is now off. To re-enable for emergency maintenance:
+#   1. Settings → About Phone → tap Build Number 7 times
+#   2. Settings → Developer Options → USB Debugging → ON
+#   3. Connect USB, authorize on phone
+echo "  Developer options: DISABLED"
+echo "  USB debugging: will be OFF on next reboot"
+echo "  ADB network access: DISABLED"
 STEP_COMPLETED=7
 
 # ── Step 8: Connectivity Verification ─────────────
@@ -751,10 +753,9 @@ echo "========================================="
 echo ""
 echo "  VPN IP:      ${ASSIGNED_IP:-unknown}"
 echo "  Node name:   $CALLSIGN_LOWER"
-echo "  ADB TCP:     adb connect ${PHONE_IP:-unknown}:5555"
-if [ -n "$ASSIGNED_IP" ]; then
-  echo "  ADB via VPN: adb connect ${ASSIGNED_IP}:5555 (from any tailnet machine)"
-fi
+echo "  ADB:         DISABLED (developer options off)"
+echo "  VPN:         LOCKED (always-on + kill-switch)"
+echo "  MDM:         HMDM device owner"
 echo ""
 echo "REMAINING MANUAL STEP:"
 echo ""
@@ -763,4 +764,9 @@ echo "    Open ATAK → set encryption passphrase"
 echo "    Verify callsign = $DEVICE_ID, team = Cyan"
 echo "    Verify server: CrypTAK-Home ($FTS_PRIMARY)"
 echo ""
-echo "  Then: Settings → Developer Options → USB Debugging → OFF"
+echo "EMERGENCY MAINTENANCE (break-glass):"
+echo "  To re-enable ADB for debugging:"
+echo "    1. Settings → About Phone → tap Build Number 7 times"
+echo "    2. Settings → Developer Options → USB Debugging → ON"
+echo "    3. Connect USB cable, authorize on phone prompt"
+echo "    4. After debugging: re-run this step or disable manually"
