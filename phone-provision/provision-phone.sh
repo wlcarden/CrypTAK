@@ -363,13 +363,44 @@ adb_cmd shell "svc wifi enable"
 echo "  WiFi cycled for DNS refresh"
 sleep 8
 
-# 4c. Network check (warning, not blocker)
+# 4c. Network check + split DNS verification
 PHONE_IP=$(adb_cmd shell "ip addr show wlan0 2>/dev/null" | grep -o 'inet [0-9.]*' | awk '{print $2}' | tr -d '\r' || true)
 if [[ "$PHONE_IP" == 192.168.50.* ]]; then
-  echo "  Network: $PHONE_IP (home WiFi — split DNS path)"
+  echo "  Network: $PHONE_IP (home WiFi)"
+
+  # Verify split DNS resolves to internal IP (not external — which hits hairpin NAT)
+  RESOLVED_IP=$(nslookup vpn.thousand-pikes.com 192.168.50.1 2>/dev/null | grep -A1 "Name:" | grep "Address:" | awk '{print $2}' || true)
+  if [ "$RESOLVED_IP" = "192.168.50.120" ]; then
+    echo "  Split DNS: OK (vpn.thousand-pikes.com → 192.168.50.120)"
+  else
+    echo "  Split DNS: NOT configured (resolves to ${RESOLVED_IP:-nothing})"
+    echo "  Attempting to fix router DNS..."
+    # Try SSH to router to add split DNS + fix DHCP order
+    if ssh -o ConnectTimeout=5 wlcarden@192.168.50.1 'killall dnsmasq 2>/dev/null; sed -i "s|dhcp-option=lan,6,.*|dhcp-option=lan,6,192.168.50.1,1.1.1.1,8.8.8.8|" /etc/dnsmasq.conf; echo "address=/vpn.thousand-pikes.com/192.168.50.120" >> /etc/dnsmasq.conf; dnsmasq --log-async' 2>/dev/null; then
+      echo "  Router DNS: fixed (non-persistent — lost on router reboot)"
+      # Re-cycle WiFi to pick up new DHCP DNS order
+      adb_cmd shell "svc wifi disable"
+      sleep 2
+      adb_cmd shell "svc wifi enable"
+      sleep 8
+    else
+      echo "  WARNING: Cannot SSH to router (wlcarden@192.168.50.1)"
+      echo "  WiFi enrollment will likely fail. Options:"
+      echo "    1. Add SSH key to router: http://192.168.50.1 → Administration → Authorized Keys"
+      echo "    2. Connect phone to mobile hotspot instead of home WiFi"
+      echo "  Continuing anyway..."
+    fi
+  fi
+
+  # Verify headscale port 443 is reachable from desktop (same LAN)
+  if curl -sk --connect-timeout 3 "https://192.168.50.120/key?v=131" >/dev/null 2>&1; then
+    echo "  Headscale LAN port: OK (192.168.50.120:443)"
+  else
+    echo "  WARNING: Headscale not reachable on 192.168.50.120:443"
+    echo "  Check nginx container has port 192.168.50.120:443:443 binding"
+  fi
 else
-  echo "  WARNING: Phone IP is $PHONE_IP (not home WiFi). Split DNS may not work."
-  echo "  Enrollment may still work if phone can reach $HEADSCALE_URL"
+  echo "  Network: $PHONE_IP (not home WiFi — enrollment via external path)"
 fi
 
 # 4d. Clear Tailscale
@@ -434,13 +465,15 @@ if [ -n "$FIELD" ]; then
 fi
 adb_cmd shell input text "$PREAUTH_KEY"
 sleep 1
-# Dismiss keyboard before tapping Add account
+# Dismiss keyboard — the long key text expands the field, pushing "Add account"
+# button down. Must dismiss keyboard and re-dump UI to get correct button position.
 adb_cmd shell input keyevent 4
-sleep 1
+sleep 2
 echo "  Auth key: entered"
 
-# Submit enrollment
-tap_element "Add account" 2 >/dev/null
+# Submit enrollment — tap_element re-dumps UI, so it finds the button at its
+# new position after the text field expanded from the long key string
+tap_element "Add account" 3 >/dev/null
 sleep 5
 
 # 4g. Handle notification permission
@@ -454,11 +487,24 @@ if wait_for_ui "Allow.*notifications" 5; then
   sleep 2
 fi
 
-# 4h. Verify enrollment via Headscale
+# 4h. Verify enrollment via Headscale (retry loop — enrollment may take a few seconds)
 echo "  Verifying enrollment..."
-sleep 5
-LATEST_LOG=$(ssh "$UNRAID_SSH" "docker logs headscale --since 2m 2>&1" || true)
-NODE_ID=$(echo "$LATEST_LOG" | grep -oP 'Node connected node\.id=\K[0-9]+' | tail -1 || true)
+NODE_ID=""
+for attempt in 1 2 3 4 5 6; do
+  sleep 5
+  LATEST_LOG=$(ssh "$UNRAID_SSH" "docker logs headscale --since 3m 2>&1" || true)
+  NODE_ID=$(echo "$LATEST_LOG" | grep -oP 'Node connected node\.id=\K[0-9]+' | tail -1 || true)
+  if [ -n "$NODE_ID" ]; then
+    break
+  fi
+  # Also check if the phone's Tailscale UI shows "Connected"
+  adb_cmd shell uiautomator dump /sdcard/ui.xml 2>/dev/null
+  if adb_cmd shell cat /sdcard/ui.xml 2>/dev/null | grep -qi "Connected"; then
+    # Phone says connected — find the node by checking the most recent online node
+    NODE_ID=$(ssh "$UNRAID_SSH" "docker exec headscale headscale nodes list 2>/dev/null" | grep "online" | tail -1 | awk '{print $1}' | tr -d '[:space:]' || true)
+    [ -n "$NODE_ID" ] && break
+  fi
+done
 
 if [ -n "$NODE_ID" ]; then
   echo "  Enrollment: SUCCESS (node.id=$NODE_ID)"
@@ -472,9 +518,11 @@ if [ -n "$NODE_ID" ]; then
     echo "  Node renamed: $CALLSIGN_LOWER" || \
     echo "  WARNING: Node rename failed — do manually"
 else
-  echo "  WARNING: Enrollment not confirmed in logs — check manually"
-  echo "  ssh unraid \"docker logs headscale --tail 20\""
-  echo "  Continuing anyway (Tailscale may still be connected)..."
+  echo "  ERROR: Enrollment not confirmed after 30s"
+  echo "  Check: ssh unraid \"docker logs headscale --tail 20\""
+  echo "  The phone may need a different network (mobile hotspot) for enrollment."
+  echo "  Cannot continue without VPN — HMDM requires VPN routing."
+  exit 1
 fi
 
 # 4j. Restore Private DNS
