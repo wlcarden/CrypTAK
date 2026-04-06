@@ -118,47 +118,103 @@ echo ""
 echo "[1/5] Running Termux SSH setup..."
 echo "  (Must run before VPN lockdown — Termux mirrors need direct internet)"
 
-# Grant storage permissions
+# Grant storage and run-command permissions
 adb shell pm grant com.termux android.permission.READ_EXTERNAL_STORAGE 2>/dev/null || true
 adb shell pm grant com.termux android.permission.WRITE_EXTERNAL_STORAGE 2>/dev/null || true
 adb shell appops set --uid com.termux MANAGE_EXTERNAL_STORAGE allow 2>/dev/null || true
 
-# Launch Termux fresh (first launch triggers bootstrap ~5s)
+# Enable Termux's RUN_COMMAND intent (Settings → Termux → Allow External Apps)
+# This must be done before using am broadcast to run commands.
+adb shell mkdir -p /data/data/com.termux/files/home/.termux 2>/dev/null || true
+adb shell "echo 'allow-external-apps=true' > /data/data/com.termux/files/home/.termux/termux.properties" 2>/dev/null || true
+
+# Launch Termux to trigger bootstrap (first launch installs base packages)
 adb shell am force-stop com.termux 2>/dev/null
 sleep 1
 adb shell am start -n com.termux/.HomeActivity 2>/dev/null
-sleep 8
 
-# Install packages (type directly — most reliable for Termux)
+# Wait for bootstrap with verification (check for login shell)
+echo "  Waiting for Termux bootstrap..."
+for i in $(seq 1 20); do
+  if adb shell "run-as com.termux ls files/usr/bin/bash" &>/dev/null 2>&1; then
+    echo "  Bootstrap complete (${i}s)"
+    break
+  fi
+  # Fallback: check if /data/data/com.termux/files/usr/bin exists
+  if adb shell "ls /data/data/com.termux/files/usr/bin/bash" &>/dev/null 2>&1; then
+    echo "  Bootstrap complete (${i}s)"
+    break
+  fi
+  sleep 2
+done
+
+# Run pkg install via Termux's RUN_COMMAND intent (reliable, no ADB input needed)
+# Fallback to ADB input if RUN_COMMAND doesn't work (requires termux.properties)
 echo "  Installing openssh + termux-services..."
-adb shell input text 'pkg'
-adb shell input keyevent 62
-adb shell input text 'install'
-adb shell input keyevent 62
-adb shell input text '-y'
-adb shell input keyevent 62
-adb shell input text 'openssh'
-adb shell input keyevent 62
-adb shell input text 'termux-services'
-adb shell input keyevent 66
-sleep 90  # pkg install takes ~60-90s
+TERMUX_CMD_RESULT=$(adb shell am broadcast \
+  --user 0 \
+  -a com.termux.RUN_COMMAND \
+  -n com.termux/.app.RunCommandService \
+  --es com.termux.RUN_COMMAND_PATH '/data/data/com.termux/files/usr/bin/pkg' \
+  --esa com.termux.RUN_COMMAND_ARGUMENTS 'install,-y,openssh,termux-services' \
+  --ez com.termux.RUN_COMMAND_BACKGROUND 'true' 2>&1 || true)
 
-# Copy and run setup script using $HOME (~ expands to / via ADB input)
+if echo "$TERMUX_CMD_RESULT" | grep -q "result=0\|Broadcast completed"; then
+  echo "  RUN_COMMAND accepted — waiting for pkg install..."
+  # Poll for sshd binary to confirm install completed
+  for i in $(seq 1 60); do
+    if adb shell "ls /data/data/com.termux/files/usr/bin/sshd" &>/dev/null 2>&1; then
+      echo "  openssh installed (${i}x2s)"
+      break
+    fi
+    sleep 2
+  done
+else
+  echo "  RUN_COMMAND not available — falling back to ADB input..."
+  adb shell input text 'pkg'
+  adb shell input keyevent 62  # space
+  adb shell input text 'install'
+  adb shell input keyevent 62
+  adb shell input text '-y'
+  adb shell input keyevent 62
+  adb shell input text 'openssh'
+  adb shell input keyevent 62
+  adb shell input text 'termux-services'
+  adb shell input keyevent 66  # enter
+  sleep 90
+fi
+
+# Run the SSH setup script
 echo "  Running SSH setup script..."
-adb shell input text 'cp'
-adb shell input keyevent 62
-adb shell input text '/sdcard/termux_setup.sh'
-adb shell input keyevent 62
-adb shell input text '\$HOME/setup.sh'
-adb shell input keyevent 66
-sleep 3
-adb shell input text 'bash'
-adb shell input keyevent 62
-adb shell input text '\$HOME/setup.sh'
-adb shell input keyevent 66
+adb shell am broadcast \
+  --user 0 \
+  -a com.termux.RUN_COMMAND \
+  -n com.termux/.app.RunCommandService \
+  --es com.termux.RUN_COMMAND_PATH '/data/data/com.termux/files/usr/bin/bash' \
+  --esa com.termux.RUN_COMMAND_ARGUMENTS '/sdcard/termux_setup.sh' \
+  --ez com.termux.RUN_COMMAND_BACKGROUND 'true' 2>/dev/null || {
+  # Fallback: copy script and run via ADB input
+  adb shell input text 'cp'
+  adb shell input keyevent 62
+  adb shell input text '/sdcard/termux_setup.sh'
+  adb shell input keyevent 62
+  adb shell input text '\$HOME/setup.sh'
+  adb shell input keyevent 66
+  sleep 3
+  adb shell input text 'bash'
+  adb shell input keyevent 62
+  adb shell input text '\$HOME/setup.sh'
+  adb shell input keyevent 66
+}
 sleep 15
 
-echo "  Termux SSH setup: DONE"
+# Verify SSH is running
+if adb shell "ls /data/data/com.termux/files/usr/bin/sshd" &>/dev/null 2>&1; then
+  echo "  Termux SSH setup: DONE (sshd binary confirmed)"
+else
+  echo "  WARNING: sshd not found — Termux setup may have failed"
+  echo "  Run manually in Termux: bash /sdcard/termux_setup.sh"
+fi
 
 # ── 2. VPN Lockdown ─────────────────────────────
 echo ""
@@ -201,11 +257,26 @@ adb shell appops set --uid com.hmdm.launcher MANAGE_EXTERNAL_STORAGE allow 2>/de
 adb shell appops set com.hmdm.launcher REQUEST_INSTALL_PACKAGES allow 2>/dev/null || true
 
 # Set HMDM as device owner (enables silent APK installs)
+# Prerequisite: no accounts on device. Remove any that exist.
 echo "  Setting device owner..."
-if adb shell dpm set-device-owner com.hmdm.launcher/.AdminReceiver 2>&1 | grep -q "Success\|already"; then
+ACCOUNTS=$(adb shell dumpsys account 2>/dev/null | grep -c "Account {" || true)
+if [ "$ACCOUNTS" -gt 0 ]; then
+  echo "  WARNING: $ACCOUNTS account(s) found — device owner requires no accounts"
+  echo "  Attempting to remove accounts..."
+  # On GrapheneOS, accounts can be removed via pm
+  adb shell pm clear com.google.android.gms 2>/dev/null || true
+  sleep 2
+fi
+DPM_RESULT=$(adb shell dpm set-device-owner com.hmdm.launcher/.AdminReceiver 2>&1)
+if echo "$DPM_RESULT" | grep -q "Success\|already"; then
   echo "  Device owner: SET"
 else
-  echo "  WARNING: Could not set device owner (may need account removal first)"
+  if echo "$DPM_RESULT" | grep -q "already several accounts\|Not allowed to set"; then
+    echo "  ERROR: Cannot set device owner — accounts exist on device"
+    echo "  Remove all accounts in Settings → Passwords & accounts, then re-run"
+  else
+    echo "  WARNING: Device owner failed: $(echo "$DPM_RESULT" | tail -1)"
+  fi
   echo "  HMDM will still work but will prompt for each app install"
 fi
 
@@ -243,10 +314,29 @@ if [ "$HAS_SERVER" -gt 0 ]; then
   if [ -n "$FIELD" ]; then
     adb shell input tap $FIELD
     sleep 0.5
-    # Clear default text (move to end, backspace all)
-    adb shell input keyevent 123  # MOVE_END
-    for i in $(seq 1 40); do adb shell input keyevent 67; done  # backspace
+    # Select all text then delete — works regardless of default text length
+    adb shell input keyevent 29 --longpress 2>/dev/null  # Ctrl+A (select all)
     sleep 0.3
+    adb shell input keyevent 67  # Delete selected text
+    sleep 0.3
+    # Verify field is empty, if not try move-to-end + backspace
+    adb shell uiautomator dump /sdcard/ui.xml 2>/dev/null
+    FIELD_TEXT=$(adb shell cat /sdcard/ui.xml 2>/dev/null | python3 -c "
+import sys, xml.etree.ElementTree as ET
+tree = ET.parse(sys.stdin)
+for node in tree.iter('node'):
+    cls = node.get('class', '')
+    text = node.get('text', '') or ''
+    if 'EditText' in cls and text and 'http' in text.lower():
+        print(text)
+        break
+" 2>/dev/null)
+    if [ -n "$FIELD_TEXT" ]; then
+      # Ctrl+A didn't work — fallback to end+backspace
+      adb shell input keyevent 123  # MOVE_END
+      for i in $(seq 1 50); do adb shell input keyevent 67; done
+      sleep 0.3
+    fi
     adb shell input text "$HMDM_SERVER"
     sleep 1
     tap_element "OK" 2 2>/dev/null || adb shell input keyevent 66
