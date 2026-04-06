@@ -51,6 +51,30 @@ fi
 DEVICE_MODEL=$(adb shell getprop ro.product.model 2>/dev/null | tr -d '\r')
 echo "Connected: $DEVICE_MODEL"
 
+# --- Pre-flight device check ---
+echo ""
+echo "--- Pre-flight device check ---"
+
+# Check for stale ATAK database (blocks fresh setup with old passphrase)
+if adb shell "ls /sdcard/atak/Databases/" &>/dev/null; then
+  echo "  WARNING: Stale ATAK database found — wiping to avoid passphrase lockout"
+  adb shell "rm -rf /sdcard/atak/Databases" 2>/dev/null
+fi
+
+# Check for pre-installed ATAK with mismatched signatures
+INSTALLED_ATAK=$(adb shell pm list packages com.atakmap.app.civ 2>/dev/null | grep -c "package:" || true)
+if [ "$INSTALLED_ATAK" -gt 0 ]; then
+  echo "  Existing ATAK found — uninstalling to avoid signature conflicts"
+  adb shell pm list packages 2>/dev/null | grep "com.atakmap" | sed 's/package://' | while read -r pkg; do
+    adb uninstall "$pkg" 2>/dev/null && echo "    Removed: $pkg"
+  done
+fi
+
+# Ensure Termux has storage access (GrapheneOS requires explicit grant)
+echo "  NOTE: After Termux install, run 'termux-setup-storage' on device before executing setup script"
+
+echo "  Pre-flight checks passed"
+
 # --- Install apps ---
 echo ""
 echo "[1/8] Installing F-Droid..."
