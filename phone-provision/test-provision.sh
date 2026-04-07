@@ -372,6 +372,143 @@ fi
 echo ""
 
 # ─────────────────────────────────────────────
+echo "--- UI Parsing (fixture-based) ---"
+# ─────────────────────────────────────────────
+
+# Test tap_element and find_input_field parsing logic against real uiautomator
+# XML captured from a Pixel 6 running Tailscale 1.94.2 on GrapheneOS.
+# These tests verify the Python XML parsing works correctly without a device.
+
+FIXTURE_DIR="$SCRIPT_DIR/test-fixtures"
+
+if [ -d "$FIXTURE_DIR" ] && ls "$FIXTURE_DIR"/ts-*.xml >/dev/null 2>&1; then
+
+  # Extract the tap_element Python logic from the script (reusable parser)
+  TAP_PARSER='
+import sys, xml.etree.ElementTree as ET
+search = sys.argv[1].lower()
+tree = ET.parse(sys.stdin)
+all_nodes = list(tree.iter("node"))
+parent_map = {c: p for p in tree.iter() for c in p}
+for node in all_nodes:
+    text = (node.get("text", "") or "").lower()
+    desc = (node.get("content-desc", "") or "").lower()
+    if search in text or search in desc:
+        current = node
+        while current is not None:
+            if current.get("clickable", "") == "true":
+                print(current.get("bounds", ""))
+                sys.exit(0)
+            current = parent_map.get(current)
+        print(node.get("bounds", ""))
+        sys.exit(0)
+'
+
+  # Extract the find_input_field Python logic
+  FIELD_PARSER='
+import sys, xml.etree.ElementTree as ET, re
+tree = ET.parse(sys.stdin)
+for node in tree.iter("node"):
+    cls = node.get("class", "")
+    if "EditText" in cls or "AutoCompleteTextView" in cls:
+        bounds = node.get("bounds", "")
+        m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
+        if m:
+            x1,y1,x2,y2 = map(int, m.groups())
+            print(f"{(x1+x2)//2} {(y1+y2)//2}")
+            break
+'
+
+  # Test: Welcome screen — "Get Started" should be found
+  BOUNDS=$(python3 -c "$TAP_PARSER" "Get Started" < "$FIXTURE_DIR/ts-welcome.xml" 2>/dev/null || true)
+  if [[ "$BOUNDS" =~ ^\[.*\] ]]; then
+    pass "Fixture: 'Get Started' found on welcome screen ($BOUNDS)"
+  else
+    fail "Fixture: 'Get Started' not found on welcome screen"
+  fi
+
+  # Test: Main screen — "Open settings" (gear icon) should be found
+  BOUNDS=$(python3 -c "$TAP_PARSER" "Open settings" < "$FIXTURE_DIR/ts-main-login.xml" 2>/dev/null || true)
+  if [[ "$BOUNDS" =~ ^\[.*\] ]]; then
+    pass "Fixture: 'Open settings' found on main screen ($BOUNDS)"
+  else
+    fail "Fixture: 'Open settings' not found on main screen"
+  fi
+
+  # Test: Settings screen — "Accounts" should be found
+  BOUNDS=$(python3 -c "$TAP_PARSER" "Accounts" < "$FIXTURE_DIR/ts-settings.xml" 2>/dev/null || true)
+  if [[ "$BOUNDS" =~ ^\[.*\] ]]; then
+    pass "Fixture: 'Accounts' found on settings screen"
+  else
+    fail "Fixture: 'Accounts' not found on settings screen"
+  fi
+
+  # Test: Accounts screen — "menu" (three-dot) should be found
+  BOUNDS=$(python3 -c "$TAP_PARSER" "menu" < "$FIXTURE_DIR/ts-accounts.xml" 2>/dev/null || true)
+  if [[ "$BOUNDS" =~ ^\[.*\] ]]; then
+    pass "Fixture: 'menu' found on accounts screen"
+  else
+    fail "Fixture: 'menu' not found on accounts screen"
+  fi
+
+  # Test: Menu — "Use an alternate server" should be found
+  BOUNDS=$(python3 -c "$TAP_PARSER" "Use an alternate server" < "$FIXTURE_DIR/ts-accounts-menu.xml" 2>/dev/null || true)
+  if [[ "$BOUNDS" =~ ^\[.*\] ]]; then
+    pass "Fixture: 'Use an alternate server' found in menu"
+  else
+    fail "Fixture: 'Use an alternate server' not found in menu"
+  fi
+
+  # Test: Menu — "Use an auth key" should be found
+  BOUNDS=$(python3 -c "$TAP_PARSER" "Use an auth key" < "$FIXTURE_DIR/ts-accounts-menu.xml" 2>/dev/null || true)
+  if [[ "$BOUNDS" =~ ^\[.*\] ]]; then
+    pass "Fixture: 'Use an auth key' found in menu"
+  else
+    fail "Fixture: 'Use an auth key' not found in menu"
+  fi
+
+  # Test: Alternate server screen — EditText should be found with valid coords
+  COORDS=$(python3 -c "$FIELD_PARSER" < "$FIXTURE_DIR/ts-alternate-server.xml" 2>/dev/null || true)
+  if [[ "$COORDS" =~ ^[0-9]+\ [0-9]+$ ]]; then
+    pass "Fixture: EditText found on alternate server screen ($COORDS)"
+  else
+    fail "Fixture: EditText not found on alternate server screen (got: '$COORDS')"
+  fi
+
+  # Test: Auth key screen — EditText should be found with valid coords
+  COORDS=$(python3 -c "$FIELD_PARSER" < "$FIXTURE_DIR/ts-auth-key.xml" 2>/dev/null || true)
+  if [[ "$COORDS" =~ ^[0-9]+\ [0-9]+$ ]]; then
+    pass "Fixture: EditText found on auth key screen ($COORDS)"
+  else
+    fail "Fixture: EditText not found on auth key screen (got: '$COORDS')"
+  fi
+
+  # Test: "Add account" should be found on both server URL and auth key screens
+  for screen in ts-alternate-server ts-auth-key; do
+    BOUNDS=$(python3 -c "$TAP_PARSER" "Add account" < "$FIXTURE_DIR/${screen}.xml" 2>/dev/null || true)
+    if [[ "$BOUNDS" =~ ^\[.*\] ]]; then
+      pass "Fixture: 'Add account' found on $screen"
+    else
+      fail "Fixture: 'Add account' not found on $screen"
+    fi
+  done
+
+  # Negative test: element that shouldn't exist
+  BOUNDS=$(python3 -c "$TAP_PARSER" "NonExistentElement12345" < "$FIXTURE_DIR/ts-welcome.xml" 2>/dev/null || true)
+  if [ -z "$BOUNDS" ]; then
+    pass "Fixture: missing element returns empty (correct)"
+  else
+    fail "Fixture: missing element returned bounds (should be empty)"
+  fi
+
+else
+  warn "UI fixtures not found in test-fixtures/ — skipping UI parsing tests"
+  warn "Capture fixtures with a connected device: see test-provision.sh comments"
+fi
+
+echo ""
+
+# ─────────────────────────────────────────────
 echo "--- Static Analysis (shellcheck) ---"
 # ─────────────────────────────────────────────
 
