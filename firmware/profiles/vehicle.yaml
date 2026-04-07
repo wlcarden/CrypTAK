@@ -1,7 +1,8 @@
-# Vehicle Node — ROUTER_CLIENT profile
-# Mobile repeater mounted in a vehicle. Rebroadcasts all mesh traffic
-# while actively reporting GPS position. Charges via USB when car is on,
-# runs on battery when parked.
+# Vehicle Node — CLIENT profile
+# Mobile node mounted in a vehicle. Reports GPS position while moving.
+# Charges via USB when car is on, runs on battery when parked.
+# NOTE: ROUTER_CLIENT crashes firmware 2.7.15 on this RAK4631 unit (VHC01).
+#       Using CLIENT with rebroadcast_mode: ALL as workaround.
 #
 # Apply via: ./firmware/provision.sh "Node Name"
 
@@ -14,7 +15,7 @@ config:
     channel_num: 0
 
   device:
-    role: ROUTER_CLIENT
+    role: CLIENT
     serial_enabled: true              # Must stay true — only way to reprovision (see LEARNINGS.md)
     rebroadcast_mode: ALL
     node_info_broadcast_secs: 900            # 15 min — frequent enough for diagnostics
@@ -32,6 +33,10 @@ config:
 
   power:
     is_power_saving: false
+
+  bluetooth:
+    enabled: true
+    mode: FIXED_PIN
 
   display:
     auto_screen_carousel_secs: 0

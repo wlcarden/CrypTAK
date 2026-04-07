@@ -461,7 +461,7 @@ print(f'{max(nums)+1:02d}' if nums else '01')
 role_label() {
     case "$1" in
         relay)   echo "ROUTER" ;;
-        vehicle) echo "ROUTER_CLIENT" ;;
+        vehicle) echo "CLIENT" ;;
         tracker) echo "TRACKER" ;;
         bridge)  echo "CLIENT (bridge)" ;;
         field)   echo "CLIENT" ;;
