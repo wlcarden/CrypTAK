@@ -103,7 +103,7 @@ tap_element() {
   local attempt=0
 
   while [ $attempt -lt $retries ]; do
-    adb_cmd shell uiautomator dump /sdcard/ui.xml 2>/dev/null
+    adb_cmd shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
     local bounds
     bounds=$(adb_cmd shell cat /sdcard/ui.xml 2>/dev/null | python3 -c "
 import sys, xml.etree.ElementTree as ET
@@ -134,13 +134,13 @@ if m:
     x1,y1,x2,y2 = map(int, m.groups())
     print(f'{(x1+x2)//2} {(y1+y2)//2}')
 " 2>/dev/null)
-      if [ -n "$coords" ]; then
+      if [ -n "$coords" ] && [[ "$coords" =~ ^[0-9]+\ [0-9]+$ ]]; then
         adb_cmd shell input tap $coords
         return 0
       fi
     fi
 
-    ((attempt++))
+    attempt=$((attempt + 1))
     sleep 2
   done
 
@@ -150,7 +150,7 @@ if m:
 
 # ── Helper: find first EditText and return center coords ──
 find_input_field() {
-  adb_cmd shell uiautomator dump /sdcard/ui.xml 2>/dev/null
+  adb_cmd shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
   adb_cmd shell cat /sdcard/ui.xml 2>/dev/null | python3 -c "
 import sys, xml.etree.ElementTree as ET, re
 tree = ET.parse(sys.stdin)
@@ -172,7 +172,7 @@ wait_for_ui() {
   local timeout="${2:-30}"
   local elapsed=0
   while [ $elapsed -lt $timeout ]; do
-    adb_cmd shell uiautomator dump /sdcard/ui.xml 2>/dev/null
+    adb_cmd shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
     if adb_cmd shell cat /sdcard/ui.xml 2>/dev/null | grep -qi "$search_text"; then
       return 0
     fi
@@ -350,21 +350,22 @@ STEP_COMPLETED=3
 echo ""
 echo "[4/9] Enrolling in Tailscale VPN..."
 
-# 4a. Disable Private DNS (DoT bypasses router's split DNS)
-ORIG_DNS=$(adb_cmd shell settings get global private_dns_mode 2>/dev/null | tr -d '\r')
-adb_cmd shell "settings put global private_dns_mode off"
-PRIVATE_DNS_DISABLED=1
-echo "  Private DNS: disabled (was: $ORIG_DNS)"
+# 4a. Wait for WiFi connectivity
+# NOTE: Private DNS stays ON here — "Get Started" needs general DNS (login.tailscale.com)
+# to complete. Private DNS is disabled later (4f) only for split DNS enrollment.
+echo "  Waiting for WiFi..."
+for wifi_wait in $(seq 1 15); do
+  PHONE_IP=$(adb_cmd shell "ip addr show wlan0 2>/dev/null" | grep -o 'inet [0-9.]*' | awk '{print $2}' | tr -d '\r' || true)
+  [ -n "$PHONE_IP" ] && break
+  sleep 2
+done
+if [ -z "$PHONE_IP" ]; then
+  echo "  ERROR: Phone has no WiFi connection. Connect to WiFi and re-run."
+  exit 1
+fi
+echo "  WiFi: connected ($PHONE_IP)"
 
-# 4b. Cycle WiFi for DHCP DNS refresh (router pushes 192.168.50.1 first)
-adb_cmd shell "svc wifi disable"
-sleep 2
-adb_cmd shell "svc wifi enable"
-echo "  WiFi cycled for DNS refresh"
-sleep 8
-
-# 4c. Network check + split DNS verification
-PHONE_IP=$(adb_cmd shell "ip addr show wlan0 2>/dev/null" | grep -o 'inet [0-9.]*' | awk '{print $2}' | tr -d '\r' || true)
+# 4c. Network check + split DNS verification (reuse PHONE_IP from 4b)
 if [[ "$PHONE_IP" == 192.168.50.* ]]; then
   echo "  Network: $PHONE_IP (home WiFi)"
 
@@ -382,7 +383,12 @@ if [[ "$PHONE_IP" == 192.168.50.* ]]; then
       adb_cmd shell "svc wifi disable"
       sleep 2
       adb_cmd shell "svc wifi enable"
-      sleep 8
+      # Wait for WiFi to reconnect
+      for rw in $(seq 1 15); do
+        PHONE_IP=$(adb_cmd shell "ip addr show wlan0 2>/dev/null" | grep -o 'inet [0-9.]*' | awk '{print $2}' | tr -d '\r' || true)
+        [ -n "$PHONE_IP" ] && break
+        sleep 2
+      done
     else
       echo "  WARNING: Cannot SSH to router (wlcarden@192.168.50.1)"
       echo "  WiFi enrollment will likely fail. Options:"
@@ -403,62 +409,119 @@ else
   echo "  Network: $PHONE_IP (not home WiFi — enrollment via external path)"
 fi
 
-# 4d. Clear Tailscale
+# 4d. Verify DNS is functional before proceeding
+echo "  Verifying DNS..."
+DNS_OK=0
+for dns_try in 1 2 3; do
+  if nslookup vpn.thousand-pikes.com >/dev/null 2>&1; then
+    DNS_OK=1
+    break
+  fi
+  sleep 2
+done
+if [ "$DNS_OK" -eq 0 ]; then
+  echo "  WARNING: DNS resolution failing — waiting for resolver to stabilize..."
+  sleep 10
+fi
+
+# 4e. Clear Tailscale
 adb_cmd shell pm clear com.tailscale.ipn >/dev/null 2>&1
 echo "  Tailscale: cleared"
 
 # 4e. Launch and navigate UI
-# Welcome screen → Get Started
 adb_cmd shell "monkey -p com.tailscale.ipn -c android.intent.category.LAUNCHER 1" >/dev/null 2>&1
 sleep 3
-if wait_for_ui "Get Started" 10; then
-  tap_element "Get Started" 2 >/dev/null
+
+# Handle VPN connection request dialog — appears on first launch after pm clear
+# This system dialog blocks ALL other UI interaction until dismissed
+if wait_for_ui "Connection request" 5; then
+  tap_element "OK" 2 >/dev/null
+  echo "  VPN permission: granted"
   sleep 2
 fi
 
-# Gear → Accounts → ⋮ menu → "Use an alternate server"
-tap_element "Open settings" 2 >/dev/null
+# Welcome screen → Get Started
+# First tap opens a Custom Chrome Tab (login.tailscale.com) INSIDE Tailscale.
+# This is NOT a separate browser — force-stop won't work. Close it with the
+# "Close tab" X button (top left), then tap "Get Started" again to advance.
+if wait_for_ui "Get Started" 10; then
+  tap_element "Get Started" 2 >/dev/null || true
+  sleep 4
+  # Check if Custom Chrome Tab opened (look for "Close tab" X button)
+  if wait_for_ui "Close tab" 5; then
+    tap_element "Close tab" 2 >/dev/null || true
+    sleep 2
+    # Second tap on "Get Started" advances to the main screen
+    tap_element "Get Started" 2 >/dev/null || true
+    sleep 3
+  fi
+  echo "  Past welcome screen"
+fi
+
+# 4f. NOW disable Private DNS (needed for split DNS to resolve vpn.thousand-pikes.com)
+ORIG_DNS=$(adb_cmd shell settings get global private_dns_mode 2>/dev/null | tr -d '\r')
+adb_cmd shell "settings put global private_dns_mode off"
+PRIVATE_DNS_DISABLED=1
+echo "  Private DNS: disabled for enrollment (was: $ORIG_DNS)"
+
+# Navigate: Gear → Accounts → ⋮ menu → "Use an alternate server"
+echo "  Navigating: Gear → Accounts → ⋮ → Alternate server..."
+tap_element "Open settings" 3 || true
 sleep 2
-tap_element "Accounts" 2 >/dev/null
+tap_element "Accounts" 3 || true
 sleep 2
-tap_element "menu" 2 >/dev/null
+tap_element "menu" 3 || true
 sleep 2
-tap_element "Use an alternate server" 2 >/dev/null
+tap_element "Use an alternate server" 3 || true
 sleep 2
 
-# Enter server URL
-FIELD=$(find_input_field)
+# Enter server URL — find the EditText field, tap it, type URL
+for field_try in 1 2 3; do
+  FIELD=$(find_input_field)
+  [ -n "$FIELD" ] && break
+  sleep 2
+done
 if [ -n "$FIELD" ]; then
   adb_cmd shell input tap $FIELD
   sleep 1
+  adb_cmd shell input text "$HEADSCALE_URL"
+  sleep 1
+  echo "  Server URL: entered"
+else
+  echo "  WARNING: Could not find URL input field — typing anyway"
+  adb_cmd shell input text "$HEADSCALE_URL"
+  sleep 1
 fi
-adb_cmd shell input text "$HEADSCALE_URL"
-sleep 1
-echo "  Server URL: entered"
 
-# Submit (opens browser briefly — expected for OIDC server check)
-tap_element "Add account" 2 >/dev/null
-sleep 3
-# Close browser
-adb_cmd shell input keyevent 4
-sleep 1
-adb_cmd shell input keyevent 4
-sleep 1
+# Submit (opens Custom Chrome Tab for OIDC — we don't need it, just saving the URL)
+tap_element "Add account" 3 >/dev/null || true
+sleep 4
+# Close the Custom Chrome Tab (X button, top left) — it's inside Tailscale, not a separate browser
+if wait_for_ui "Close tab" 5; then
+  tap_element "Close tab" 2 >/dev/null || true
+  sleep 2
+fi
 
-# 4f. Navigate back for auth key entry
+# 4g. Navigate back for auth key entry
+# Re-launch Tailscale to get a clean state
 adb_cmd shell "monkey -p com.tailscale.ipn -c android.intent.category.LAUNCHER 1" >/dev/null 2>&1
 sleep 3
-tap_element "Open settings" 2 >/dev/null
+echo "  Navigating: Gear → Accounts → ⋮ → Auth key..."
+tap_element "Open settings" 3 || true
 sleep 2
-tap_element "Accounts" 2 >/dev/null
+tap_element "Accounts" 3 || true
 sleep 2
-tap_element "menu" 2 >/dev/null
+tap_element "menu" 3 || true
 sleep 2
-tap_element "Use an auth key" 2 >/dev/null
+tap_element "Use an auth key" 3 || true
 sleep 2
 
 # Enter pre-auth key
-FIELD=$(find_input_field)
+for field_try in 1 2 3; do
+  FIELD=$(find_input_field)
+  [ -n "$FIELD" ] && break
+  sleep 2
+done
 if [ -n "$FIELD" ]; then
   adb_cmd shell input tap $FIELD
   sleep 1
@@ -473,19 +536,43 @@ echo "  Auth key: entered"
 
 # Submit enrollment — tap_element re-dumps UI, so it finds the button at its
 # new position after the text field expanded from the long key string
-tap_element "Add account" 3 >/dev/null
+tap_element "Add account" 3 >/dev/null || true
 sleep 5
 
-# 4g. Handle notification permission
-if wait_for_ui "Notifications" 10; then
-  tap_element "Continue" 2 >/dev/null
-  sleep 2
-fi
-# Android system notification permission dialog
-if wait_for_ui "Allow.*notifications" 5; then
-  tap_element "Allow" 2 >/dev/null
-  sleep 2
-fi
+# 4g. Handle post-enrollment system dialogs
+# Three dialogs may appear in any order after enrollment:
+#   1. Tailscale notification permission screen ("Notifications" → "Continue")
+#   2. Android notification permission dialog ("Allow Tailscale to send notifications?" → "Allow")
+#   3. Android VPN connection request ("Connection request" → "OK")
+for dialog_attempt in 1 2 3 4 5; do
+  sleep 3
+  adb_cmd shell uiautomator dump /sdcard/ui.xml 2>/dev/null
+  UI_TEXT=$(adb_cmd shell cat /sdcard/ui.xml 2>/dev/null)
+
+  # Tailscale notification info screen
+  if echo "$UI_TEXT" | grep -qi "Notifications.*troubleshoot\|We use notifications"; then
+    tap_element "Continue" 2 >/dev/null || true
+    continue
+  fi
+
+  # Android notification permission dialog
+  if echo "$UI_TEXT" | grep -qi "Allow.*send.*notifications"; then
+    tap_element "Allow" 2 >/dev/null || true
+    continue
+  fi
+
+  # Android VPN connection request dialog (first-time VPN setup)
+  if echo "$UI_TEXT" | grep -qi "Connection request\|set up a VPN connection"; then
+    tap_element "OK" 2 >/dev/null || true
+    echo "  VPN connection: authorized"
+    continue
+  fi
+
+  # If we see "Connected" or the main Tailscale UI, we're done with dialogs
+  if echo "$UI_TEXT" | grep -qi "Connected\|Exit node\|Search"; then
+    break
+  fi
+done
 
 # 4h. Verify enrollment via Headscale (retry loop — enrollment may take a few seconds)
 echo "  Verifying enrollment..."
