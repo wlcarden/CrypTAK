@@ -64,9 +64,10 @@ cleanup() {
     echo "========================================="
   fi
 
-  # Restore Private DNS if we disabled it
+  # If Private DNS was disabled but enrollment didn't complete, restore it.
+  # On successful provisioning, Private DNS stays OFF (VPN provides encryption).
   if [ "$PRIVATE_DNS_DISABLED" -eq 1 ] && [ -n "$USB_SERIAL" ]; then
-    echo "Restoring Private DNS..."
+    echo "Restoring Private DNS (enrollment didn't complete)..."
     adb -s "$USB_SERIAL" shell "settings put global private_dns_mode opportunistic" 2>/dev/null || true
   fi
 
@@ -612,10 +613,12 @@ else
   exit 1
 fi
 
-# 4j. Restore Private DNS
-adb_cmd shell "settings put global private_dns_mode opportunistic"
-PRIVATE_DNS_DISABLED=0
-echo "  Private DNS: restored"
+# 4j. Leave Private DNS OFF permanently
+# With VPN lockdown, all traffic goes through WireGuard — DoT adds nothing.
+# Restoring Private DNS would break Tailscale reconnects from home WiFi
+# (DoT to 1.1.1.1 bypasses router split DNS → hairpin NAT failure).
+PRIVATE_DNS_DISABLED=0  # clear flag so cleanup trap doesn't restore it
+echo "  Private DNS: left OFF (VPN provides encryption)"
 STEP_COMPLETED=4
 
 # ── Step 5: HMDM Enrollment ──────────────────────
@@ -877,6 +880,36 @@ else
   echo "  WARNING: VPN lockdown may not have applied (app=$VPN_APP lock=$VPN_LOCK)"
 fi
 STEP_COMPLETED=9
+
+# Force Tailscale reconnect with final network config
+# VPN lockdown changes the network stack — Tailscale needs a restart to
+# reconnect through the always-on VPN tunnel.
+echo "  Restarting Tailscale for clean VPN connection..."
+adb_cmd shell "am force-stop com.tailscale.ipn"
+sleep 2
+adb_cmd shell "monkey -p com.tailscale.ipn -c android.intent.category.LAUNCHER 1" >/dev/null 2>&1
+sleep 8
+# Handle any post-restart dialogs
+for d in 1 2 3; do
+  adb_cmd shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+  UI=$(adb_cmd shell cat /sdcard/ui.xml 2>/dev/null)
+  if echo "$UI" | grep -qi "Notifications.*troubleshoot"; then
+    tap_element "Continue" 2 >/dev/null || true; sleep 2; continue
+  fi
+  if echo "$UI" | grep -qi "Allow.*notifications"; then
+    tap_element "Allow" 2 >/dev/null || true; sleep 2; continue
+  fi
+  break
+done
+adb_cmd shell input keyevent 3  # HOME
+# Verify VPN is connected
+sleep 3
+VPN_CHECK=$(ssh "$UNRAID_SSH" "docker exec headscale headscale nodes list 2>/dev/null" | grep "$CALLSIGN_LOWER" || true)
+if echo "$VPN_CHECK" | grep -q "online"; then
+  echo "  Tailscale: connected (verified via Headscale)"
+else
+  echo "  WARNING: Tailscale shows offline in Headscale — may need manual reconnect"
+fi
 
 # Force HMDM config refresh — ensures any remaining apps (e.g. CrypTAK Plugin)
 # get pushed now that VPN lockdown is in place and connectivity is verified.
