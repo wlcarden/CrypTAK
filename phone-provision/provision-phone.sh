@@ -295,9 +295,28 @@ STEP_COMPLETED=2
 echo ""
 echo "[3/9] Pushing ATAK configuration and maps..."
 
-# ATAK server preferences
-adb_cmd shell mkdir -p /sdcard/atak/tools 2>/dev/null || true
-cat > /tmp/atak_servers.pref << PREFEOF
+# ATAK server config — build a mission package ZIP that ATAK auto-imports.
+# A loose .pref file at /sdcard/atak/servers.pref does NOT get imported.
+# ATAK requires a ZIP with MANIFEST/manifest.xml + the .pref file.
+adb_cmd shell mkdir -p /sdcard/atak/tools/datapackage/incoming 2>/dev/null || true
+
+TMPDIR=$(mktemp -d)
+mkdir -p "$TMPDIR/MANIFEST"
+cat > "$TMPDIR/MANIFEST/manifest.xml" << 'MANIFESTEOF'
+<?xml version="1.0" encoding="utf-8"?>
+<MissionPackageManifest version="2">
+    <Configuration>
+        <Parameter name="uid" value="cryptak-server-config-v1"/>
+        <Parameter name="name" value="CrypTAK Server Config"/>
+        <Parameter name="onReceiveDelete" value="false"/>
+    </Configuration>
+    <Contents>
+        <Content ignore="false" zipEntry="cryptak-fts.pref"/>
+    </Contents>
+</MissionPackageManifest>
+MANIFESTEOF
+
+cat > "$TMPDIR/cryptak-fts.pref" << PREFEOF
 <?xml version='1.0' standalone='yes'?>
 <preferences>
   <preference version="1" name="cot_streams">
@@ -319,9 +338,11 @@ cat > /tmp/atak_servers.pref << PREFEOF
   </preference>
 </preferences>
 PREFEOF
-adb_cmd push /tmp/atak_servers.pref /sdcard/atak/servers.pref >/dev/null
-rm /tmp/atak_servers.pref
-echo "  ATAK server config: pushed (callsign=$DEVICE_ID, team=Cyan)"
+
+(cd "$TMPDIR" && zip -q cryptak-server-config.zip MANIFEST/manifest.xml cryptak-fts.pref)
+adb_cmd push "$TMPDIR/cryptak-server-config.zip" /sdcard/atak/tools/datapackage/incoming/ >/dev/null
+rm -rf "$TMPDIR"
+echo "  ATAK server config: mission package pushed (callsign=$DEVICE_ID, team=Cyan)"
 
 # ATAK offline map sources
 adb_cmd shell mkdir -p /sdcard/atak/imagery 2>/dev/null || true
