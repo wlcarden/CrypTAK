@@ -349,7 +349,7 @@ adb_cmd shell mkdir -p /sdcard/atak/imagery 2>/dev/null || true
 MAP_COUNT=0
 for XML in "$SCRIPT_DIR/atak-maps/"*.xml; do
   [ -f "$XML" ] || continue
-  adb_cmd push "$XML" "/sdcard/atak/imagery/$(basename "$XML")" >/dev/null 2>&1 && ((MAP_COUNT++)) || true
+  adb_cmd push "$XML" "/sdcard/atak/imagery/$(basename "$XML")" >/dev/null 2>&1 && MAP_COUNT=$((MAP_COUNT + 1)) || true
 done
 echo "  Map sources: $MAP_COUNT XML files pushed"
 
