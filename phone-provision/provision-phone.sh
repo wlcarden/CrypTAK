@@ -878,6 +878,17 @@ else
 fi
 STEP_COMPLETED=9
 
+# Force HMDM config refresh — ensures any remaining apps (e.g. CrypTAK Plugin)
+# get pushed now that VPN lockdown is in place and connectivity is verified.
+echo ""
+echo "  Forcing MDM config update..."
+adb_cmd shell am broadcast -a com.hmdm.PUSH_CONFIG -n com.hmdm.launcher/.AdminReceiver 2>/dev/null || true
+# Also open and close HMDM to trigger a foreground sync
+adb_cmd shell am start -n com.hmdm.launcher/.ui.MainActivity 2>/dev/null || true
+sleep 10
+adb_cmd shell input keyevent 3  # HOME
+echo "  MDM config refresh: triggered"
+
 # ── Cleanup ───────────────────────────────────────
 echo ""
 adb_cmd shell input keyevent 3  # HOME
