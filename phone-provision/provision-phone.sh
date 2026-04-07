@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2086  # Word splitting is intentional for: input tap $coords, input tap $FIELD
 # CrypTAK Unified Phone Provisioning Script
 #
 # Takes a fresh GrapheneOS phone from zero to fully provisioned CrypTAK device.
@@ -24,8 +25,6 @@ FTS_SECONDARY="100.64.0.2:8087"
 UNRAID_SSH="unraid"
 SCREEN_TIMEOUT_PROVISION=600000
 SCREEN_TIMEOUT_DEFAULT=120000
-DESKTOP_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHzLTikGXhZQfdkyXelIvALwZCugO7PH0xaQbh8D9Kig wlcarden@gmail.com"
-
 DEVICE_ID="${1:-}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APK_DIR="$SCRIPT_DIR/apks"
@@ -376,7 +375,7 @@ echo "[4/9] Enrolling in Tailscale VPN..."
 # NOTE: Private DNS stays ON here — "Get Started" needs general DNS (login.tailscale.com)
 # to complete. Private DNS is disabled later (4f) only for split DNS enrollment.
 echo "  Waiting for WiFi..."
-for wifi_wait in $(seq 1 15); do
+for _ in $(seq 1 15); do
   PHONE_IP=$(adb_cmd shell "ip addr show wlan0 2>/dev/null" | grep -o 'inet [0-9.]*' | awk '{print $2}' | tr -d '\r' || true)
   [ -n "$PHONE_IP" ] && break
   sleep 2
@@ -406,7 +405,7 @@ if [[ "$PHONE_IP" == 192.168.50.* ]]; then
       sleep 2
       adb_cmd shell "svc wifi enable"
       # Wait for WiFi to reconnect
-      for rw in $(seq 1 15); do
+      for _ in $(seq 1 15); do
         PHONE_IP=$(adb_cmd shell "ip addr show wlan0 2>/dev/null" | grep -o 'inet [0-9.]*' | awk '{print $2}' | tr -d '\r' || true)
         [ -n "$PHONE_IP" ] && break
         sleep 2
@@ -434,7 +433,7 @@ fi
 # 4d. Verify DNS is functional before proceeding
 echo "  Verifying DNS..."
 DNS_OK=0
-for dns_try in 1 2 3; do
+for _ in 1 2 3; do
   if nslookup vpn.thousand-pikes.com >/dev/null 2>&1; then
     DNS_OK=1
     break
@@ -498,7 +497,7 @@ tap_element "Use an alternate server" 3 || true
 sleep 2
 
 # Enter server URL — find the EditText field, tap it, type URL
-for field_try in 1 2 3; do
+for _ in 1 2 3; do
   FIELD=$(find_input_field)
   [ -n "$FIELD" ] && break
   sleep 2
@@ -539,7 +538,7 @@ tap_element "Use an auth key" 3 || true
 sleep 2
 
 # Enter pre-auth key
-for field_try in 1 2 3; do
+for _ in 1 2 3; do
   FIELD=$(find_input_field)
   [ -n "$FIELD" ] && break
   sleep 2
@@ -566,7 +565,7 @@ sleep 5
 #   1. Tailscale notification permission screen ("Notifications" → "Continue")
 #   2. Android notification permission dialog ("Allow Tailscale to send notifications?" → "Allow")
 #   3. Android VPN connection request ("Connection request" → "OK")
-for dialog_attempt in 1 2 3 4 5; do
+for _ in 1 2 3 4 5; do
   sleep 3
   adb_cmd shell uiautomator dump /sdcard/ui.xml 2>/dev/null
   UI_TEXT=$(adb_cmd shell cat /sdcard/ui.xml 2>/dev/null)
@@ -911,7 +910,7 @@ sleep 2
 adb_cmd shell "monkey -p com.tailscale.ipn -c android.intent.category.LAUNCHER 1" >/dev/null 2>&1
 sleep 8
 # Handle any post-restart dialogs
-for d in 1 2 3; do
+for _ in 1 2 3; do
   adb_cmd shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
   UI=$(adb_cmd shell cat /sdcard/ui.xml 2>/dev/null)
   if echo "$UI" | grep -qi "Notifications.*troubleshoot"; then

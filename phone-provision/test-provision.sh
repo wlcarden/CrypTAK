@@ -372,6 +372,36 @@ fi
 echo ""
 
 # ─────────────────────────────────────────────
+echo "--- Static Analysis (shellcheck) ---"
+# ─────────────────────────────────────────────
+
+if command -v shellcheck &>/dev/null; then
+  # Only fail on errors and warnings (severity=error,warning), not info/style
+  SC_OUT=$(shellcheck --severity=warning "$SCRIPT" 2>&1 || true)
+  SC_COUNT=$(echo "$SC_OUT" | grep -c "SC[0-9]" || true)
+  if [ "$SC_COUNT" -eq 0 ]; then
+    pass "shellcheck: no warnings or errors"
+  else
+    fail "shellcheck: $SC_COUNT warning(s) found"
+    echo "$SC_OUT" | head -20
+  fi
+
+  # Also check test script itself
+  SC_OUT2=$(shellcheck --severity=warning "$SCRIPT_DIR/test-provision.sh" 2>&1 || true)
+  SC_COUNT2=$(echo "$SC_OUT2" | grep -c "SC[0-9]" || true)
+  if [ "$SC_COUNT2" -eq 0 ]; then
+    pass "shellcheck (test script): no warnings or errors"
+  else
+    fail "shellcheck (test script): $SC_COUNT2 warning(s)"
+    echo "$SC_OUT2" | head -20
+  fi
+else
+  warn "shellcheck not installed — skipping static analysis"
+fi
+
+echo ""
+
+# ─────────────────────────────────────────────
 echo "========================================="
 echo "RESULTS: $PASS passed, $FAIL failed, $WARN warnings"
 echo "========================================="
