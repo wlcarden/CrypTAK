@@ -655,6 +655,25 @@ main() {
     fi
     sleep "$CMD_DELAY"
 
+    # WiFi: configure on nodes with wifi: true in nodes.yaml (ESP32-based boards only).
+    # Credentials sourced from secrets.sh (WIFI_SSID / WIFI_PSK).
+    local has_wifi
+    has_wifi=$(get_field "${node_json:-{\}}" "wifi" 2>/dev/null || true)
+    if [[ "$has_wifi" == "True" ]]; then
+        if [[ -n "${WIFI_SSID:-}" && -n "${WIFI_PSK:-}" ]]; then
+            if mesh_cmd --set network.wifi_enabled true \
+                        --set network.wifi_ssid "$WIFI_SSID" \
+                        --set network.wifi_psk "$WIFI_PSK" >/dev/null 2>&1; then
+                ok "WiFi: configured (SSID: $WIFI_SSID)"
+            else
+                warn "WiFi: failed to set (non-fatal)"
+            fi
+            sleep "$CMD_DELAY"
+        else
+            warn "WiFi: node is wifi-capable but WIFI_SSID/WIFI_PSK not set in secrets.sh"
+        fi
+    fi
+
     # Identity: owner name (doesn't work via mesh admin — --set-owner is serial/wifi only)
     if [[ "$CONNECTION_MODE" == "remote" ]]; then
         warn "Owner name: cannot be set via mesh admin — set physically when accessible"

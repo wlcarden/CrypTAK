@@ -30,6 +30,10 @@ config:
     device_update_interval: 60              # 1 min — max diagnostics during testing
     device_telemetry_enabled: true
 
+  neighbor_info:
+    enabled: true
+    update_interval: 900                 # 15 min
+
   power:
     is_power_saving: false
 

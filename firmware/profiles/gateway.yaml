@@ -25,10 +25,14 @@ config:
     device_telemetry_enabled: true
 
   position:
-    position_broadcast_smart_enabled: true
-    gps_enabled: true
-    gps_update_interval: 120
+    fixed_position: true               # Gateway has no GPS — position set via --setlat/--setlon
+    position_broadcast_smart_enabled: false
+    gps_enabled: false
     position_broadcast_secs: 900       # 15 min
+
+  neighbor_info:
+    enabled: true
+    update_interval: 900                 # 15 min — gateway is USB-powered, no airtime concern
 
   power:
     is_power_saving: false

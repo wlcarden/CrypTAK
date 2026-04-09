@@ -4,6 +4,7 @@ nodes:
     profile: bridge
     short_name: CG01
     cot_type: "a-f-G-E-X"
+    wifi: true
   CrypTAK-BSE01:
     id: "!01f94ec0"
     profile: relay
@@ -40,13 +41,19 @@ nodes:
     short_name: CW01
     cot_type: "a-f-G-E-X"
     gateway: true
+    wifi: true
+    gps: false
+    latitude: 38.84192
+    longitude: -77.29345
   CrypTAK-RPT02:
     id: "!435ae49c"
     profile: relay
     short_name: CR02
     cot_type: "a-f-G-E-S"
+    wifi: true
   CrypTAK-RPT03:
     id: "!435bab94"
     profile: relay
     short_name: CR03
     cot_type: "a-f-G-E-S"
+    wifi: true
