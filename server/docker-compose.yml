@@ -200,6 +200,8 @@ services:
     container_name: mesh-relay
     profiles: ["mesh-relay"]
     restart: always
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
     depends_on:
       freetakserver:
         condition: service_started
@@ -375,6 +377,8 @@ services:
     container_name: incident-tracker
     profiles: ["incident-tracker"]
     restart: always
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
     depends_on:
       freetakserver:
         condition: service_started
