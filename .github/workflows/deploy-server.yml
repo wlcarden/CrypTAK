@@ -54,7 +54,9 @@ jobs:
           # Profile services need explicit targeting — bare 'up -d' doesn't
           # start services in non-default profiles.
           docker compose --profile incident-tracker up -d --no-deps incident-tracker
-          docker compose --profile mesh-relay up -d --no-deps mesh-relay
+          # mesh-relay depends on meshmonitor_default (external network) and
+          # /dev/ttyACM0 (USB serial) — both may be absent. Non-fatal.
+          docker compose --profile mesh-relay up -d --no-deps mesh-relay || echo "::warning::mesh-relay failed to start (expected if meshmonitor stack or serial device is unavailable)"
 
       - name: Wait for Node-RED to start
         run: |
