@@ -15,6 +15,11 @@ concurrency:
 env:
   DEPLOY_DIR: /mnt/user/appdata/tak-server
   NODERED_URL: http://host.docker.internal:1880
+  HMDM_URL: http://100.64.0.1:8095
+  # Opt into Node.js 24 for actions/* JS actions. GitHub forces this on
+  # 2026-06-16; setting it explicitly avoids the deprecation warning and
+  # gives us control over when we cut over (today, not at the deadline).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   deploy:
@@ -57,6 +62,19 @@ jobs:
           # mesh-relay depends on meshmonitor_default (external network) and
           # /dev/ttyACM0 (USB serial) — both may be absent. Non-fatal.
           docker compose --profile mesh-relay up -d --no-deps mesh-relay || echo "::warning::mesh-relay failed to start (expected if meshmonitor stack or serial device is unavailable)"
+
+      - name: Deploy MDM stack
+        working-directory: /mnt/user/appdata/tak-server/mdm
+        run: |
+          # MDM is a separate compose project from the main tak-server stack.
+          # hmdm-db has a healthcheck and hmdm depends_on: service_healthy,
+          # so docker compose serializes startup correctly even on cold boot.
+          if [ ! -f .env ]; then
+            echo "::warning::mdm/.env missing — skipping HMDM deploy. Copy .env.example and fill in values to enable."
+            exit 0
+          fi
+          docker compose pull
+          docker compose up -d --remove-orphans
 
       - name: Wait for Node-RED to start
         run: |
@@ -133,6 +151,30 @@ jobs:
               sys.exit(1)
           print(f'All {len(services) - len(warned)} core services running')
           "
+
+      - name: Verify HMDM webapp landing page
+        run: |
+          # Container-up checks don't catch the failure mode where Tomcat
+          # is Running but the HMDM webapp failed to deploy (Liquibase init
+          # crashed → ROOT context failed → every path returns a 683-byte
+          # 404 stub). The real landing page is ~6500 bytes of AngularJS
+          # bootstrap HTML, so assert size > 1KB to distinguish.
+          if [ ! -f "$DEPLOY_DIR/mdm/.env" ]; then
+            echo "MDM not configured — skipping HMDM health check"
+            exit 0
+          fi
+          # Poll with backoff: HMDM Tomcat + webapp deploy takes ~5s on a
+          # healthy boot but can spike to 30s under load.
+          for i in $(seq 1 30); do
+            SIZE=$(curl -sk -o /dev/null -w '%{size_download}' --max-time 5 "$HMDM_URL/" 2>/dev/null || echo 0)
+            if [ "${SIZE:-0}" -ge 1000 ]; then
+              echo "HMDM webapp healthy (landing page ${SIZE} bytes, ready after ${i}s)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::HMDM webapp returned ${SIZE} bytes (expected >=1000). Tomcat may be up but webapp failed to deploy — check 'docker logs hmdm' for Liquibase/DB errors."
+          exit 1
 
       - name: Notify on failure
         if: failure()

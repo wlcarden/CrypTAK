@@ -1,0 +1,86 @@
+# Headwind MDM (HMDM) stack — fleet device management.
+#
+# Separate compose project from the main tak-server stack because HMDM's
+# lifecycle (database schema migrations, app updates) is independent and
+# its volumes are isolated under ./volumes/.
+#
+# Deployed by .github/workflows/deploy-server.yml via:
+#   docker compose -f /mnt/user/appdata/tak-server/mdm/docker-compose.yml up -d
+#
+# Configuration: copy .env.example → .env and fill in SQL credentials etc.
+# The .env file is gitignored — never commit it.
+
+services:
+  hmdm-db:
+    image: postgres:15-alpine
+    container_name: hmdm-db
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"  # compose-managed
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${SQL_USER}
+      POSTGRES_PASSWORD: ${SQL_PASS}
+      POSTGRES_DB: ${SQL_BASE}
+    volumes:
+      - ./volumes/db:/var/lib/postgresql/data
+    networks:
+      - mdmnet
+    # Healthcheck required so `hmdm` can wait for `service_healthy` instead of
+    # racing the db on startup. Without this, hmdm's Liquibase init phase fires
+    # before Postgres is ready, fails with UnknownHostException / connection
+    # refused, and Tomcat ends up Running with no webapp deployed — every
+    # request returns 404 silently. (Root cause of the 2026-06-02 outage.)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  hmdm:
+    image: headwindmdm/hmdm:latest
+    container_name: hmdm
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"  # compose-managed
+    restart: unless-stopped
+    depends_on:
+      hmdm-db:
+        condition: service_healthy
+    ports:
+      # Bind to the Tailscale interface only — fleet phones reach HMDM via the
+      # tailnet, not over LAN/WAN. 100.64.0.1 is the host's tailscale1 IP.
+      - "100.64.0.1:8095:8080"
+      - "100.64.0.1:8444:8443"
+      - "100.64.0.1:31000:31000"
+    volumes:
+      - ./volumes/work:/usr/local/tomcat/work
+      - ./volumes/config:/usr/local/tomcat/conf/Catalina/localhost
+      - ./volumes/files:/usr/local/tomcat/work/files
+      - ./volumes/ssl:/usr/local/tomcat/ssl
+    environment:
+      SQL_HOST: hmdm-db
+      SQL_USER: ${SQL_USER}
+      SQL_BASE: ${SQL_BASE}
+      SQL_PASS: ${SQL_PASS}
+      BASE_DOMAIN: ${BASE_DOMAIN}
+      LOCAL_IP: ${LOCAL_IP}
+      PROTOCOL: ${PROTOCOL}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      SHARED_SECRET: ${SHARED_SECRET}
+      HMDM_VARIANT: ${HMDM_VARIANT}
+      CLIENT_VERSION: ${CLIENT_VERSION}
+      FORCE_RECONFIGURE: ${FORCE_RECONFIGURE}
+    networks:
+      - mdmnet
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+networks:
+  mdmnet:
+    driver: bridge
