@@ -1,23 +1,39 @@
-#!/usr/bin/env bash
-# Renew Let's Encrypt TLS certificate for vpn.thousand-pikes.com
-# Uses DNS-01 challenge via Cloudflare API (no inbound port needed).
+#!/bin/bash
+# Renew Let's Encrypt cert for vpn.thousand-pikes.com (DNS-01 via Cloudflare).
 #
-# Install as cron on Unraid:
-#   echo "30 3 * * 1 /mnt/user/appdata/tak-server/scripts/renew-cert.sh >> /var/log/certbot-renew.log 2>&1" >> /boot/config/plugins/dynamix/users/root/crontab
+# certbot renew is idempotent — exits cleanly if cert is not yet within the
+# renewal window. We only restart headscale-nginx when the cert file actually
+# changed, so the nightly cron is a true no-op outside the renewal window
+# (no VPN blip from a redundant restart).
 #
-# certbot renew is idempotent — exits cleanly if cert isn't due for renewal.
+# Deploy path: /mnt/user/appdata/tak-server/scripts/renew-cert.sh
+#   (synced from repo by .github/workflows/deploy-server.yml)
+# Schedule:    /boot/config/plugins/dynamix/cryptak-renew-cert.cron
+# Credentials: /mnt/user/appdata/letsencrypt/cloudflare.ini (NOT in repo)
+#
+# See server/scripts/README.md for the full setup procedure.
 
-set -euo pipefail
+set -uo pipefail
 
-LE_DIR="/mnt/user/appdata/letsencrypt"
+LE_DIR=/mnt/user/appdata/letsencrypt
+CERT="$LE_DIR/live/vpn.thousand-pikes.com/fullchain.pem"
+
+before=$(stat -c %Y "$CERT" 2>/dev/null || echo 0)
 
 docker run --rm \
     -v "$LE_DIR:/etc/letsencrypt" \
     certbot/dns-cloudflare:latest \
     renew --quiet --non-interactive
 
-# Restart nginx to pick up new cert.
-# Cannot use 'nginx -s reload' — bind-mounted config gets stale file handles on Unraid.
-docker restart headscale-nginx 2>/dev/null && \
-    echo "$(date): nginx restarted" || \
-    echo "$(date): nginx restart failed (container may be down)"
+after=$(stat -c %Y "$CERT" 2>/dev/null || echo 0)
+
+if [ "$after" != "$before" ]; then
+    if docker restart headscale-nginx >/dev/null 2>&1; then
+        echo "$(date): cert renewed, nginx reloaded"
+    else
+        echo "$(date): cert renewed, nginx reload FAILED" >&2
+        exit 1
+    fi
+else
+    echo "$(date): no renewal needed"
+fi

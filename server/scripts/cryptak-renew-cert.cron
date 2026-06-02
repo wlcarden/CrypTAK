@@ -1,0 +1,9 @@
+# CrypTAK: renew vpn.thousand-pikes.com Let's Encrypt cert (DNS-01, idempotent)
+# Daily at 03:00 is safe — certbot renew is a no-op outside the renewal window.
+# Logs to appdata (cache pool) because /var/log on Unraid is tmpfs and silently
+# drops cron stdout/stderr.
+#
+# Install to: /boot/config/plugins/dynamix/cryptak-renew-cert.cron
+#   then run: /usr/local/sbin/update_cron
+# See server/scripts/README.md.
+0 3 * * * bash /mnt/user/appdata/tak-server/scripts/renew-cert.sh >> /mnt/user/appdata/letsencrypt/renew.log 2>&1
