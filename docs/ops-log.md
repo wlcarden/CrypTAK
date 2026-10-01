@@ -46,6 +46,14 @@ was disconnected; ATAK re-sent the same burst on reconnect.
   in that window, merged with its latest MQTT telemetry. The WebMap's
   `_client` flag now also excludes `mesh-`/`tracker-` uids, since relay PLIs
   carry a `<takv>` and an endpoint like a TAK client's.
+- Two things hid the first seed: the server's `firmware/nodes.yaml` was a hand
+  copy from 2026-03-28 (no GW01 coordinates; the repo file lives outside the
+  rsync'd `server/` tree, so nothing deployed it — Node-RED's whitelist read
+  the same stale file), and FTS registers a new connection from its first
+  read and discards anything else in it, so a PLI written 3 ms after the SA
+  was lost. CI now rsyncs `firmware/nodes.yaml` in place (and rsyncs
+  `server/` with `--inplace`, restarting FTS when `fts-patches/` change);
+  `FtsClient.connect()` lets the SA settle 0.5 s before the first event.
 
 ---
 

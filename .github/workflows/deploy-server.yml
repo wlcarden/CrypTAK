@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'server/**'
+      - 'firmware/nodes.yaml'
       - '.github/workflows/deploy-server.yml'
   workflow_dispatch:
 
@@ -29,7 +30,11 @@ jobs:
 
       - name: Sync server files to deploy directory
         run: |
-          rsync -av \
+          # --inplace: several deployed files are bind-mounted into running
+          # containers (fts-patches/, nodered/webmap/index.html, nodered/lib/);
+          # rewriting the existing inode keeps those mounts valid instead of
+          # leaving them on a replaced file (ESTALE on Unraid shfs).
+          rsync -av --inplace \
             --exclude='.env' \
             --exclude='config.local.yaml' \
             --exclude='docker-compose.override.yml' \
@@ -38,6 +43,12 @@ jobs:
             --exclude='headscale/config.yaml' \
             --exclude='incident-tracker/config.yaml' \
             server/ "$DEPLOY_DIR/"
+          # firmware/nodes.yaml is the node registry (single source of truth,
+          # provision.sh and both Node-RED and mesh-relay mount it) but lives
+          # outside server/; it was a stale hand copy on the server until
+          # 2026-10-01. mesh-relay re-reads it on mtime change.
+          mkdir -p "$DEPLOY_DIR/firmware"
+          rsync -a --inplace firmware/nodes.yaml "$DEPLOY_DIR/firmware/nodes.yaml"
 
       - name: Build local images
         working-directory: /mnt/user/appdata/tak-server
@@ -62,6 +73,19 @@ jobs:
           # mesh-relay depends on meshmonitor_default (external network) and
           # /dev/ttyACM0 (USB serial) — both may be absent. Non-fatal.
           docker compose --profile mesh-relay up -d --no-deps mesh-relay || echo "::warning::mesh-relay failed to start (expected if meshmonitor stack or serial device is unavailable)"
+
+      - name: Restart FTS when its patches changed
+        working-directory: /mnt/user/appdata/tak-server
+        run: |
+          # The patches are bind-mounted Python modules: a rewritten file is only
+          # loaded by a fresh process. Compose does not recreate the container for
+          # a changed mount *content*, so restart it when a patch changed.
+          if git diff --name-only HEAD~1 HEAD -- server/fts-patches/ 2>/dev/null | grep -q .; then
+            echo "fts-patches changed -> restarting freetakserver"
+            docker compose restart freetakserver
+          else
+            echo "fts-patches unchanged"
+          fi
 
       - name: Deploy MDM stack
         working-directory: /mnt/user/appdata/tak-server/mdm
