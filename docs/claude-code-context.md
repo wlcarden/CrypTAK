@@ -31,7 +31,7 @@ unit. Self-hosted, no cloud dependencies.
 │   ├── nodered/         ← WebMap + mesh panel + CoT pipeline
 │   ├── field-services/  ← systemd units (GPS bridge, power button)
 │   ├── scripts/         ← Server-side utilities
-│   ├── fts-patches/     ← FTS 2.2.1 bug patches (5 files)
+│   ├── fts-patches/     ← FTS 2.2.1 bug patches (bind-mounted into the image)
 │   ├── headscale/       ← VPN config
 │   └── authelia/        ← OIDC auth config
 ├── firmware/            ← Meshtastic node profiles and provisioning

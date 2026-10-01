@@ -55,6 +55,9 @@ services:
       # Any other value (e.g. "warning") leaves log_level unbound → UnboundLocalError on Python 3.12+.
       # Patch adds default log_level=WARNING and an explicit "warning" branch.
       - /mnt/user/appdata/fts/CreateLoggerController_patched.py:/home/freetak/FreeTAKServer/core/configuration/CreateLoggerController.py:ro
+      # CoT framing across TCP reads (ATAK marker re-send burst split at the MSS dropped the
+      # client every 20 s). Mounted from the rsync'd repo copy; CI deploys it.
+      - ./fts-patches/ClientReceptionHandler_patched.py:/home/freetak/FreeTAKServer/services/tcp_cot_service/controllers/ClientReceptionHandler.py:ro
     environment:
       # Ports
       FTS_COT_PORT: 8087
