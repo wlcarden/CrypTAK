@@ -38,7 +38,12 @@ volumes:
   - ./nodered/settings.js:/data/settings.js:ro # functionGlobalContext
   - ./nodered/lib:/opt/cot-maps:ro # cot-maps.js module
   - ./nodered/public:/data/public:ro # favicon, logo
+  - /mnt/cache/appdata/tak-server/nodered/webmap/index.html:/data/node_modules/node-red-contrib-web-worldmap/worldmap/index.html:ro
 ```
+
+`webmap/index.html` is the worldmap sidebar/UI, rsync'd with the rest of
+`server/` and bind-mounted over the module's own page. It is only re-read
+when Node-RED restarts.
 
 Key: `lib/` is mounted at `/opt/cot-maps` (not `/data/lib`) because Node-RED
 reserves `/data/lib/` for its internal function library.
@@ -57,6 +62,24 @@ Deployed via the Node-RED admin API (`POST /flows`), NOT by filesystem copy.
 Node-RED reads flows from `/data/flows.json` (the persistent Docker volume),
 which is separate from the rsync'd repo copy. The CI/CD workflow pushes the
 repo version through the API to keep them in sync.
+
+## Marker identity (read before editing the CoT pipeline)
+
+- A marker's worldmap `name` — and its key in the `takMarkers` cache — is the
+  CoT **`uid`**, never the callsign. Many CoT objects legitimately share a
+  callsign (a device's own position report and every marker it places all
+  carry `TAK-01`), and ATAK's `<link parent_callsign="…">` precedes
+  `<contact callsign="…">`, so a loose `/callsign="/` match returns the
+  placing device. `cot-maps.js` `extractCallsign()` reads the `<contact>`
+  element; the callsign is carried as `_callsign` for display and the
+  operator comment as `_remarks` (verbatim; only
+  `<remarks source="incident-tracker">` is parsed as pipe-delimited fields).
+- `_client` marks a TAK client's own position report — `<takv platform>` or
+  `<contact endpoint>` present and `how` not `h-g-i-g-o` — and is the only
+  thing the sidebar's CONNECTED list counts. Placed markers never qualify.
+- Tracker overrides (`trackerAffiliations`, `trackerAssetTypes`,
+  `trackerIcons`) stay keyed by callsign because that is what the popup
+  posts; the endpoints resolve callsign → uid.
 
 ## Configuration
 

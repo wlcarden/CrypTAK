@@ -699,14 +699,19 @@
             if (d.name === 'CrypTAK-WebMap') continue;
 
             var name = d.name || keys[i];
+            // name is the worldmap identity (the CoT uid); the callsign is the title
+            var label = d._callsign || name;
             var nameLC = name.toLowerCase();
+            var labelLC = label.toLowerCase();
             var layer = d.layer || 'Other';
 
             if (filter && nameLC.indexOf(filter) === -1 &&
+                labelLC.indexOf(filter) === -1 &&
                 layer.toLowerCase().indexOf(filter) === -1) continue;
 
             items.push({
                 name: name,
+                label: label,
                 lat: d.lat,
                 lon: d.lon,
                 layer: layer,
@@ -727,7 +732,9 @@
         if (sortMode === 'recent') {
             items.sort(function(a, b) { return b.startMs - a.startMs; });
         } else {
-            items.sort(function(a, b) { return a.name.localeCompare(b.name); });
+            items.sort(function(a, b) {
+                return (a.label || a.name).localeCompare(b.label || b.name);
+            });
         }
     }
 
@@ -768,7 +775,7 @@
                 '<i class="fa ' + iconName + '"></i></div>';
         }
         html += '<div class="sb-marker-info">';
-        html += '<div class="sb-marker-name">' + esc(m.name) + '</div>';
+        html += '<div class="sb-marker-name">' + esc(m.label || m.name) + '</div>';
         var meta = m.lat.toFixed(4) + ', ' + m.lon.toFixed(4);
         if (m.battery > 100) meta += ' (USB)';
         else if (m.battery > 0) meta += ' (' + m.battery + '%)';
@@ -1035,7 +1042,8 @@
             html += '<div class="sb-client-row' + (hasLoc ? ' has-loc' : '') + '"';
             if (hasLoc) {
                 html += ' data-lat="' + c.lat + '" data-lon="' + c.lon + '"';
-                html += ' data-name="' + (c.callsign || '').replace(/"/g, '&quot;') + '"';
+                // worldmap identity is the CoT uid; callsign is only the label
+                html += ' data-name="' + (c.uid || c.callsign || '').replace(/"/g, '&quot;') + '"';
             }
             html += '>';
             html += '<span class="sb-client-icon sb-client-online"><i class="fa fa-circle"></i></span>';

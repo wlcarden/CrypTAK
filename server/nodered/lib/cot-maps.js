@@ -184,19 +184,67 @@ function calcOpacity(startStr, staleStr, ageBased) {
 }
 
 /**
+ * Decode the XML entities ATAK emits inside text nodes such as <remarks>.
+ * Callers re-escape for HTML via escHtml, so decoding here is safe.
+ */
+function unescapeXml(s) {
+  return String(s)
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+/**
+ * Extract a CoT object's OWN callsign.
+ *
+ * ATAK puts parent_callsign="<placing device>" on the <link> element of a
+ * placed marker. A loose /callsign="/ match hits that substring first and
+ * mislabels every placed marker with the sending device's callsign, so the
+ * <contact> element is preferred and the fallback is \b-anchored
+ * (parent_callsign cannot match: "_" is a word char, so there is no
+ * boundary before "callsign").
+ *
+ * @param {string} xml - complete CoT XML event string
+ * @param {string} fallback - value to use when no callsign is present
+ */
+function extractCallsign(xml, fallback) {
+  var contactM = xml.match(/<contact\b[^>]*?\bcallsign="([^"]*)"/);
+  if (contactM && contactM[1]) return unescapeXml(contactM[1]);
+  var csM = xml.match(/\bcallsign="([^"]*)"/);
+  if (csM && csM[1]) return unescapeXml(csM[1]);
+  return fallback;
+}
+
+/**
  * Parse pipe-delimited remarks into structured fields.
  * Format: summary | location | source | severity | url | published_utc
  * @param {string} raw - raw remarks text from CoT XML
  */
-function parseRemarks(raw) {
-  var parts = (raw || "").split(" | ");
+function parseRemarks(raw, attrs) {
+  var text = unescapeXml(raw || "");
+
+  // incident-tracker tags its element <remarks source="incident-tracker"> and
+  // always emits exactly 6 " | " fields (src/cot/builder.py). Anything else is
+  // operator free text -- an ATAK marker comment -- which must be preserved
+  // verbatim rather than split across summary/location/source/severity.
+  var parts = text.split(" | ");
+  var structured = /\bsource="incident-tracker"/.test(attrs || "");
+  if (!structured && parts.length >= 6 && !isNaN(Date.parse(parts[5]))) {
+    structured = true;
+  }
+
   return {
-    summary: parts[0] || "",
-    location: parts[1] || "",
-    source: parts[2] || "",
-    severity: parts[3] || "",
-    url: parts[4] || "",
-    published: parts[5] || "",
+    summary: structured ? parts[0] || "" : "",
+    location: structured ? parts[1] || "" : "",
+    source: structured ? parts[2] || "" : "",
+    severity: structured ? parts[3] || "" : "",
+    url: structured ? parts[4] || "" : "",
+    published: structured ? parts[5] || "" : "",
+    comment: structured ? "" : text,
+    raw: text,
   };
 }
 
@@ -236,8 +284,21 @@ function formatUptime(secs) {
 function buildPopup(callsign, r, color, battery, isTracker, mesh) {
   var html =
     '<div style="font-family:sans-serif;font-size:13px;max-width:300px;">';
+  // Title: the CoT object's own callsign. Markers are keyed by uid, so the
+  // callsign is carried here for display rather than inferred from the key.
+  if (callsign)
+    html +=
+      '<div style="font-weight:600;margin-bottom:2px;">' +
+      escHtml(callsign) +
+      "</div>";
   if (r.location) html += "<b>" + escHtml(r.location) + "</b><br>";
   if (r.summary) html += escHtml(r.summary) + "<br>";
+  // Operator free-text comment (ATAK marker remarks), preserved verbatim.
+  if (r.comment)
+    html +=
+      '<div style="white-space:pre-wrap;margin:2px 0;">' +
+      escHtml(r.comment) +
+      "</div>";
   if (r.source || r.severity) {
     html += '<span style="color:#888;font-size:11px;">';
     var meta = [];
@@ -400,12 +461,11 @@ function parseCotDrawing(xml) {
   var type = typeM[1];
   var uid = uidM[1];
 
-  var csM = xml.match(/callsign="([^"]+)"/);
-  var callsign = csM ? csM[1] : uid;
+  var callsign = extractCallsign(xml, uid);
 
   // Check for force-delete
   if (xml.indexOf("<__forcedelete") !== -1) {
-    return { name: callsign, deleted: true };
+    return { name: uid, deleted: true };
   }
 
   // Parse colors
@@ -439,7 +499,9 @@ function parseCotDrawing(xml) {
     var radius = ellipseM ? parseFloat(ellipseM[1]) : 100;
 
     return {
-      name: callsign,
+      name: uid,
+      _uid: uid,
+      _callsign: callsign,
       lat: lat,
       lon: lon,
       radius: radius,
@@ -479,7 +541,9 @@ function parseCotDrawing(xml) {
   var isFilled = type === "u-d-r" || isClosed || fill.alpha > 0.05;
 
   var shape = {
-    name: callsign,
+    name: uid,
+    _uid: uid,
+    _callsign: callsign,
     color: stroke.hex,
     fillColor: fill.hex,
     fillOpacity: fill.alpha,
@@ -520,8 +584,8 @@ function parseCotToMarker(xml) {
   var lon = parseFloat(lonM[1]);
   if (lat === 0 && lon === 0) return null;
 
-  var csM = xml.match(/callsign="([^"]+)"/);
-  var cs = csM ? csM[1] : uidM ? uidM[1] : "Unknown";
+  var uid = uidM[1];
+  var cs = extractCallsign(xml, uid);
   if (cs === "CrypTAK-WebMap") return null;
 
   var parts = typeM[1].split("-");
@@ -529,11 +593,35 @@ function parseCotToMarker(xml) {
   var icon = getIcon(parts);
   var sidc = cotTypeToSIDC(parts);
 
-  var remM = xml.match(/<remarks[^>]*>([^<]*)<\/remarks>/);
-  var r = parseRemarks(remM ? remM[1] : "");
+  var remM = xml.match(/<remarks\b([^>]*)>([\s\S]*?)<\/remarks>/);
+  var r = parseRemarks(remM ? remM[2] : "", remM ? remM[1] : "");
 
   var batM = xml.match(/<status[^>]+battery="(\d+)"/);
   var battery = batM ? parseInt(batM[1], 10) : 0;
+
+  // Is this a TAK client's own position report, or an object it placed?
+  // ATAK/iTAK/WinTAK self-SA carries <takv platform="..."> and a
+  // <contact endpoint="..."> (how the client can be reached); an operator-
+  // placed marker carries neither and is how="h-g-i-g-o". The sidebar's
+  // CONNECTED list must only count the former, so this is decided here, at
+  // parse time, rather than inferred later from what a marker is *not*.
+  var howM = xml.match(/\bhow="([^"]*)"/);
+  var how = howM ? howM[1] : "";
+  var takvM = xml.match(/<takv\b([^>]*)\/?>/);
+  var takvAttrs = takvM ? takvM[1] : "";
+  var takvAttr = function (name) {
+    var m = takvAttrs.match(new RegExp("\\b" + name + '="([^"]*)"'));
+    return m ? unescapeXml(m[1]) : "";
+  };
+  var platform = takvAttr("platform");
+  var device = takvAttr("device");
+  var appVersion = takvAttr("version");
+  var hasEndpoint = /<contact\b[^>]*?\bendpoint="[^"]+"/.test(xml);
+  var isPlaced = how.indexOf("h-g-i-g-o") === 0;
+  var isClient =
+    !isPlaced &&
+    (platform !== "" || hasEndpoint) &&
+    uid.indexOf("CrypTAK-") !== 0; // our own services also announce an endpoint
 
   // Parse mesh telemetry (voltage, channel util, SNR, etc.)
   var meshTelem = null;
@@ -568,7 +656,7 @@ function parseCotToMarker(xml) {
   );
 
   if (opacity <= 0.05) {
-    return { name: cs, deleted: true };
+    return { name: uid, deleted: true };
   }
 
   var affCode = parts[1] || "u";
@@ -583,7 +671,15 @@ function parseCotToMarker(xml) {
   var ageBased = !!r.published;
 
   var marker = {
-    name: cs,
+    name: uid,
+    _uid: uid,
+    _callsign: cs,
+    _remarks: r.comment || "",
+    _client: isClient,
+    _how: how,
+    _platform: platform,
+    _device: device,
+    _appVersion: appVersion,
     lat: lat,
     lon: lon,
     layer: layerName,

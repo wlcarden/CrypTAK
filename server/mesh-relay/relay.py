@@ -110,6 +110,40 @@ FRIENDLY_NODES: set[str] = _yaml_friendly if _yaml_friendly else _env_friendly
 TRACKER_NODES: set[str] = _yaml_trackers if _yaml_trackers else _env_trackers
 COT_TYPES: dict[str, str] = _yaml_cot_types  # node_id → cot_type from nodes.yaml
 
+# Only relay nodes listed in nodes.yaml. The MQTT uplink currently carries the
+# public LongFast channel as well as the private cryptak channel, so without
+# this every stranger's node within range would be relayed onto the TAK map.
+# Set MQTT_OWNED_ONLY=false to relay every node the gateway can hear.
+MQTT_OWNED_ONLY: bool = os.environ.get(
+    "MQTT_OWNED_ONLY", "true",
+).strip().lower() in ("1", "true", "yes", "on")
+
+def _mqtt_node_id(data: dict) -> str:
+    """Return the hex id (no "!") of the node that ORIGINATED the packet.
+
+    Meshtastic's MQTT JSON carries two distinct identities:
+      "from"   -- the node that originated the packet (uint32, decimal)
+      "sender" -- the gateway that uplinked the packet to MQTT
+
+    GW01 gateways the entire mesh, so reading "sender" attributed every
+    node's position and telemetry to GW01: a fixed-position node appeared
+    to jump tens of kilometres, unrelated nodes' battery and uptime were
+    collapsed onto it, and the uptime going backwards between nodes raised
+    spurious "rebooted" warnings. Always prefer "from".
+    """
+    raw = data.get("from")
+    if isinstance(raw, str):
+        txt = raw.strip().lstrip("!")
+        try:
+            raw = int(txt) if txt.isdigit() else int(txt, 16)
+        except ValueError:
+            raw = None
+    if isinstance(raw, int) and raw > 0:
+        return "%08x" % (raw & 0xFFFFFFFF)
+    # Fall back to the gateway id only when "from" is missing entirely.
+    return str(data.get("sender", "")).lstrip("!")
+
+
 # Telemetry cache — updated by telemetry handler, read during nodedb seed.
 _telemetry_cache: dict[str, dict] = {}
 _uptime_cache: dict[str, int] = {}
@@ -319,25 +353,34 @@ def build_detection_alert(
 # --- FTS TCP client ---
 
 class FtsClient:
-    """Async TCP client that sends CoT XML to FreeTAKServer."""
+    """Async TCP client that sends CoT XML to FreeTAKServer.
+
+    The connection is bidirectional even though this client only publishes:
+    FTS broadcasts every CoT event to all registered clients. The inbound
+    half must therefore be drained continuously (see _drain_inbound).
+    """
 
     def __init__(self, host: str, port: int) -> None:
         self._host = host
         self._port = port
+        self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._backoff = 1.0
         self._last_sa: datetime | None = None
+        self._drain_task: asyncio.Task | None = None
+        self._rx_bytes = 0
 
     async def connect(self) -> None:
         """Connect to FTS with exponential backoff, send SA on success."""
         while True:
             try:
-                _, self._writer = await asyncio.open_connection(
+                self._reader, self._writer = await asyncio.open_connection(
                     self._host, self._port,
                 )
                 self._backoff = 1.0
                 logger.info("Connected to FTS at %s:%d", self._host, self._port)
                 await self._send_sa()
+                self._start_drain()
                 return
             except (ConnectionRefusedError, OSError) as exc:
                 logger.warning(
@@ -391,7 +434,72 @@ class FtsClient:
                 await self._close()
                 return False
 
+    def _start_drain(self) -> None:
+        """Start the task that consumes FTS's inbound CoT stream.
+
+        FTS pushes every CoT event to each registered client. This client used
+        to discard the reader half, so nothing ever consumed that stream: the
+        socket receive buffer filled, the TCP receive window closed, and FTS's
+        send queue to us grew until delivery stalled outright (observed in
+        production: 784 KB queued, rwnd_limited 100%, TCP backoff 15, no read
+        for over 15 hours). Restarting the container only postponed it, since
+        the backlog rebuilt from the same omission.
+
+        Inbound events are counted and discarded -- relaying them onto the mesh
+        is a separate feature. The purpose here is to keep the window open so
+        FTS can always deliver to this subscriber.
+        """
+        if self._drain_task is not None and not self._drain_task.done():
+            return
+        reader = self._reader
+        if reader is None:
+            return
+        self._drain_task = asyncio.create_task(self._drain_inbound(reader))
+
+    async def _drain_inbound(self, reader: asyncio.StreamReader) -> None:
+        try:
+            while True:
+                chunk = await reader.read(65536)
+                if not chunk:
+                    logger.warning(
+                        "FTS inbound stream closed by peer (EOF) after %d bytes",
+                        self._rx_bytes,
+                    )
+                    break
+                self._rx_bytes += len(chunk)
+        except asyncio.CancelledError:
+            raise
+        except (ConnectionResetError, OSError) as exc:
+            logger.warning("FTS inbound drain stopped (%s)", exc)
+
+        # The peer closed or errored. Tear the writer down now so the next
+        # send() reconnects before writing: a write into a half-closed socket
+        # is not rejected until the RST comes back, so the first event after an
+        # FTS-side close would otherwise be accepted locally and lost.
+        if self._reader is reader:
+            self._drain_task = None
+            self._reader = None
+            writer, self._writer = self._writer, None
+            if writer is not None:
+                try:
+                    writer.close()
+                except Exception:
+                    pass
+
+    async def _stop_drain(self) -> None:
+        task = self._drain_task
+        self._drain_task = None
+        if task is None or task.done():
+            return
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, OSError):
+            pass
+
     async def _close(self) -> None:
+        await self._stop_drain()
+        self._reader = None
         if self._writer:
             try:
                 self._writer.close()
@@ -624,8 +732,15 @@ def _mqtt_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
         # --- Telemetry ---
         if msg_type == "telemetry":
             try:
-                sender = data.get("sender", "")
-                node_id = sender.lstrip("!")
+                node_id = _mqtt_node_id(data)
+                if not node_id:
+                    return
+                if MQTT_OWNED_ONLY and node_id not in FRIENDLY_NODES:
+                    logger.debug(
+                        "[MQTT] Telemetry from unowned node %s, skipping", node_id,
+                    )
+                    return
+                sender = "!" + node_id
                 payload = data.get("payload", {})
                 battery_level = int(payload.get("battery_level", 0) or 0)
                 voltage = float(payload.get("voltage", 0) or 0)
@@ -658,8 +773,15 @@ def _mqtt_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
         # --- Position ---
         if msg_type == "position":
             try:
-                sender = data.get("sender", "")
-                node_id = sender.lstrip("!")
+                node_id = _mqtt_node_id(data)
+                if not node_id:
+                    return
+                if MQTT_OWNED_ONLY and node_id not in FRIENDLY_NODES:
+                    logger.debug(
+                        "[MQTT] Position from unowned node %s, skipping", node_id,
+                    )
+                    return
+                sender = "!" + node_id
                 payload = data.get("payload", {})
 
                 lat_i = payload.get("latitude_i", 0) or 0
