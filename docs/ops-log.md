@@ -29,8 +29,16 @@ backup `config.json.bak-20261001-092940`): group `mdm` = hmdm-db → hmdm (the
 plugin stops a group in reverse and starts it in order), and `updateContainer`
 = no for all 31 compose-managed containers (tak-server, mdm, meshmonitor,
 dystopia-online, qbittorrent) — the plugin's default is to auto-update every
-container, which would have fought the digest pins. Dystopia's app/DB pairs are
-not grouped yet; `api` sorts before `platform-db`, the same shape.
+container, which would have fought the digest pins.
+- dystopia-online: its compose graph is one interdependent platform (api ↔ play ↔
+  map-storage ↔ back, authentik referencing play, api referencing synapse,
+  authentik and dr-bridge), so pairs would still restart services under their
+  peers. Grouped all 17 as `dystopia` with a start order from `depends_on`:
+  stores (platform-db, matrix-db, authentik-db, wa-redis) → icon, dr-bridge,
+  authentik-worker, synapse → authentik-server → api → map-storage, back → play
+  → npc-supervisor, dr-oidc, avatar → reverse-proxy; the plugin stops in reverse.
+  One consistent snapshot per night; the stack is down for the length of its 17
+  volume backups instead of per-container blips.
 
 Same day, retention follow-ups: an FTS `t-x-d-d` for a *disconnecting client*
 had tombstoned `CrypTAK-MeshRelay`, so inbound deletes now act only on placed
