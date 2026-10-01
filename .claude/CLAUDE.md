@@ -63,7 +63,7 @@ All active nodes run firmware 2.7.15.567b8ea.
 
 **T-Beam Supreme (ESP32-S3) config instability:** Incremental serial config writes sometimes revert on reboot. Use YAML batch config (meshtastic --configure) for reliable provisioning.
 
-**FTS zombie state (fixed 2026-03-16):** FTS can stay alive with broken listen loop (list index out of range forever). restart: always does not help. FTS watchdog cron (/boot/config/scripts/fts-watchdog.sh) runs every 5 min on Unraid. Also fixed from_id null guard in relay.py.
+**FTS zombie state (fixed 2026-03-16):** FTS can stay alive with broken listen loop (list index out of range forever). restart: always does not help. The FTS watchdog cron this note used to cite (/boot/config/scripts/fts-watchdog.sh) no longer exists on Unraid (checked 2026-10-01; nothing in root's crontab references FTS) — FTS liveness is only `restart: always` plus the CI "Verify core services" step. Also fixed from_id null guard in relay.py.
 
 **Stale WebMap markers (fixed 2026-03-16):** Node-RED worldmap cached 469+ markers without expiry. Added stale-time purge to cache write and replay filter.
 
@@ -126,7 +126,10 @@ All active nodes run firmware 2.7.15.567b8ea.
 - Mosquitto ACL: `/mnt/user/appdata/mosquitto/config/acl.conf` on Unraid (users: `meshtastic` rw, `nodered` read on `msh/#`). Reference copy + apply notes in `server/mosquitto/`; reload with `docker kill -s HUP mosquitto`. Any new MQTT consumer needs a `user` block or it is silently denied.
 - MeshMonitor login: admin; current password is outside Git at ~/.config/cryptak/meshmonitor/credentials.json. Recovery copy and handling instructions: docs/meshmonitor-access.md. The old deployment-doc password is invalid; do not retry it or reset credentials without authorization.
 
-### Audit TODOs (from 2026-03-28)
-- Move MQTT uplink from ch0 to ch1 (cryptak) on GW01
-- Add cryptak channel to RPT02/RPT03 (need USB, WiFi did not persist on Supremes)
+### Open items (updated 2026-10-01 — closed items are in docs/ops-log.md)
+- Add cryptak channel to RPT02/RPT03 (need USB, WiFi did not persist on Supremes) — prerequisite for the next item
+- Move MQTT uplink from ch0 (LongFast) to ch1 (cryptak) on GW01 — broker still sees only LongFast + PKI; foreign nodes are filtered (`MQTT_OWNED_ONLY`, Node-RED community prune) but fleet traffic still rides the public channel
 - Consider IoT VLAN for mesh WiFi credentials
+- SSL CoT service (8089) has its own copy of `ClientReceptionHandler` with the same whole-read parsing that dropped TAK-01 on 8087 — unpatched; patch it before pointing any client at 8089
+- GW01/BSE01 appear on the map only via mesh-relay's `nodes.yaml` seed (`FIXED_POSITION_SEED_SECS`); the nodes themselves still never broadcast a position — set it on-device via `provision.sh` if the LoRa side (other nodes, ATAK plugin) needs it
+- FTS registers a new connection from its first read and discards anything else in that read; both relays wait 0.5 s after their SA. Any new FTS client must do the same or its first event is lost
