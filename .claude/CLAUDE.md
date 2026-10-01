@@ -130,4 +130,3 @@ All active nodes run firmware 2.7.15.567b8ea.
 - Move MQTT uplink from ch0 to ch1 (cryptak) on GW01
 - Add cryptak channel to RPT02/RPT03 (need USB, WiFi did not persist on Supremes)
 - Consider IoT VLAN for mesh WiFi credentials
-- Build nodeinfo callsign cache in MQTT handler

@@ -144,6 +144,40 @@ def _mqtt_node_id(data: dict) -> str:
     return str(data.get("sender", "")).lstrip("!")
 
 
+# nodes.yaml display names, re-read only when the file's mtime changes.
+# _resolve_callsign used to open and parse the YAML on every MQTT message.
+_node_name_cache: tuple[float, dict[str, str]] = (-1.0, {})
+
+
+def _node_names() -> dict[str, str]:
+    """Map node id (no '!') -> longName/shortName/key from nodes.yaml."""
+    global _node_name_cache
+    try:
+        mtime = os.path.getmtime(_NODES_YAML)
+    except OSError:
+        return {}
+    if mtime != _node_name_cache[0]:
+        names: dict[str, str] = {}
+        try:
+            with open(_NODES_YAML) as f:
+                data = yaml.safe_load(f)
+            for name, cfg in ((data or {}).get("nodes") or {}).items():
+                cfg = cfg or {}
+                node_id = str(cfg.get("id") or "").lstrip("!")
+                if node_id:
+                    names[node_id] = cfg.get("longName") or cfg.get("shortName") or name
+        except Exception:
+            logger.exception("nodes.yaml unreadable; keeping previous names")
+            return _node_name_cache[1]
+        _node_name_cache = (mtime, names)
+    return _node_name_cache[1]
+
+
+def _resolve_callsign(sender: str) -> str:
+    """Resolve callsign from a hex node id via nodes.yaml, fallback to the id."""
+    return _node_names().get(sender.lstrip("!"), sender)
+
+
 # Telemetry cache — updated by telemetry handler, read during nodedb seed.
 _telemetry_cache: dict[str, dict] = {}
 _uptime_cache: dict[str, int] = {}
@@ -704,22 +738,6 @@ def _mqtt_thread(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop):
         topics = ["msh/US/2/2/json/LongFast/#"]
 
     logger.info("[MQTT] Topics: %s", topics)
-
-    def _resolve_callsign(sender: str) -> str:
-        """Resolve callsign from sender hex ID via nodes.yaml, fallback to hex ID."""
-        node_id = sender.lstrip("!")
-        # Walk the raw nodes.yaml data to look up by id → get longName/shortName
-        try:
-            with open(_NODES_YAML) as f:
-                data = yaml.safe_load(f)
-            nodes = (data or {}).get("nodes", {})
-            for name, cfg in nodes.items():
-                cfg_id = (cfg.get("id") or "").lstrip("!")
-                if cfg_id == node_id:
-                    return cfg.get("longName") or cfg.get("shortName") or name or sender
-        except Exception:
-            pass
-        return sender  # fallback: use hex ID as-is
 
     def on_connect(client, userdata, flags, reason_code, properties):
         if reason_code == 0:

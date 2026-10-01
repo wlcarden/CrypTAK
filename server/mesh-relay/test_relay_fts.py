@@ -342,3 +342,32 @@ def test_keepalive_reconnects_after_peer_close() -> None:
             server.close()
 
     asyncio.run(scenario())
+
+
+# --- nodes.yaml name cache ----------------------------------------------------
+
+def test_resolve_callsign_reads_yaml_once_until_it_changes(tmp_path, monkeypatch) -> None:
+    import os, time
+    import relay as r
+    y = tmp_path / "nodes.yaml"
+    y.write_text("nodes:\n  GW01:\n    id: '!087a29a4'\n    longName: CrypTAK-GW01\n  SOL01:\n    id: '!c6eadff0'\n    shortName: CS01\n")
+    monkeypatch.setattr(r, "_NODES_YAML", str(y))
+    r._node_name_cache = (-1.0, {})
+
+    assert r._resolve_callsign("!087a29a4") == "CrypTAK-GW01"
+    assert r._resolve_callsign("c6eadff0") == "CS01"          # shortName fallback, bare id accepted
+    assert r._resolve_callsign("!deadbeef") == "!deadbeef"    # unknown -> id as-is
+    first = r._node_name_cache
+    r._resolve_callsign("!087a29a4")
+    assert r._node_name_cache is first, "unchanged file must not be re-parsed"
+
+    y.write_text("nodes:\n  GW01:\n    id: '!087a29a4'\n    longName: Renamed-GW01\n")
+    os.utime(y, (time.time() + 5, time.time() + 5))           # guarantee a different mtime
+    assert r._resolve_callsign("!087a29a4") == "Renamed-GW01"
+
+
+def test_resolve_callsign_without_yaml_returns_the_id(monkeypatch) -> None:
+    import relay as r
+    monkeypatch.setattr(r, "_NODES_YAML", "/nonexistent/nodes.yaml")
+    r._node_name_cache = (-1.0, {})
+    assert r._resolve_callsign("!087a29a4") == "!087a29a4"
