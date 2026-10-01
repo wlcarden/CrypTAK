@@ -37,24 +37,24 @@ services:
       - /mnt/user/appdata/fts/data:/opt/fts
       # FTS 2.2.1 patch: use session.merge() (UPSERT) instead of session.add() (INSERT-only)
       # to prevent SQLAlchemy session corruption on client reconnects.
-      - /mnt/user/appdata/fts/table_controllers_patched.py:/home/freetak/FreeTAKServer/core/persistence/table_controllers.py:ro
+      - ./fts-patches/table_controllers_patched.py:/home/freetak/FreeTAKServer/core/persistence/table_controllers.py:ro
       # FTS 2.2.1 patch: EventTableController.create() overrides base class with its own session.add(row).
       # Must also patch this file; the table_controllers.py patch alone is insufficient.
-      - /mnt/user/appdata/fts/event_table_controller_patched.py:/home/freetak/FreeTAKServer/core/persistence/EventTableController.py:ro
+      - ./fts-patches/event_table_controller_patched.py:/home/freetak/FreeTAKServer/core/persistence/EventTableController.py:ro
       # FTS 2.2.1 patch: relay code never removes dead connections from self.connections dict.
       # Disconnection handler only cleans client_information_queue, not connections.
       # This patch auto-removes dead sockets on relay failure instead of spamming Bad fd errors.
-      - /mnt/user/appdata/fts/send_component_data_controller_patched.py:/home/freetak/FreeTAKServer/services/tcp_cot_service/controllers/send_component_data_controller.py:ro
+      - ./fts-patches/send_component_data_controller_patched.py:/home/freetak/FreeTAKServer/services/tcp_cot_service/controllers/send_component_data_controller.py:ro
       # FTS 2.2.1 patch: IAMUsersController returns None for connection/disconnection responses.
       # send_component_message tries to send None over socket → TypeError that deadlocks event loop.
-      - /mnt/user/appdata/fts/tcp_cot_service_main_patched.py:/home/freetak/FreeTAKServer/services/tcp_cot_service/tcp_cot_service_main.py:ro
+      - ./fts-patches/tcp_cot_service_main_patched.py:/home/freetak/FreeTAKServer/services/tcp_cot_service/tcp_cot_service_main.py:ro
       # FTS 2.2.1 patch: AllowedCLIIPs config setting removed from schema but REST API still
       # references it. Without this patch, /Clients and other endpoints return 500.
-      - /mnt/user/appdata/fts/MainConfig_patched.py:/home/freetak/FreeTAKServer/core/configuration/MainConfig.py:ro
+      - ./fts-patches/MainConfig_patched.py:/home/freetak/FreeTAKServer/core/configuration/MainConfig.py:ro
       # FTS 2.2.1 patch: CreateLoggerController only handles log levels "info", "error", "debug".
       # Any other value (e.g. "warning") leaves log_level unbound → UnboundLocalError on Python 3.12+.
       # Patch adds default log_level=WARNING and an explicit "warning" branch.
-      - /mnt/user/appdata/fts/CreateLoggerController_patched.py:/home/freetak/FreeTAKServer/core/configuration/CreateLoggerController.py:ro
+      - ./fts-patches/CreateLoggerController_patched.py:/home/freetak/FreeTAKServer/core/configuration/CreateLoggerController.py:ro
       # CoT framing across TCP reads (ATAK marker re-send burst split at the MSS dropped the
       # client every 20 s). Mounted from the rsync'd repo copy; CI deploys it.
       - ./fts-patches/ClientReceptionHandler_patched.py:/home/freetak/FreeTAKServer/services/tcp_cot_service/controllers/ClientReceptionHandler.py:ro
