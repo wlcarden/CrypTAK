@@ -312,7 +312,7 @@
     "type": "mqtt in",
     "z": "tab1",
     "name": "Meshtastic JSON Topics",
-    "topic": "msh/+/2/json/#",
+    "topic": "msh/+/2/2/json/#",
     "qos": "0",
     "datatype": "json",
     "broker": "mqtt_broker1",

@@ -89,11 +89,18 @@ Connection parameters are hardcoded in the flow nodes:
 | ----------- | ------------ | ------------------------- |
 | FTS host    | fn_cot       | `192.168.50.120:8087`     |
 | MQTT broker | mqtt_broker1 | `192.168.50.120:1883`     |
+| MQTT topic  | mqtt_mesh    | `msh/+/2/2/json/#`        |
 | Map center  | wmap1        | `38.87, -77.30` (DC/NoVA) |
 | Map path    | wmap1        | `/tak-map`                |
 
 To change these, edit the corresponding nodes in `flows.json` or via the
 Node-RED editor.
+
+The mesh topic has two `2` segments: GW01's configured MQTT root is
+`msh/US/2` and the firmware appends its own `/2/json/<channel>/<gateway>`.
+The old subscription `msh/+/2/json/#` matched nothing after the root
+changed, which is why the sidebar's Mesh Network panel read "No mesh
+nodes heard" from ~April to September 2026.
 
 ## Adding Icons and Colors
 
