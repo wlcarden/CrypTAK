@@ -4,6 +4,28 @@ Running log of maintenance, incidents, and infrastructure changes.
 
 ---
 
+## 2026-10-01 — Placed-marker retention on the WebMap
+
+### Problem
+
+ATAK placed markers arrive with `<archive/>` and `stale` = +1 year and are
+re-sent every ~10 s with fresh `time`/`start`; the WebMap aged markers only by
+`stale`, and nothing handled ATAK's `t-x-d-d` delete, so every dropped contact
+was permanent on the map (and replayed to every new browser session) even
+after the operator deleted it on the phone.
+
+### Resolution
+
+Retention policy for managed markers (contacts 12 h, places 7 d, remarks
+`#keep` / `#exp`), aged from `production_time`, faded over the last quarter,
+then retired by broadcasting a `t-x-d-d` through FTS (phones agree) with a 24 h
+tombstone. Inbound `t-x-d-d` honored; `POST /tak-map/api/marker/remove` and
+sidebar/popup Remove controls do the same on demand. `lib/cot-maps.test.js`
+covers it offline. Existing markers placed 01:25 UTC retire at 13:25 UTC.
+
+---
+
+
 ## 2026-10-01 — FTS dropped ATAK every 20 s (CoT framing); patches versioned; images pinned
 
 ### Problem

@@ -276,6 +276,10 @@
       text-overflow: ellipsis;
       margin-top: 1px;
     }
+    .sb-marker-life { font-size: 10px; color: #c9a227; margin-left: 6px; white-space: nowrap; }
+    .sb-remove { background: none; border: 1px solid #555; color: #bbb; border-radius: 3px; font-size: 12px;
+                 line-height: 1; padding: 0 4px; margin-left: 6px; cursor: pointer; }
+    .sb-remove:hover { border-color: #FF4444; color: #FF4444; }
     .sb-marker-age {
       flex-shrink: 0;
       font-size: 11px;
@@ -720,6 +724,8 @@
                 color: d.iconColor || layerColors[layer] || '#888',
                 opacity: d.opacity !== undefined ? d.opacity : 1,
                 startMs: d._startMs || 0,
+                managed: !!d._managed,
+                retireAt: d._retireAtMs || 0,
                 staleMs: d._staleMs || 0,
                 battery: d._battery || 0,
                 mesh: d._mesh || null,
@@ -781,6 +787,13 @@
         else if (m.battery > 0) meta += ' (' + m.battery + '%)';
         html += '<div class="sb-marker-meta">' + meta + '</div>';
         html += '</div>';
+        if (m.managed) {
+            // Placed marker: show its retention state and a remove control
+            // (removal also broadcasts a t-x-d-d so TAK clients drop it).
+            var life = m.retireAt ? 'retires in ' + formatAge(Math.max(0, m.retireAt - now)) : 'kept';
+            html += '<span class="sb-marker-life" title="' + life + '">' + esc(life) + '</span>';
+            html += '<button class="sb-remove" data-uid="' + esc(m.name) + '" data-cs="' + esc(m.label || m.name) + '" title="Remove from the map and every TAK client">&times;</button>';
+        }
         if (age) html += '<span class="sb-marker-age">' + age + '</span>';
         if (m.mesh && m.mesh.snr !== null) {
             html += '<span class="sb-signal" title="SNR: ' + m.mesh.snr.toFixed(1) +
@@ -1057,6 +1070,18 @@
         }
         sbClientsList.innerHTML = html;
     }
+
+    // Remove an operator-placed marker (WebMap + broadcast delete to TAK clients)
+    document.addEventListener('click', function(e) {
+        var btn = e.target.closest('.sb-remove');
+        if (!btn) return;
+        e.preventDefault(); e.stopPropagation();
+        if (!confirm('Remove ' + btn.dataset.cs + ' from the map and every TAK client?')) return;
+        fetch('/tak-map/api/marker/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({ uid: btn.dataset.uid }) })
+            .then(function(r) { if (!r.ok) alert('Remove failed (' + r.status + ')'); })
+            .catch(function() { alert('Remove failed'); });
+    });
 
     // Click-to-fly for client rows with position
     sbClientsList.addEventListener('click', function(e) {

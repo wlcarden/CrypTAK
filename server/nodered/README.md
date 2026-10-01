@@ -81,6 +81,33 @@ repo version through the API to keep them in sync.
   `trackerIcons`) stay keyed by callsign because that is what the popup
   posts; the endpoints resolve callsign → uid.
 
+## Placed-marker retention
+
+ATAK sends an operator-placed marker with `<archive/>`, `how="h-g-i-g-o"` and
+`stale` = +1 year, and re-sends it every ~10 s while connected: in TAK terms its
+lifecycle is managed, not timed, and the only end is a `t-x-d-d` delete. Left
+alone, every contact anyone ever dropped stays on the map for a year. The WebMap
+therefore applies a retention policy to **managed** markers only (live reports
+keep their stale-driven aging):
+
+| class | CoT affiliation | default |
+| --- | --- | --- |
+| contacts | hostile, suspect, unknown, pending, joker, faker | 12 h |
+| places | friendly, neutral, assumed friendly | 7 d |
+| override in ATAK remarks | `#keep` / `#exp 6h` / `#exp 2d` / `#exp 90m` | as stated |
+
+Age is measured from `production_time` (re-sends refresh `time`/`start`). A
+marker fades over the last quarter of its retention, then the WebMap
+**broadcasts a `t-x-d-d`** so every TAK client drops it, and tombstones the uid
+for 24 h so a device that has not processed the delete cannot resurrect it.
+Inbound `t-x-d-d` from ATAK is honored the same way, and the sidebar / popup
+"Remove" control (`POST /tak-map/api/marker/remove {uid}`) does the same on
+demand. Defaults come from `RETENTION_POLICY` in `lib/cot-maps.js`; override
+with `WEBMAP_RETENTION_CONTACT_HOURS`, `WEBMAP_RETENTION_PLACE_HOURS`,
+`WEBMAP_TOMBSTONE_HOURS` in the nodered service environment.
+
+Offline tests: `node lib/cot-maps.test.js`.
+
 ## Configuration
 
 Connection parameters are hardcoded in the flow nodes:

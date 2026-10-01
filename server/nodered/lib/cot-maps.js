@@ -249,6 +249,127 @@ function parseRemarks(raw, attrs) {
 }
 
 /**
+ * Retention policy for operator-placed markers.
+ *
+ * ATAK sends a placed marker with <archive/> ("persistent"), how="h-g-i-g-o"
+ * and stale = +1 year: lifecycle is managed, not timed, and the only end is a
+ * t-x-d-d delete. Left alone, every contact anyone ever dropped stays on the
+ * WebMap for a year. Policy: age each placed marker from its production_time
+ * (re-sends refresh time/start every ~10 s, so those cannot be used), fade it
+ * over the last quarter of its retention, then retire it by broadcasting a
+ * t-x-d-d so the phones agree, and tombstone the uid so a device that has not
+ * yet processed the delete cannot resurrect it.
+ *
+ * Classes: contacts (hostile/suspect/unknown/pending/joker/faker: observations
+ * of something that moves) retire after 12 h; places (friendly/neutral/assumed
+ * friendly: assets and locations) after 7 d. Operators override per marker in
+ * ATAK remarks: "#keep" (never auto-retire) or "#exp 6h" / "#exp 2d" / "#exp 90m".
+ */
+function envHours(name, fallback) {
+  var v = typeof process !== "undefined" && process.env ? process.env[name] : "";
+  var f = parseFloat(v);
+  return isNaN(f) ? fallback : f;
+}
+var RETENTION_POLICY = {
+  contactMs: envHours("WEBMAP_RETENTION_CONTACT_HOURS", 12) * 3600000,
+  placeMs: envHours("WEBMAP_RETENTION_PLACE_HOURS", 7 * 24) * 3600000,
+  tombstoneMs: envHours("WEBMAP_TOMBSTONE_HOURS", 24) * 3600000,
+  fadeFrom: 0.75, // fraction of retention at which the fade begins
+  fadeFloor: 0.2, // opacity at retirement -- still visible until the delete goes out
+};
+var CONTACT_AFFILIATIONS = { h: 1, s: 1, u: 1, p: 1, j: 1, k: 1 };
+
+/**
+ * Is this CoT an operator-placed ("persistent") object rather than a live
+ * report? ATAK marks them with <archive/> and how="h-g-i-g-o".
+ */
+function isManagedCot(xml, how) {
+  return xml.indexOf("<archive") !== -1 || (how || "").indexOf("h-g-i-g-o") === 0;
+}
+
+/**
+ * When the object was created, as opposed to when this copy was sent.
+ * ATAK keeps production_time on the parent <link> and <creator time> across
+ * re-sends; fall back to start, then to now.
+ */
+function producedMs(xml, startStr) {
+  var m =
+    xml.match(/<link\b[^>]*\bproduction_time="([^"]+)"/) ||
+    xml.match(/<creator\b[^>]*\btime="([^"]+)"/);
+  var candidates = [m ? m[1] : null, startStr];
+  for (var i = 0; i < candidates.length; i++) {
+    if (!candidates[i]) continue;
+    var t = new Date(candidates[i]).getTime();
+    if (!isNaN(t)) return t;
+  }
+  return Date.now();
+}
+
+/**
+ * Retention in ms for a placed marker: remarks override, else by affiliation.
+ * Returns 0 for "keep until removed".
+ */
+function retentionFor(affCode, remarksText) {
+  var text = remarksText || "";
+  if (/(^|\s)#keep\b/i.test(text)) return 0;
+  var exp = text.match(/(^|\s)#exp\s*(\d+(?:\.\d+)?)\s*([mhd])\b/i);
+  if (exp) {
+    var mult = { m: 60000, h: 3600000, d: 86400000 }[exp[3].toLowerCase()];
+    return Math.max(60000, Math.round(parseFloat(exp[2]) * mult));
+  }
+  return CONTACT_AFFILIATIONS[affCode] ? RETENTION_POLICY.contactMs : RETENTION_POLICY.placeMs;
+}
+
+/**
+ * Opacity for a managed marker: solid until fadeFrom of its retention, then
+ * linear down to fadeFloor at retirement (never 0: it stays visible until the
+ * delete is broadcast).
+ */
+function calcRetireOpacity(producedAt, retireAt, nowMs) {
+  if (!retireAt) return 1.0;
+  var span = retireAt - producedAt;
+  if (span <= 0) return RETENTION_POLICY.fadeFloor;
+  var fadeStart = producedAt + span * RETENTION_POLICY.fadeFrom;
+  if (nowMs <= fadeStart) return 1.0;
+  var f = (nowMs - fadeStart) / (retireAt - fadeStart);
+  return Math.max(RETENTION_POLICY.fadeFloor, 1.0 - f * (1.0 - RETENTION_POLICY.fadeFloor));
+}
+
+/**
+ * Parse a t-x-d-d delete event. Returns { name: <target uid>, deleted: true }
+ * or null. ATAK references the deleted object through <link uid="...">.
+ */
+function parseCotDelete(xml) {
+  var typeM = xml.match(/\btype="([^"]+)"/);
+  if (!typeM || typeM[1] !== "t-x-d-d") return null;
+  var linkM = xml.match(/<link\b[^>]*\buid="([^"]+)"/);
+  if (!linkM) return null;
+  return { name: linkM[1], deleted: true, _delete: true };
+}
+
+/**
+ * Build the t-x-d-d the WebMap broadcasts when it retires or removes a
+ * marker, in the shape ATAK sends so every TAK client drops the object.
+ */
+function buildDeleteCot(targetUid, targetType, reason) {
+  var now = new Date();
+  var fmt = function (d) { return d.toISOString(); };
+  var stale = new Date(now.getTime() + 60000);
+  var uid = "CrypTAK-NR-del-" + Math.random().toString(16).slice(2, 10);
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<event version="2.0" uid="' + uid + '" type="t-x-d-d" how="m-g"' +
+    ' time="' + fmt(now) + '" start="' + fmt(now) + '" stale="' + fmt(stale) + '">' +
+    '<point lat="0" lon="0" hae="0" ce="9999999" le="9999999"/>' +
+    "<detail>" +
+    '<link uid="' + escHtml(targetUid) + '" relation="none" type="' + escHtml(targetType || "a-u-G") + '"/>' +
+    "<__forcedelete/>" +
+    (reason ? "<remarks>" + escHtml(reason) + "</remarks>" : "") +
+    "</detail></event>\n"
+  );
+}
+
+/**
  * Build tooltip text for a marker (shown on hover).
  */
 function buildTooltip(callsign, r, battery, mesh) {
@@ -281,7 +402,7 @@ function formatUptime(secs) {
   return m + "m";
 }
 
-function buildPopup(callsign, r, color, battery, isTracker, mesh) {
+function buildPopup(callsign, r, color, battery, isTracker, mesh, uid, managed, retireAtMs, producedAt) {
   var html =
     '<div style="font-family:sans-serif;font-size:13px;max-width:300px;">';
   // Title: the CoT object's own callsign. Markers are keyed by uid, so the
@@ -367,6 +488,20 @@ function buildPopup(callsign, r, color, battery, isTracker, mesh) {
       r.url.replace(/"/g, "%22") +
       '" target="_blank" ' +
       'style="color:#4A90D9;font-size:12px;">View details &rarr;</a>';
+  }
+  if (managed && uid) {
+    var placed = producedAt ? formatUptime(Math.max(0, Math.round((Date.now() - producedAt) / 1000))) + " ago" : "";
+    var life = retireAtMs
+      ? "retires in " + formatUptime(Math.max(0, Math.round((retireAtMs - Date.now()) / 1000)))
+      : "kept until removed";
+    var safeUid = escHtml(uid).replace(/'/g, "\\'");
+    html +=
+      '<div style="margin-top:6px;font-size:11px;color:#888;">Placed ' + escHtml(placed) + " &middot; " + life + "</div>" +
+      '<div style="margin-top:4px;font-size:11px;">' +
+      "<a href=\"#\" onclick=\"if(!confirm('Remove " + escHtml(callsign).replace(/'/g, "\\'") +
+      " from the map and every TAK client?'))return false;fetch('api/marker/remove',{method:'POST'," +
+      "headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:'" + safeUid +
+      "'})}).then(function(){location.reload()});return false;\" style=\"color:#FF4444;\">Remove from map</a></div>";
   }
   if (isTracker) {
     var safeCs = escHtml(callsign).replace(/'/g, "\\'");
@@ -665,6 +800,10 @@ function parseCotToMarker(xml) {
 
   var affCode = parts[1] || "u";
   var layerName = affiliationNames[affCode] || "TAK Other";
+  var managed = isManagedCot(xml, how);
+  var produced = managed ? producedMs(xml, startM ? startM[1] : null) : 0;
+  var retentionMs = managed ? retentionFor(affCode, r.raw) : 0;
+  var retireAtMs = managed && retentionMs > 0 ? produced + retentionMs : 0;
   var ttlSec = 300;
   if (staleM && staleM[1]) {
     var stMs = new Date(staleM[1]).getTime();
@@ -680,6 +819,11 @@ function parseCotToMarker(xml) {
     _callsign: cs,
     _remarks: r.comment || "",
     _client: isClient,
+    _managed: managed,
+    _cotType: typeM[1],
+    _producedMs: produced,
+    _retentionMs: retentionMs,
+    _retireAtMs: retireAtMs,
     _how: how,
     _platform: platform,
     _device: device,
@@ -689,7 +833,7 @@ function parseCotToMarker(xml) {
     layer: layerName,
     iconColor: color,
     tooltip: buildTooltip(cs, r, battery, meshTelem),
-    popup: buildPopup(cs, r, color, battery, isTracker, meshTelem),
+    popup: buildPopup(cs, r, color, battery, isTracker, meshTelem, uid, managed, retireAtMs, produced),
     opacity: Math.round(opacity * 100) / 100,
     ttl: ttlSec,
     _staleMs: staleM ? new Date(staleM[1]).getTime() : 0,
@@ -702,6 +846,13 @@ function parseCotToMarker(xml) {
     _meshBridge: isBridge,
     _mesh: meshTelem,
   };
+
+  if (managed) {
+    // Age and "Recent" sorting follow the placement, not the latest re-send,
+    // and the fade is driven by the retention policy rather than stale.
+    marker._startMs = produced;
+    marker.opacity = Math.round(calcRetireOpacity(produced, retireAtMs, Date.now()) * 100) / 100;
+  }
 
   // Use SIDC for milsymbol rendering when available; fall back to FA icon
   if (sidc) {
@@ -753,9 +904,25 @@ function makeSA(uid) {
 function refreshMarkerColors(cache) {
   var updated = [];
   var expired = [];
+  var retired = [];
   var keys = Object.keys(cache);
+  var nowMs = Date.now();
   for (var i = 0; i < keys.length; i++) {
     var m = cache[keys[i]];
+    if (m && m._managed) {
+      // Placed marker: policy-driven. Retired ones are returned separately so
+      // the caller can broadcast the delete before removing them.
+      if (m._retireAtMs && nowMs >= m._retireAtMs) {
+        retired.push(keys[i]);
+        continue;
+      }
+      var ro = Math.round(calcRetireOpacity(m._producedMs, m._retireAtMs, nowMs) * 100) / 100;
+      if (ro !== m.opacity) {
+        m.opacity = ro;
+        updated.push(m);
+      }
+      continue;
+    }
     if (!m._staleMs || !m._startMs) continue;
 
     var startStr = new Date(m._startMs).toISOString();
@@ -773,7 +940,7 @@ function refreshMarkerColors(cache) {
       updated.push(m);
     }
   }
-  return { updated: updated, expired: expired };
+  return { updated: updated, expired: expired, retired: retired };
 }
 
 // Asset type → CoT function suffix mapping (for tracker classification)
@@ -928,6 +1095,12 @@ module.exports = {
   makeSA: makeSA,
   snrToLinkStyle: snrToLinkStyle,
   cotTypeToSIDC: cotTypeToSIDC,
+  parseCotDelete: parseCotDelete,
+  buildDeleteCot: buildDeleteCot,
+  isManagedCot: isManagedCot,
+  retentionFor: retentionFor,
+  calcRetireOpacity: calcRetireOpacity,
+  RETENTION_POLICY: RETENTION_POLICY,
   buildTrackerSIDC: buildTrackerSIDC,
   sidcAffiliation: sidcAffiliation,
   HW_MODELS: HW_MODELS,
