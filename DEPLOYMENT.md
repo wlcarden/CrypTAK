@@ -85,7 +85,13 @@ docker compose up -d
 - MeshMonitor logs: `docker logs meshmonitor | tail -5`
 - Web UI: http://192.168.50.120:8090
 
-### Default Login
+### Current Login
+
+The admin password was rotated and verified on 2026-09-12. See
+[MeshMonitor access and recovery](docs/meshmonitor-access.md) for the protected
+desktop and Unraid credential locations. Never store the new password here.
+
+### Historical Default Login — no longer valid
 - Username: `admin`
 - Password: `changeme` (⚠️ **Change on first login!**)
 

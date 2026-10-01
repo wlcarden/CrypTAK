@@ -123,13 +123,12 @@ All active nodes run firmware 2.7.15.567b8ea.
 ### Credentials (reference locations only)
 - Node-RED admin password: NR_ADMIN_PASS env var (check secrets/unraid.md)
 - MQTT credentials: secrets/mqtt.md
-- Mosquitto ACLs: TODO (not yet implemented)
-- MeshMonitor login: admin / (check deploy docs)
+- Mosquitto ACL: `/mnt/user/appdata/mosquitto/config/acl.conf` on Unraid (users: `meshtastic` rw, `nodered` read on `msh/#`). Reference copy + apply notes in `server/mosquitto/`; reload with `docker kill -s HUP mosquitto`. Any new MQTT consumer needs a `user` block or it is silently denied.
+- MeshMonitor login: admin; current password is outside Git at ~/.config/cryptak/meshmonitor/credentials.json. Recovery copy and handling instructions: docs/meshmonitor-access.md. The old deployment-doc password is invalid; do not retry it or reset credentials without authorization.
 
 ### Audit TODOs (from 2026-03-28)
 - Move MQTT uplink from ch0 to ch1 (cryptak) on GW01
 - Add cryptak channel to RPT02/RPT03 (need USB, WiFi did not persist on Supremes)
-- Add Mosquitto ACL file
 - Bind FTS 8087 to localhost only
 - Consider IoT VLAN for mesh WiFi credentials
 - Build nodeinfo callsign cache in MQTT handler

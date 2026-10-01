@@ -153,7 +153,8 @@ rwnd_limited none.
   and fixed the file to `mosquitto:mosquitto 0640` (mosquitto warned it will
   refuse world-readable/root-owned ACL files in a future version).
   Reference copies + apply notes now in `server/mosquitto/`.
-  CLAUDE.md's "Mosquitto ACLs: TODO (not yet implemented)" is stale.
+  CLAUDE.md's "Mosquitto ACLs: TODO" and the "Add Mosquitto ACL file" audit
+  item were stale; both corrected the same day.
 
 ---
 
