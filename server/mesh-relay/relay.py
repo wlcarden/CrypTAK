@@ -50,6 +50,11 @@ CLIENT_UID = "CrypTAK-MeshRelay"
 STALE_MINUTES = int(os.environ.get("STALE_MINUTES", "30"))
 DETECTION_STALE_MINUTES = int(os.environ.get("DETECTION_STALE_MINUTES", "5"))
 SA_REFRESH_MINUTES = 4
+# FTS registers a new connection from the first read it gets and discards
+# anything else in that same read, so a CoT written right after the SA (the
+# fixed-position seed, or a queued PLI after a reconnect) was silently lost.
+# Give the registration its own read before the first event goes out.
+CONNECT_SETTLE_SECS = 0.5
 RECONNECT_DELAY = 10
 MESH_HEARTBEAT_SECS = 30  # keep T-Beam TCP alive (firmware app-level idle ~130s)
 POSITION_POLL_SECS = int(os.environ.get("POSITION_POLL_SECS", "120"))
@@ -482,6 +487,7 @@ class FtsClient:
                 logger.info("Connected to FTS at %s:%d", self._host, self._port)
                 await self._send_sa()
                 self._start_drain()
+                await asyncio.sleep(CONNECT_SETTLE_SECS)
                 return
             except (ConnectionRefusedError, OSError) as exc:
                 logger.warning(

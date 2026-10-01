@@ -430,3 +430,40 @@ def test_seed_disabled_by_zero_interval(tmp_path, monkeypatch) -> None:
     r = _fixed_setup(tmp_path, monkeypatch)
     monkeypatch.setattr(r, "FIXED_POSITION_SEED_SECS", 0)
     assert r.fixed_position_plis(now=1_000_000.0) == []
+
+
+def test_connect_lets_the_sa_settle_before_returning(monkeypatch) -> None:
+    """The first event after a (re)connect must not share FTS's registration read."""
+    import time
+    import relay as r
+    monkeypatch.setattr(r, "CONNECT_SETTLE_SECS", 0.2)
+
+    async def scenario() -> None:
+        reads: list[tuple[float, bytes]] = []
+
+        async def fts(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+            try:
+                while True:
+                    data = await reader.read(65536)      # one "read" per FTS poll
+                    if not data:
+                        return
+                    reads.append((time.monotonic(), data))
+            except (ConnectionResetError, OSError):
+                return
+
+        server = await asyncio.start_server(fts, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        client = FtsClient("127.0.0.1", port)
+        try:
+            t0 = time.monotonic()
+            await client.connect()
+            assert time.monotonic() - t0 >= 0.2
+            await client.send("<event uid='first-pli' type='a-f-G-U-C'/>")
+            await asyncio.sleep(0.1)
+            assert len(reads) >= 2, "SA and first event must arrive in separate reads"
+            assert b"first-pli" not in reads[0][1], "first event shared the registration read"
+        finally:
+            await client.close()
+            server.close()
+
+    asyncio.run(scenario())
