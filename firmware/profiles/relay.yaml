@@ -18,8 +18,8 @@ config:
   device:
     role: ROUTER
     serial_enabled: true              # Must stay true — only way to reprovision T-Beam S3 Core boards
-    rebroadcast_mode: ALL
-    node_info_broadcast_secs: 900            # 15 min — frequent enough for diagnostics
+    # rebroadcast_mode: firmware forces CORE_PORTNUMS_ONLY for ROUTER role
+    # node_info_broadcast_secs: firmware resets via initConfigIntervals() for ROUTER role
 
   position:
     position_broadcast_smart_enabled: false  # Relays are fixed; smart = never broadcasts
@@ -28,8 +28,12 @@ config:
     position_broadcast_secs: 300             # 5 min — high frequency during testing
 
   telemetry:
-    device_update_interval: 60              # 1 min — solar health critical to monitor; max during testing
+    # device_update_interval: firmware resets to default_telemetry_broadcast_interval_secs for ROUTER role
     device_telemetry_enabled: true
+
+  neighbor_info:
+    enabled: true
+    update_interval: 900                 # 15 min — relay is solar, balance airtime vs topology freshness
 
   power:
     is_power_saving: false

@@ -16,8 +16,8 @@ config:
   device:
     role: ROUTER
     serial_enabled: true              # Must stay true — only way to reprovision (see LEARNINGS.md)
-    rebroadcast_mode: ALL
-    node_info_broadcast_secs: 1800      # 30 min — more visible during testing
+    # rebroadcast_mode: firmware forces CORE_PORTNUMS_ONLY for ROUTER role
+    # node_info_broadcast_secs: firmware resets via initConfigIntervals() for ROUTER role
 
   position:
     position_broadcast_smart_enabled: false
@@ -25,11 +25,11 @@ config:
     position_broadcast_secs: 3600
 
   telemetry:
-    device_update_interval: 120         # 2 min — catch fast changes during test
+    # device_update_interval: firmware resets to default for ROUTER role
     device_telemetry_enabled: true
-    environment_update_interval: 120    # Probe env sensors (BME280 etc.) if present
+    # environment_update_interval: firmware resets via initModuleConfigIntervals() for ROUTER role
     environment_measurement_enabled: true
-    power_update_interval: 120          # Probe INA power monitor if present
+    # power_update_interval: firmware resets via initModuleConfigIntervals() for ROUTER role
     power_measurement_enabled: true
 
   power:

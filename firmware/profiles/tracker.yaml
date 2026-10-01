@@ -27,7 +27,7 @@ config:
     position_broadcast_secs: 60             # 1 min timer — high frequency during testing
 
   telemetry:
-    device_update_interval: 60              # 1 min — max diagnostics during testing
+    # device_update_interval: firmware resets to default for TRACKER role
     device_telemetry_enabled: true
 
   power:
