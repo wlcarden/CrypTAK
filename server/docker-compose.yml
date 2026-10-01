@@ -13,8 +13,11 @@ name: tak-server
 #   docker compose up -d freetakserver-ui
 
 services:
+  # Floating tags are pinned by digest (2026-10-01): `docker compose pull` is a no-op until a
+  # digest is bumped here, so a deploy no longer recreates services whose upstream moved.
+  # The fts-patches/ files target this exact FreeTAKServer image; bump both together.
   freetakserver:
-    image: ghcr.io/freetakteam/freetakserver:latest
+    image: ghcr.io/freetakteam/freetakserver:latest@sha256:cc6147ba031c03406ff63abe35641cd2f9efb6f507b88617a1c099e0ff87a866
     container_name: freetakserver
     hostname: freetakserver
     restart: always
@@ -23,10 +26,19 @@ services:
     networks:
       - taknet
     ports:
-      - "8087:8087"      # CoT TCP  — ATAK client connections
-      - "8089:8089"      # CoT SSL  — encrypted client connections
-      - "8080:8080"      # Data Package HTTP
-      - "8443:8443"      # Data Package HTTPS
+      # Client-facing ports are published on the tailnet IP and loopback only. Every
+      # ATAK client reaches FTS over Tailscale (100.64.0.1 is the host's tailscale1
+      # IP, as for HMDM); nothing on the LAN connects, and 8087 is plaintext CoT that
+      # is only acceptable inside the WireGuard tunnel. Loopback keeps host tooling
+      # (curl localhost:8080, diagnostics on 8087) working.
+      - "100.64.0.1:8087:8087"   # CoT TCP  — ATAK client connections
+      - "127.0.0.1:8087:8087"
+      - "100.64.0.1:8089:8089"   # CoT SSL  — encrypted client connections
+      - "127.0.0.1:8089:8089"
+      - "100.64.0.1:8080:8080"   # Data Package HTTP
+      - "127.0.0.1:8080:8080"
+      - "100.64.0.1:8443:8443"   # Data Package HTTPS
+      - "127.0.0.1:8443:8443"
       - "127.0.0.1:19023:19023"  # REST API — localhost only; FTS-UI reaches via taknet
       - "127.0.0.1:9000:9000"  # Federation — server-to-server linking; localhost-only until needed
     deploy:
@@ -68,7 +80,7 @@ services:
       # FTS_DP_ADDRESS = external IP — embedded in data-package download URLs ATAK fetches.
       # FTS_USER_ADDRESS / FTS_API_ADDRESS = bind address inside container — use 0.0.0.0;
       # Docker port-maps these outward. Do NOT set to the external IP (bind will fail).
-      FTS_DP_ADDRESS: ${UNRAID_IP}
+      FTS_DP_ADDRESS: 100.64.0.1          # advertised data-package host: the tailnet IP, reachable from every client
       FTS_USER_ADDRESS: "0.0.0.0"
       FTS_API_ADDRESS: "0.0.0.0"
 
@@ -110,7 +122,7 @@ services:
       disable: true
 
   freetakserver-ui:
-    image: ghcr.io/freetakteam/ui:latest
+    image: ghcr.io/freetakteam/ui:latest@sha256:e25eb4d4d20887ed3f419fbfab2b62b1c149f6176be1fdf880755be71dfe59cd
     container_name: freetakserver-ui
     hostname: freetakserver-ui
     restart: always
@@ -182,7 +194,7 @@ services:
           memory: 512m
 
   mosquitto:
-    image: eclipse-mosquitto:2
+    image: eclipse-mosquitto:2@sha256:38c0da4f2ef84284d47b3b3eeea1cb3bdeabe81ee10caf0cd5c5ff61ee3ea408
     container_name: mosquitto
     restart: always
     labels:
@@ -287,7 +299,7 @@ services:
           memory: 512m
 
   headscale-nginx:
-    image: ghcr.io/nginxinc/nginx-unprivileged:alpine
+    image: ghcr.io/nginxinc/nginx-unprivileged:alpine@sha256:e234d4f7e346c098f7b22245690372382aded5be988611eb2c53ae62231eece7
     container_name: headscale-nginx
     restart: always
     labels:
@@ -334,7 +346,7 @@ services:
           memory: 512m
 
   headscale-ui:
-    image: ghcr.io/gurucomputing/headscale-ui:latest
+    image: ghcr.io/gurucomputing/headscale-ui:latest@sha256:015f5ba04bcbd5ee03178540a1dbbfc97b6896d7411032e3bf33c2f3e08f8b6f
     container_name: headscale-ui
     restart: always
     labels:
@@ -359,7 +371,7 @@ services:
   # Docker socket mount lets the runner execute docker compose commands.
   # The runner auto-registers on start and deregisters on graceful stop.
   github-runner:
-    image: myoung34/github-runner:latest
+    image: myoung34/github-runner:latest@sha256:bfb712a53a64bfee172f42f2fb2c089cc8fce10ca6e2b875cda851ffa67a14d9
     container_name: github-runner
     restart: always
     labels:

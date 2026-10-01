@@ -27,6 +27,10 @@ was disconnected; ATAK re-sent the same burst on reconnect.
 - Floating image tags pinned by digest; `compose pull` is a no-op until bumped.
 - Still open: the SSL CoT service (8089) has its own handler copy with the
   same read loop; phones use 8087, so it was not patched.
+- FTS client ports (8087/8089/8080/8443) now published on `100.64.0.1` and
+  `127.0.0.1` only (were `0.0.0.0`); `FTS_DP_ADDRESS` advertises the tailnet
+  IP. Closes the audit item "bind 8087 to localhost" without breaking the
+  phones, which are provisioned against `100.64.0.1:8087`.
 
 ---
 
