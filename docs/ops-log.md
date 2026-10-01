@@ -139,7 +139,21 @@ rwnd_limited none.
   subscription matched nothing — the sidebar "Mesh Network" panel had read
   "No mesh nodes heard" since ~April 2026 (every `meshRegistry.lastHeard`
   ~6 months old, past the 48 h / 72 h filters). Parser keys on `payload.from`
-  and only checks `/json/`, so the topic was the whole fix.
+  and only checks `/json/`.
+- …which was necessary but not sufficient. With the right filter the broker
+  logged SUBSCRIBE from `nodered-mesh-map` and **zero deliveries**, while
+  mesh-relay's client received every message. The broker loads its config
+  from `/mnt/user/appdata/mosquitto/config` (not the rsynced
+  `tak-server/mosquitto/`, so the repo copy was a dead file) and has had
+  `acl_file acl.conf` since 2026-03-29 with a single rule: `user meshtastic`
+  → `readwrite msh/#`. With an ACL loaded, users without a rule are denied
+  everything, and read filtering is not logged — Node-RED connects as user
+  `nodered`, so it was silently read-denied from the day the ACL appeared.
+  Added `user nodered / topic read msh/#`, `docker kill -s HUP mosquitto`,
+  and fixed the file to `mosquitto:mosquitto 0640` (mosquitto warned it will
+  refuse world-readable/root-owned ACL files in a future version).
+  Reference copies + apply notes now in `server/mosquitto/`.
+  CLAUDE.md's "Mosquitto ACLs: TODO (not yet implemented)" is stale.
 
 ---
 
