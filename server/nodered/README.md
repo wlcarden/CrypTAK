@@ -106,6 +106,11 @@ demand. Defaults come from `RETENTION_POLICY` in `lib/cot-maps.js`; override
 with `WEBMAP_RETENTION_CONTACT_HOURS`, `WEBMAP_RETENTION_PLACE_HOURS`,
 `WEBMAP_TOMBSTONE_HOURS` in the nodered service environment.
 
+worldmap re-creates a marker on every update it receives (there is no in-place
+update), which flashes a faded icon to full opacity; `fn_cot` therefore forwards
+an ATAK re-send only when a material field changed (`markerUnchanged`) and the
+fade moves in 0.05 steps owned by the 30 s refresh timer.
+
 Offline tests: `node lib/cot-maps.test.js`.
 
 ## Configuration

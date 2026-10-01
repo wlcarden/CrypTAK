@@ -332,7 +332,27 @@ function calcRetireOpacity(producedAt, retireAt, nowMs) {
   var fadeStart = producedAt + span * RETENTION_POLICY.fadeFrom;
   if (nowMs <= fadeStart) return 1.0;
   var f = (nowMs - fadeStart) / (retireAt - fadeStart);
-  return Math.max(RETENTION_POLICY.fadeFloor, 1.0 - f * (1.0 - RETENTION_POLICY.fadeFloor));
+  var o = Math.max(RETENTION_POLICY.fadeFloor, 1.0 - f * (1.0 - RETENTION_POLICY.fadeFloor));
+  // Coarse steps: worldmap re-creates a marker on every update, which flashes
+  // it at full opacity, so the fade must be a few updates, not a stream.
+  return Math.round(o * 20) / 20;
+}
+
+/**
+ * Does a re-sent managed marker change anything worldmap needs to know?
+ * ATAK re-sends persisted markers every ~10 s with fresh timestamps; forwarding
+ * each one makes worldmap remove and re-add the icon (a flash to full opacity
+ * when it is faded). Compare the material fields only; opacity is owned by the
+ * refresh timer and is excluded here.
+ */
+var MATERIAL_FIELDS = ["lat", "lon", "_callsign", "_cotType", "_remarks", "_retireAtMs", "layer", "iconColor", "SIDC", "icon"];
+function markerUnchanged(prev, next) {
+  if (!prev || !next) return false;
+  for (var i = 0; i < MATERIAL_FIELDS.length; i++) {
+    var k = MATERIAL_FIELDS[i];
+    if ((prev[k] === undefined ? null : prev[k]) !== (next[k] === undefined ? null : next[k])) return false;
+  }
+  return true;
 }
 
 /**
@@ -1100,6 +1120,7 @@ module.exports = {
   isManagedCot: isManagedCot,
   retentionFor: retentionFor,
   calcRetireOpacity: calcRetireOpacity,
+  markerUnchanged: markerUnchanged,
   RETENTION_POLICY: RETENTION_POLICY,
   buildTrackerSIDC: buildTrackerSIDC,
   sidcAffiliation: sidcAffiliation,

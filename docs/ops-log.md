@@ -22,6 +22,9 @@ then retired by broadcasting a `t-x-d-d` through FTS (phones agree) with a 24 h
 tombstone. Inbound `t-x-d-d` honored; `POST /tak-map/api/marker/remove` and
 sidebar/popup Remove controls do the same on demand. `lib/cot-maps.test.js`
 covers it offline. Existing markers placed 01:25 UTC retire at 13:25 UTC.
+- Follow-up: faded contacts blipped to full opacity every ~10 s. worldmap removes
+  and re-adds a marker on every update and each ATAK re-send was forwarded;
+  re-sends with no material change are now dropped, fade steps are 0.05.
 
 ---
 

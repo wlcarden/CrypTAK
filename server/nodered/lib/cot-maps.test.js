@@ -87,4 +87,20 @@ test("popup carries the lifecycle line and a Remove link for managed markers onl
   assert.ok(maps.parseCotToMarker(placed()).popup.includes("Remove from map"));
   assert.ok(!maps.parseCotToMarker(selfSA()).popup.includes("Remove from map"));
 });
+test("fade steps are coarse (multiples of 0.05) so a fade is a handful of worldmap updates", () => {
+  const seen = new Set();
+  for (let t = 9 * HOUR; t <= 12 * HOUR; t += 60000) seen.add(maps.calcRetireOpacity(0, 12 * HOUR, t));
+  for (const v of seen) assert.ok(Math.abs(v * 20 - Math.round(v * 20)) < 1e-9, "not a 0.05 step: " + v);
+  assert.ok(seen.size <= 17 && seen.size >= 10, "steps: " + seen.size);
+});
+test("markerUnchanged ignores re-send timestamps and opacity, notices moves/edits/retire changes", () => {
+  const a = maps.parseCotToMarker(placed()), b = maps.parseCotToMarker(placed());
+  b._startMs += 10000; b.opacity = 0.3; b.ttl -= 10;
+  assert.strictEqual(maps.markerUnchanged(a, b), true);
+  const moved = maps.parseCotToMarker(placed().replace('lat="38.8411"', 'lat="38.8500"'));
+  assert.strictEqual(maps.markerUnchanged(a, moved), false);
+  const kept = maps.parseCotToMarker(placed({ remarks: "#keep" }));
+  assert.strictEqual(maps.markerUnchanged(a, kept), false);
+  assert.strictEqual(maps.markerUnchanged(undefined, b), false);
+});
 console.log(`\n${passed} passed`);
