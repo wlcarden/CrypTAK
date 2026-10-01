@@ -4,6 +4,33 @@ Running log of maintenance, incidents, and infrastructure changes.
 
 ---
 
+## 2026-10-01 — FTS dropped ATAK every 20 s (CoT framing); patches versioned; images pinned
+
+### Problem
+
+TAK-01 reconnected to FTS 167 times/hour; FTS dropped it 4 s after every
+connect with `ExpatError: not well-formed (invalid token): line 4, column 260`.
+A packet capture inside the FTS network namespace showed a clean on-connect
+burst (self-SA, then the three persisted markers) with a TCP segment boundary
+inside the third marker at the phone's 1228-byte MSS. FTS 2.2.1's
+`ClientReceptionHandler` parses each `recv_until()` result as whole events
+(1024-byte reads, 1 ms timeout), so the truncated event raised and the client
+was disconnected; ATAK re-sent the same burst on reconnect.
+
+### Resolution
+
+- `server/fts-patches/ClientReceptionHandler_patched.py`: frame on `</event>`
+  across reads, carry the remainder per client; validated in-container on the
+  captured burst (all four events, no disconnect; upstream: SA only, two drops).
+- All seven FTS patches now mount from `./fts-patches/` (rsync'd), so CI deploys
+  them; `tcp_cot_service_main_patched.py` was server-only until now.
+- Floating image tags pinned by digest; `compose pull` is a no-op until bumped.
+- Still open: the SSL CoT service (8089) has its own handler copy with the
+  same read loop; phones use 8087, so it was not patched.
+
+---
+
+
 ## 2026-09-30 — CI deploy downgraded headscale (stale pin) — ~4 min VPN control-plane outage
 
 ### Problem
