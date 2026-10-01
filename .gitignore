@@ -36,3 +36,22 @@ scripts/phone-provision/atak-maps/nova-streets.sqlite
 scripts/phone-provision/apks/
 scripts/phone-provision/osmand-maps/
 scripts/phone-provision/apks/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Meshtastic release binaries (download per node, never commit)
+firmware/*.zip
+firmware/*.bin
+firmware/*.uf2
+firmware/esp32s3/
+firmware/meshtastic/
+
+# Generated map tiles (phone-provision/build-nova-tiles.py output) and scratch
+*.mbtiles
+*.mbtiles-journal
+/nova-streets.sqlite
+/*.log
