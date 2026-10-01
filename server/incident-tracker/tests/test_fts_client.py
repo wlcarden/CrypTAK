@@ -342,3 +342,144 @@ class TestFtsClientClose:
         await client._close_writer()  # should not raise
 
         assert client._writer is None
+
+
+# --- Inbound drain (real sockets) -------------------------------------------
+# FTS broadcasts every CoT event to every registered client. A client that
+# never reads lets its receive window close, and FTS's send queue to it stalls
+# permanently (seen in production as 920 KB notsent, rwnd_limited 100%).
+
+_BURST = b"<event uid='flood' type='a-f-G-U-C'/>\n" * 512  # ~19 KB
+_TARGET = 4 * 1024 * 1024  # 4 MB, well beyond any socket buffer
+
+
+class _FloodingFts:
+    def __init__(self, target=_TARGET, drop_first=False):
+        self.target = target
+        self.drop_first = drop_first
+        self.sent = 0
+        self.stalled = False
+        self.connections = 0
+        self.received: list[bytes] = []
+        self.first_closed = asyncio.Event()
+        self.sa_seen = asyncio.Event()
+        self._server = None
+        self.port = 0
+
+    async def start(self):
+        self._server = await asyncio.start_server(self._handle, "127.0.0.1", 0)
+        self.port = self._server.sockets[0].getsockname()[1]
+
+    async def _handle(self, reader, writer):
+        self.connections += 1
+        try:
+            await self._serve(reader, writer)
+        finally:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except (ConnectionResetError, BrokenPipeError, OSError):
+                pass
+
+    async def _serve(self, reader, writer):
+        try:
+            sa = await asyncio.wait_for(reader.readline(), timeout=5)
+            self.received.append(sa)
+        except asyncio.TimeoutError:
+            return
+        finally:
+            self.sa_seen.set()
+        if self.drop_first and self.connections == 1:
+            writer.close()
+            await writer.wait_closed()
+            self.first_closed.set()
+            return
+        try:
+            if self.target:
+                while self.sent < self.target:
+                    writer.write(_BURST)
+                    try:
+                        await asyncio.wait_for(writer.drain(), timeout=5)
+                    except asyncio.TimeoutError:
+                        self.stalled = True
+                        return
+                    self.sent += len(_BURST)
+            while True:
+                line = await reader.readline()
+                if not line:
+                    return
+                self.received.append(line)
+        except (ConnectionResetError, BrokenPipeError, OSError):
+            return
+
+    async def wait_done(self, timeout=30.0):
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while self.sent < self.target and not self.stalled and loop.time() < deadline:
+            await asyncio.sleep(0.05)
+
+    async def close(self):
+        if self._server is not None:
+            self._server.close()
+            await self._server.wait_closed()
+
+
+class TestInboundDrain:
+    async def test_flood_is_drained_and_window_stays_open(self):
+        fts = _FloodingFts()
+        await fts.start()
+        client = FtsClient("127.0.0.1", fts.port)
+        try:
+            await client.connect()
+            await asyncio.wait_for(fts.sa_seen.wait(), timeout=5)
+            await fts.wait_done()
+            ok = await client.send("<event uid='probe' type='a-f-G-U-C'/>")
+            assert not fts.stalled, "receive window closed: client is not draining"
+            assert fts.sent >= _TARGET
+            assert client._rx_bytes >= _TARGET * 0.9
+            assert ok, "could not publish while being flooded"
+            assert client._drain_task is not None and not client._drain_task.done()
+        finally:
+            await client.close()
+            await fts.close()
+        assert client._drain_task is None, "drain task not cleaned up on close"
+
+    async def test_peer_close_tears_down_writer_and_send_reconnects(self):
+        fts = _FloodingFts(target=0, drop_first=True)
+        await fts.start()
+        client = FtsClient("127.0.0.1", fts.port)
+        try:
+            await client.connect()
+            await asyncio.wait_for(fts.first_closed.wait(), timeout=5)
+            for _ in range(50):
+                if client._writer is None:
+                    break
+                await asyncio.sleep(0.02)
+            assert client._writer is None, "writer not torn down after peer EOF"
+            assert client._last_sa is None
+
+            ok = await client.send("<event uid='after-close' type='a-f-G-U-C'/>")
+            assert ok
+            for _ in range(50):
+                if any(b"after-close" in r for r in fts.received):
+                    break
+                await asyncio.sleep(0.02)
+            assert any(b"after-close" in r for r in fts.received), (
+                "event published after FTS-side close was lost"
+            )
+            assert fts.connections == 2
+        finally:
+            await client.close()
+            await fts.close()
+
+    async def test_mock_reader_does_not_spin(self):
+        """A non-bytes read (test double) must end the drain, not loop forever."""
+        writer = _mock_writer()
+        reader = _mock_reader()
+        with patch("asyncio.open_connection",
+                   new_callable=AsyncMock, return_value=(reader, writer)):
+            client = FtsClient("localhost", 8087)
+            await client.connect()
+            await asyncio.sleep(0)  # let the drain task run once
+        assert client._drain_task is not None and client._drain_task.done()
+        assert client._writer is writer, "mock reader must not trigger teardown"

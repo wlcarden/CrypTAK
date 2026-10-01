@@ -123,11 +123,23 @@ rwnd_limited none.
   (holds `_reader`, never reads) — same drain fix applies.
 - Audit TODO still open: move GW01's MQTT uplink from ch0 (LongFast) to ch1
   (cryptak) so foreign nodes stop arriving at all.
-- Pre-existing, unrelated: the sidebar "Mesh Network" panel has shown "No mesh
-  nodes heard" since ~April 2026. Node-RED's mqtt-in node subscribes to
-  `msh/+/2/json/#` while the broker publishes `msh/US/2/2/json/<channel>/…`
-  (extra segment), so `meshRegistry` never updates (every `lastHeard` ~6 months
-  old, past the 48 h/72 h filters). Fix: topic `msh/+/2/2/json/#` + restart.
+
+### Follow-ups applied (same day)
+
+- incident-tracker `src/cot/fts_client.py`: same write-only client, same
+  drain + EOF-teardown fix (host-side socket showed 920 KB `notsent`,
+  `rwnd_limited 100%`, idle 13 h). Real-socket tests added to
+  `tests/test_fts_client.py`.
+- mesh-relay `FtsClient.keepalive()`: the 30 s idle path now re-registers
+  with FTS if the peer dropped us (FTS closes clients on its own schedule and
+  on every restart) instead of waiting for the next mesh position, which GW01
+  never sends; also guards `refresh_sa()` against the writer being gone.
+- Node-RED `mqtt_mesh`: topic `msh/+/2/json/#` → `msh/+/2/2/json/#`. GW01's
+  MQTT root is `msh/US/2` and the firmware appends `/2/json/…`, so the old
+  subscription matched nothing — the sidebar "Mesh Network" panel had read
+  "No mesh nodes heard" since ~April 2026 (every `meshRegistry.lastHeard`
+  ~6 months old, past the 48 h / 72 h filters). Parser keys on `payload.from`
+  and only checks `/json/`, so the topic was the whole fix.
 
 ---
 

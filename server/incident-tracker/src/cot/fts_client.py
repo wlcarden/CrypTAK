@@ -54,6 +54,8 @@ class FtsClient:
         self._writer: asyncio.StreamWriter | None = None
         self._backoff = _INITIAL_BACKOFF
         self._last_sa: datetime | None = None
+        self._drain_task: asyncio.Task | None = None
+        self._rx_bytes = 0
 
     async def connect(self) -> None:
         """Establish TCP connection to FTS, retrying with backoff."""
@@ -65,6 +67,7 @@ class FtsClient:
                 self._backoff = _INITIAL_BACKOFF
                 logger.info("Connected to FTS at %s:%d", self._host, self._port)
                 await self._send_sa()
+                self._start_drain()
                 return
             except (ConnectionRefusedError, OSError) as e:
                 logger.warning(
@@ -115,7 +118,73 @@ class FtsClient:
                 await self._close_writer()
                 return False
 
+    def _start_drain(self) -> None:
+        """Consume FTS's inbound stream so the TCP receive window stays open.
+
+        FTS pushes every CoT event to each registered client. This client only
+        publishes, and nothing read the inbound half: the receive buffer
+        filled, the window closed, and FTS's send queue to us grew until
+        delivery stalled (observed 2026-09-30: 920 KB queued, rwnd_limited
+        100%, no read for 13 h). Same defect and fix as mesh-relay's FtsClient.
+        """
+        if self._drain_task is not None and not self._drain_task.done():
+            return
+        reader = self._reader
+        if reader is None:
+            return
+        self._drain_task = asyncio.create_task(self._drain_inbound(reader))
+
+    async def _drain_inbound(self, reader: asyncio.StreamReader) -> None:
+        peer_gone = False
+        try:
+            while True:
+                chunk = await reader.read(65536)
+                # A StreamReader yields bytes; anything else is not a real
+                # stream, so stop rather than spin on it.
+                if not isinstance(chunk, (bytes, bytearray)):
+                    return
+                if not chunk:
+                    peer_gone = True
+                    logger.warning(
+                        "FTS closed inbound stream (EOF) after %d bytes",
+                        self._rx_bytes,
+                    )
+                    break
+                self._rx_bytes += len(chunk)
+        except asyncio.CancelledError:
+            raise
+        except (ConnectionResetError, OSError) as e:
+            peer_gone = True
+            logger.warning("FTS inbound drain stopped (%s)", e)
+
+        # The peer closed or errored. Drop the writer now so the next send()
+        # reconnects first: a write into a half-closed socket is accepted
+        # locally and lost, so the first event after an FTS-side close would
+        # otherwise vanish silently.
+        if peer_gone and self._reader is reader:
+            self._drain_task = None
+            self._reader = None
+            self._last_sa = None
+            writer, self._writer = self._writer, None
+            if writer is not None:
+                try:
+                    writer.close()
+                except Exception:
+                    pass
+
+    async def _stop_drain(self) -> None:
+        task = self._drain_task
+        self._drain_task = None
+        if task is None or task.done():
+            return
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, OSError):
+            pass
+
     async def _close_writer(self) -> None:
+        await self._stop_drain()
         if self._writer is not None:
             try:
                 self._writer.close()
