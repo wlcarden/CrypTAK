@@ -618,10 +618,14 @@ function parseCotToMarker(xml) {
   var appVersion = takvAttr("version");
   var hasEndpoint = /<contact\b[^>]*?\bendpoint="[^"]+"/.test(xml);
   var isPlaced = how.indexOf("h-g-i-g-o") === 0;
+  // mesh-relay's PLIs also carry a <takv> and an endpoint, so mesh/tracker
+  // uids are excluded here as well as in fn_serve_clients.
   var isClient =
     !isPlaced &&
     (platform !== "" || hasEndpoint) &&
-    uid.indexOf("CrypTAK-") !== 0; // our own services also announce an endpoint
+    uid.indexOf("CrypTAK-") !== 0 && // our own services also announce an endpoint
+    uid.indexOf("mesh-") !== 0 &&
+    uid.indexOf("tracker-") !== 0;
 
   // Parse mesh telemetry (voltage, channel util, SNR, etc.)
   var meshTelem = null;

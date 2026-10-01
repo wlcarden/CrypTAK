@@ -37,6 +37,15 @@ was disconnected; ATAK re-sent the same burst on reconnect.
 - mesh-relay resolves callsigns from an mtime-cached `nodes.yaml` table instead
   of parsing the YAML on every MQTT message; the "nodeinfo callsign cache"
   audit item is closed (unowned nodes are dropped, owned ones come from the yaml).
+- Fixed-position seeding: GW01 and BSE01 have no GPS and are provisioned with
+  `fixed_position` + coordinates in `nodes.yaml`, but firmware 2.7.15 broadcasts
+  a fixed position once at boot at best, so neither ever appeared on the map
+  from live traffic (GW01's earlier marker was foreign nodes' coordinates).
+  mesh-relay now publishes a PLI from the yaml coordinates every
+  `FIXED_POSITION_SEED_SECS` (600) for any such node without a real position
+  in that window, merged with its latest MQTT telemetry. The WebMap's
+  `_client` flag now also excludes `mesh-`/`tracker-` uids, since relay PLIs
+  carry a `<takv>` and an endpoint like a TAK client's.
 
 ---
 

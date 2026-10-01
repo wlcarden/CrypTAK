@@ -144,39 +144,106 @@ def _mqtt_node_id(data: dict) -> str:
     return str(data.get("sender", "")).lstrip("!")
 
 
-# nodes.yaml display names, re-read only when the file's mtime changes.
+# nodes.yaml, re-read only when the file's mtime changes: display name and,
+# for GPS-less nodes provisioned with a fixed position, their coordinates.
 # _resolve_callsign used to open and parse the YAML on every MQTT message.
-_node_name_cache: tuple[float, dict[str, str]] = (-1.0, {})
+_node_table_cache: tuple[float, dict[str, dict]] = (-1.0, {})
 
 
-def _node_names() -> dict[str, str]:
-    """Map node id (no '!') -> longName/shortName/key from nodes.yaml."""
-    global _node_name_cache
+def _node_table() -> dict[str, dict]:
+    """Map node id (no '!') -> {"name", "lat", "lon", "alt"} from nodes.yaml."""
+    global _node_table_cache
     try:
         mtime = os.path.getmtime(_NODES_YAML)
     except OSError:
         return {}
-    if mtime != _node_name_cache[0]:
-        names: dict[str, str] = {}
+    if mtime != _node_table_cache[0]:
+        table: dict[str, dict] = {}
         try:
             with open(_NODES_YAML) as f:
                 data = yaml.safe_load(f)
             for name, cfg in ((data or {}).get("nodes") or {}).items():
                 cfg = cfg or {}
                 node_id = str(cfg.get("id") or "").lstrip("!")
-                if node_id:
-                    names[node_id] = cfg.get("longName") or cfg.get("shortName") or name
+                if not node_id:
+                    continue
+                lat, lon = cfg.get("latitude"), cfg.get("longitude")
+                table[node_id] = {
+                    "name": cfg.get("longName") or cfg.get("shortName") or name,
+                    "lat": float(lat) if lat is not None else None,
+                    "lon": float(lon) if lon is not None else None,
+                    "alt": float(cfg.get("altitude") or 0),
+                }
         except Exception:
-            logger.exception("nodes.yaml unreadable; keeping previous names")
-            return _node_name_cache[1]
-        _node_name_cache = (mtime, names)
-    return _node_name_cache[1]
+            logger.exception("nodes.yaml unreadable; keeping previous table")
+            return _node_table_cache[1]
+        _node_table_cache = (mtime, table)
+    return _node_table_cache[1]
+
+
+def _node_names() -> dict[str, str]:
+    """Map node id (no '!') -> longName/shortName/key from nodes.yaml."""
+    return {node_id: entry["name"] for node_id, entry in _node_table().items()}
 
 
 def _resolve_callsign(sender: str) -> str:
     """Resolve callsign from a hex node id via nodes.yaml, fallback to the id."""
     return _node_names().get(sender.lstrip("!"), sender)
 
+
+def fixed_position_plis(now: float) -> list[tuple[str, str]]:
+    """PLIs due for nodes with fixed coordinates in nodes.yaml.
+
+    A node is skipped while it has reported a real position (_last_emitted)
+    or been seeded within FIXED_POSITION_SEED_SECS. Returns (node_id, cot).
+    """
+    if FIXED_POSITION_SEED_SECS <= 0:
+        return []
+    due: list[tuple[str, str]] = []
+    for node_id, entry in _node_table().items():
+        if entry["lat"] is None or entry["lon"] is None:
+            continue
+        real = _last_emitted.get(node_id)
+        if real and now - real[2] < FIXED_POSITION_SEED_SECS:
+            continue
+        if now - _last_seed_sent.get(node_id, 0.0) < FIXED_POSITION_SEED_SECS:
+            continue
+        telem = _telemetry_cache.get(node_id, {})
+        cot = build_pli(
+            node_id=node_id,
+            callsign=entry["name"],
+            lat=entry["lat"],
+            lon=entry["lon"],
+            alt=entry["alt"],
+            battery=telem.get("battery", 0),
+            tracker=node_id in TRACKER_NODES,
+            voltage=telem.get("voltage", 0.0),
+            channel_util=telem.get("channelUtil", 0.0),
+            air_util_tx=telem.get("airUtilTx", 0.0),
+            uptime=telem.get("uptime", 0),
+        )
+        _last_seed_sent[node_id] = now
+        due.append((node_id, cot))
+    return due
+
+
+async def _seed_fixed_positions(fts: "FtsClient") -> None:
+    for node_id, cot in fixed_position_plis(time.time()):
+        if await fts.send(cot):
+            logger.info("Seeded fixed position for %s from nodes.yaml", node_id)
+        else:
+            logger.error("Failed to seed fixed position for %s", node_id)
+
+
+# Fixed-position seeding. GPS-less nodes (GW01, BSE01) are provisioned with
+# fixed_position and coordinates in nodes.yaml, but firmware 2.7.15 broadcasts
+# a fixed position once at boot at best, so they never appear on the map
+# from live traffic. Every FIXED_POSITION_SEED_SECS the relay publishes a PLI
+# from the yaml coordinates for any such node that has not reported a real
+# position within that window, merged with its latest MQTT telemetry.
+# 0 disables.
+FIXED_POSITION_SEED_SECS: int = int(os.environ.get("FIXED_POSITION_SEED_SECS", "600"))
+_last_seed_sent: dict[str, float] = {}
 
 # Telemetry cache — updated by telemetry handler, read during nodedb seed.
 _telemetry_cache: dict[str, dict] = {}
@@ -1268,6 +1335,10 @@ async def main() -> None:
 
     try:
         while not stop.is_set():
+            try:
+                await _seed_fixed_positions(fts)
+            except Exception:
+                logger.exception("Fixed-position seed error")
             try:
                 data = await asyncio.wait_for(queue.get(), timeout=30.0)
             except asyncio.TimeoutError:

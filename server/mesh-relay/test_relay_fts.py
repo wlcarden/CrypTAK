@@ -371,3 +371,62 @@ def test_resolve_callsign_without_yaml_returns_the_id(monkeypatch) -> None:
     monkeypatch.setattr(r, "_NODES_YAML", "/nonexistent/nodes.yaml")
     r._node_name_cache = (-1.0, {})
     assert r._resolve_callsign("!087a29a4") == "!087a29a4"
+
+
+# --- fixed-position seeding ----------------------------------------------------
+
+YAML_FIXED = ("nodes:\n"
+              "  GW01:\n    id: '!087a29a4'\n    longName: CrypTAK-GW01\n    latitude: 38.84192\n    longitude: -77.29345\n"
+              "  BSE01:\n    id: '!01f94ec0'\n    longName: CrypTAK-BSE01\n    latitude: 38.84191827\n    longitude: -77.29344941\n    altitude: 155\n"
+              "  VHC01:\n    id: '!9aa4baf0'\n    longName: CrypTAK-VHC01\n")
+
+
+def _fixed_setup(tmp_path, monkeypatch):
+    import relay as r
+    y = tmp_path / "nodes.yaml"; y.write_text(YAML_FIXED)
+    monkeypatch.setattr(r, "_NODES_YAML", str(y))
+    monkeypatch.setattr(r, "FIXED_POSITION_SEED_SECS", 600)
+    monkeypatch.setattr(r, "_last_emitted", {})
+    monkeypatch.setattr(r, "_last_seed_sent", {})
+    monkeypatch.setattr(r, "_telemetry_cache", {})
+    r._node_table_cache = (-1.0, {})
+    return r
+
+
+def test_seed_emits_plis_only_for_nodes_with_coordinates(tmp_path, monkeypatch) -> None:
+    import xml.etree.ElementTree as ET
+    r = _fixed_setup(tmp_path, monkeypatch)
+    due = dict(r.fixed_position_plis(now=1_000_000.0))
+    assert set(due) == {"087a29a4", "01f94ec0"}          # VHC01 has no coordinates
+    ev = ET.fromstring(due["087a29a4"])
+    assert ev.get("uid") == "mesh-087a29a4"
+    assert ev.find("point").get("lat") == "38.841920" and ev.find("point").get("lon") == "-77.293450"
+    assert ev.find("detail/contact").get("callsign") == "CrypTAK-GW01"
+    assert ET.fromstring(due["01f94ec0"]).find("point").get("hae") == "155"   # build_pli writes int metres
+
+
+def test_seed_is_throttled_per_node(tmp_path, monkeypatch) -> None:
+    r = _fixed_setup(tmp_path, monkeypatch)
+    assert len(r.fixed_position_plis(now=1_000_000.0)) == 2
+    assert r.fixed_position_plis(now=1_000_000.0 + 599) == []
+    assert len(r.fixed_position_plis(now=1_000_000.0 + 600)) == 2
+
+
+def test_recent_real_position_suppresses_the_seed(tmp_path, monkeypatch) -> None:
+    r = _fixed_setup(tmp_path, monkeypatch)
+    r._last_emitted["087a29a4"] = (38.0, -77.0, 1_000_000.0 - 30)   # GW01 reported 30 s ago
+    assert [n for n, _ in r.fixed_position_plis(now=1_000_000.0)] == ["01f94ec0"]
+
+
+def test_seed_carries_latest_telemetry(tmp_path, monkeypatch) -> None:
+    import xml.etree.ElementTree as ET
+    r = _fixed_setup(tmp_path, monkeypatch)
+    r._telemetry_cache["087a29a4"] = {"battery": 101, "voltage": 4.28, "channelUtil": 1.9, "airUtilTx": 0.8, "uptime": 2351691}
+    ev = ET.fromstring(dict(r.fixed_position_plis(now=1_000_000.0))["087a29a4"])
+    assert ev.find("detail/status").get("battery") == "101"
+
+
+def test_seed_disabled_by_zero_interval(tmp_path, monkeypatch) -> None:
+    r = _fixed_setup(tmp_path, monkeypatch)
+    monkeypatch.setattr(r, "FIXED_POSITION_SEED_SECS", 0)
+    assert r.fixed_position_plis(now=1_000_000.0) == []
