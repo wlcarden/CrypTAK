@@ -353,3 +353,50 @@ class TestStopIceConfigValidation:
     def test_invalid_priority_rejected(self):
         with pytest.raises(Exception):
             StopIceConfig(min_priority="invalid")
+
+
+# --- Monthly file rollover -----------------------------------------------------
+# The site publishes each month's XML some days into the month, so on the 1st
+# the current month's URL 404s. Seen 2026-10-01: a 404 for stopicenet_oct_2026.
+
+from src.sources.stopice import _build_xml_url
+
+
+def _status_error(code: int) -> httpx.HTTPStatusError:
+    resp = MagicMock(status_code=code)
+    return httpx.HTTPStatusError("err", request=MagicMock(), response=resp)
+
+
+class TestMonthlyRollover:
+    def test_previous_month_rolls_the_year_back_over_january(self):
+        jan = datetime(2026, 1, 3, tzinfo=timezone.utc)
+        assert _build_xml_url(jan).endswith("stopicenet_jan_2026_complete.xml")
+        assert _build_xml_url(jan, months_back=1).endswith("stopicenet_dec_2025_complete.xml")
+
+    @pytest.mark.asyncio
+    async def test_404_on_current_month_falls_back_to_previous_month(self):
+        source = StopIceSource(_make_config(), _make_geo())
+        current = MagicMock(); current.raise_for_status.side_effect = _status_error(404)
+        previous = _mock_response(_make_xml())
+        with patch("src.sources.stopice.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(side_effect=[current, previous])
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+            result = await source.fetch()
+        assert result == []  # empty but valid document, no error
+        urls = [c.args[0] for c in mock_client.get.call_args_list]
+        assert urls == [_build_xml_url(), _build_xml_url(months_back=1)]
+
+    @pytest.mark.asyncio
+    async def test_non_404_error_does_not_fall_back(self):
+        source = StopIceSource(_make_config(), _make_geo())
+        current = MagicMock(); current.raise_for_status.side_effect = _status_error(503)
+        with patch("src.sources.stopice.httpx.AsyncClient") as mock_cls:
+            mock_client = AsyncMock()
+            mock_client.get = AsyncMock(return_value=current)
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
+            result = await source.fetch()
+        assert result == []
+        assert mock_client.get.await_count == 1

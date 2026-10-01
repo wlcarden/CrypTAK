@@ -60,11 +60,19 @@ _MONTHS = [
 ]
 
 
-def _build_xml_url() -> str:
-    """Build the URL for the current month's StopICE data file."""
-    now = datetime.now(timezone.utc)
-    month = _MONTHS[now.month]
-    return f"{_BASE_URL}/stopicenet_{month}_{now.year}_complete.xml"
+def _build_xml_url(now: datetime | None = None, months_back: int = 0) -> str:
+    """Build the URL for a month's StopICE data file.
+
+    months_back=1 gives the previous month (rolling the year back over
+    January). The site publishes each month's file some days into the month,
+    so on the 1st the current month's URL 404s and the caller falls back.
+    """
+    now = now or datetime.now(timezone.utc)
+    year, month = now.year, now.month - months_back
+    while month < 1:
+        month += 12
+        year -= 1
+    return f"{_BASE_URL}/stopicenet_{_MONTHS[month]}_{year}_complete.xml"
 
 
 def _parse_timestamp(ts: str) -> datetime:
@@ -124,20 +132,33 @@ class StopIceSource(Source):
         if not self._config.enabled:
             return []
 
-        url = _build_xml_url()
         min_rank = _MIN_PRIORITY_RANK.get(self._config.min_priority, 1)
 
+        # Current month first; if its file is not published yet (404 -- seen
+        # every month on the 1st), fall back to the previous month's file.
+        urls = [_build_xml_url(), _build_xml_url(months_back=1)]
+        xml_text = None
         async with httpx.AsyncClient(
             timeout=30.0,
             headers={"User-Agent": "CrypTAK-IncidentTracker/1.0"},
         ) as client:
-            try:
-                resp = await client.get(url)
-                resp.raise_for_status()
-                xml_text = resp.text
-            except Exception:
-                logger.exception("StopICE XML fetch failed: %s", url)
-                return []
+            for attempt, url in enumerate(urls):
+                try:
+                    resp = await client.get(url)
+                    resp.raise_for_status()
+                    xml_text = resp.text
+                    break
+                except httpx.HTTPStatusError as exc:
+                    if attempt == 0 and exc.response.status_code == 404:
+                        logger.info("StopICE: %s not published yet, trying previous month", url)
+                        continue
+                    logger.exception("StopICE XML fetch failed: %s", url)
+                    return []
+                except Exception:
+                    logger.exception("StopICE XML fetch failed: %s", url)
+                    return []
+        if xml_text is None:
+            return []
 
         try:
             root = ET.fromstring(xml_text)
