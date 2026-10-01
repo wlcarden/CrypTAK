@@ -31,6 +31,12 @@ was disconnected; ATAK re-sent the same burst on reconnect.
   `127.0.0.1` only (were `0.0.0.0`); `FTS_DP_ADDRESS` advertises the tailnet
   IP. Closes the audit item "bind 8087 to localhost" without breaking the
   phones, which are provisioned against `100.64.0.1:8087`.
+- Removed the dormant `openclaw` MQTT account (no connections, no ACL rule).
+- incident-tracker StopICE source: falls back to the previous month's file
+  when the current month's 404s (it did on the 1st).
+- mesh-relay resolves callsigns from an mtime-cached `nodes.yaml` table instead
+  of parsing the YAML on every MQTT message; the "nodeinfo callsign cache"
+  audit item is closed (unowned nodes are dropped, owned ones come from the yaml).
 
 ---
 

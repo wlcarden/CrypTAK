@@ -134,7 +134,7 @@ docker exec -i mosquitto mosquitto_passwd -b /mosquitto/config/passwd <username>
 cd /mnt/user/appdata/tak-server && docker compose restart mosquitto
 ```
 
-Current accounts: `nodered` (Node-RED mesh map), `openclaw` (Kit/AI assistant), `meshtastic` (T-Beam bridge)
+Current accounts: `nodered` (Node-RED mesh map, read-only), `meshtastic` (T-Beam bridge)
 
 ---
 

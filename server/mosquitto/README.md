@@ -9,7 +9,7 @@ These files mirror the live config so changes have history; apply them by hand:
 docker kill -s HUP mosquitto   # reloads acl/password files without dropping clients
 ```
 
-`passwd` (users: `meshtastic`, `nodered`, `openclaw`) is never committed.
+`passwd` (users: `meshtastic`, `nodered`; `openclaw` removed 2026-10-01) is never committed.
 Both files must be `mosquitto:mosquitto` (uid 1883) and mode `0640`: mosquitto 2.x
 warns on world-readable or root-owned ACL/password files and future versions
 refuse to load them.

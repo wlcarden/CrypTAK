@@ -114,8 +114,9 @@ MQTT to the entire LAN.
 access is disabled (Mosquitto auth required), brute-force attacks on
 credentials are possible.
 
-**STATUS:** Authentication required. Three accounts configured: `nodered`,
-`openclaw`, `meshtastic`.
+**STATUS:** Authentication required, with an ACL (`acl.conf`: `meshtastic`
+read/write, `nodered` read-only on `msh/#`). Two accounts: `nodered`, `meshtastic`
+(`openclaw`, the retired assistant's account, removed 2026-10-01).
 
 **RECOMMENDATION:** Consider binding to `127.0.0.1:1883` if only Docker
 services need access (they can reach it via the `taknet` network name
