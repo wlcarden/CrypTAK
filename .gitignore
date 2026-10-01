@@ -50,7 +50,7 @@ firmware/*.uf2
 firmware/esp32s3/
 firmware/meshtastic/
 
-# Generated map tiles (phone-provision/build-nova-tiles.py output) and scratch
+# Generated map tiles (scripts/phone-provision/build-nova-tiles.py output) and scratch
 *.mbtiles
 *.mbtiles-journal
 /nova-streets.sqlite
