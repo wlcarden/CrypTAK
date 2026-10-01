@@ -4,6 +4,35 @@ Running log of maintenance, incidents, and infrastructure changes.
 
 ---
 
+## 2026-10-01 — HMDM webapp down 08:14–13:10 UTC after the nightly appdata backup
+
+### Problem
+
+CI's "Verify HMDM webapp landing page" failed (683-byte Tomcat 404). The
+`appdata.backup` plugin (daily 04:00 local, method oneAfterTheOther) restarts
+containers individually, which bypasses compose's `depends_on`: hmdm started at
+08:13:52Z, two seconds before hmdm-db, every Liquibase module failed with
+`UnknownHostException: hmdm-db`, and Tomcat kept serving the 404 stub. Phones'
+MDM check-ins failed for ~5 h. Unrelated to the WebMap deploys.
+
+### Resolution
+
+`docker restart hmdm` once the DB was up (landing page 6508 B in 5 s). Added a
+size-based healthcheck and the `autoheal=true` label (autoheal already runs on
+the host, 300 s start period) so the same race self-heals within minutes. The
+underlying cause is the backup plugin's per-container restart order; excluding
+hmdm/hmdm-db from its stop list, or restarting the pair through compose
+afterwards, would remove the race entirely.
+
+Same day, retention follow-ups: an FTS `t-x-d-d` for a *disconnecting client*
+had tombstoned `CrypTAK-MeshRelay`, so inbound deletes now act only on placed
+markers; and because a broadcast delete reaches only connected clients (the
+first retirement, 13:15Z, went out while TAK-01 was asleep), a re-send of a
+tombstoned marker is now answered with the delete again (≤ every 5 min).
+
+---
+
+
 ## 2026-10-01 — Placed-marker retention on the WebMap
 
 ### Problem
