@@ -4,6 +4,49 @@ Running log of maintenance, incidents, and infrastructure changes.
 
 ---
 
+## 2026-09-30 — CI deploy downgraded headscale (stale pin) — ~4 min VPN control-plane outage
+
+### Problem
+
+Pushing 84c0f8d (CoT identity fixes) triggered `deploy-server.yml`. The rsync
+replaced `/mnt/user/appdata/tak-server/docker-compose.yml` with the repo copy,
+which still pinned `headscale:0.28`; the server had been upgraded to 0.29.4 on
+2026-09-28 (Tailscale Android >=1.102.3 crash fix) without committing the pin.
+`docker compose up -d` recreated headscale on 0.28, which refuses the
+0.29-migrated SQLite schema (`database_versions = v0.29.4`):
+
+```
+SQLite schema failed to validate: >> Remove table "database_versions"
+FTL Error initializing ... invalid schema
+```
+
+Crash loop 02:35:08–02:39:28 UTC; CI step "Verify core services running"
+failed on `headscale`. tak-01 and unraid-tak reconnected within seconds of
+the restore. The same run also pulled new images and recreated freetakserver,
+mosquitto, nodered, mesh-relay and incident-tracker, resetting every ATAK
+and relay session to FTS — expected behaviour of `pull` + `up -d` on floating
+tags, but worth knowing before pushing to `server/**` during an operation.
+
+### Resolution
+
+- Pin set to `ghcr.io/juanfont/headscale:0.29.4` in place on the server and
+  `docker compose up -d --no-deps headscale`; verified `minimum_version=v1.80`
+  and nodes online.
+- Same line committed to `server/docker-compose.yml` (e2c2978) so the next
+  rsync is byte-identical and compose leaves headscale alone.
+
+### Lesson
+
+Anything under `server/` that is changed on the server and not committed is
+reverted by the next deploy — the rsync excludes only `.env`,
+`docker-compose.override.yml` and the authelia/headscale/incident-tracker
+config files. Before pushing to `server/**`, diff the deployed tree against
+the repo: `diff <(git show HEAD:server/docker-compose.yml)
+<(ssh unraid cat /mnt/user/appdata/tak-server/docker-compose.yml)`.
+
+---
+
+
 ## 2026-09-30 — CoT identity bugs: WebMap marker keying, mesh-relay FTS wedge, MQTT node attribution
 
 ### Problem

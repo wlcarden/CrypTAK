@@ -309,7 +309,7 @@ services:
           memory: 256m
 
   headscale:
-    image: ghcr.io/juanfont/headscale:0.28
+    image: ghcr.io/juanfont/headscale:0.29.4  # no downgrade; required by Tailscale Android >=1.102.3
     container_name: headscale
     restart: always
     labels:
