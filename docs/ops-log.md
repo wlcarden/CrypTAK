@@ -20,9 +20,17 @@ MDM check-ins failed for ~5 h. Unrelated to the WebMap deploys.
 `docker restart hmdm` once the DB was up (landing page 6508 B in 5 s). Added a
 size-based healthcheck and the `autoheal=true` label (autoheal already runs on
 the host, 300 s start period) so the same race self-heals within minutes. The
-underlying cause is the backup plugin's per-container restart order; excluding
-hmdm/hmdm-db from its stop list, or restarting the pair through compose
-afterwards, would remove the race entirely.
+underlying cause was the backup plugin's processing order: with
+`oneAfterTheOther` each container is stopped, backed up and started in turn,
+and containers outside the plugin's explicit order are appended alphabetically,
+so `hmdm` was restarted and then `hmdm-db` was stopped for its own backup.
+Applied in the plugin config (`/boot/config/plugins/appdata.backup/config.json`,
+backup `config.json.bak-20261001-092940`): group `mdm` = hmdm-db → hmdm (the
+plugin stops a group in reverse and starts it in order), and `updateContainer`
+= no for all 31 compose-managed containers (tak-server, mdm, meshmonitor,
+dystopia-online, qbittorrent) — the plugin's default is to auto-update every
+container, which would have fought the digest pins. Dystopia's app/DB pairs are
+not grouped yet; `api` sorts before `platform-db`, the same shape.
 
 Same day, retention follow-ups: an FTS `t-x-d-d` for a *disconnecting client*
 had tombstoned `CrypTAK-MeshRelay`, so inbound deletes now act only on placed
