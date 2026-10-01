@@ -279,3 +279,66 @@ def test_peer_close_is_detected_and_next_send_reconnects_without_loss() -> None:
             server.close()
 
     asyncio.run(scenario())
+
+
+# --- Idle keepalive -----------------------------------------------------------
+
+def test_refresh_sa_after_peer_close_does_not_raise() -> None:
+    """After an EOF teardown the writer is None; refresh_sa must be a no-op."""
+    from datetime import datetime, timedelta, timezone
+
+    async def scenario() -> None:
+        client = FtsClient("127.0.0.1", 1)
+        client._last_sa = datetime.now(timezone.utc) - timedelta(minutes=10)
+        client._writer = None
+        await client.refresh_sa()  # used to raise AttributeError on None.write
+
+    asyncio.run(scenario())
+
+
+def test_keepalive_reconnects_after_peer_close() -> None:
+    """An idle relay must re-register with FTS without waiting for a position."""
+
+    async def scenario() -> None:
+        connections = 0
+        first_closed = asyncio.Event()
+
+        async def fts(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+            nonlocal connections
+            connections += 1
+            await asyncio.wait_for(reader.readline(), timeout=5)
+            if connections == 1:
+                writer.close()
+                await writer.wait_closed()
+                first_closed.set()
+                return
+            try:
+                while await reader.readline():
+                    pass
+            except (ConnectionResetError, OSError):
+                return
+
+        server = await asyncio.start_server(fts, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        client = FtsClient("127.0.0.1", port)
+        try:
+            await client.connect()
+            await asyncio.wait_for(first_closed.wait(), timeout=5)
+            for _ in range(50):
+                if client._writer is None:
+                    break
+                await asyncio.sleep(0.02)
+            assert client._writer is None, "writer not torn down after peer EOF"
+
+            await client.keepalive()  # what the main loop does on an idle queue
+            assert connections == 2, "keepalive did not reconnect"
+            assert client._writer is not None
+            assert client._drain_task is not None and not client._drain_task.done()
+
+            await client.keepalive()  # connected + SA fresh: must be a no-op
+            assert connections == 2
+        finally:
+            await client.close()
+            server.close()
+
+    asyncio.run(scenario())

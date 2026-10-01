@@ -396,9 +396,23 @@ class FtsClient:
         self._last_sa = datetime.now(timezone.utc)
         logger.info("Sent SA to FTS")
 
+    async def keepalive(self) -> None:
+        """Idle-time maintenance: re-register if FTS dropped us, else refresh SA.
+
+        FTS closes client connections on its own schedule and on every
+        restart. Reconnecting only inside send() meant that after an FTS
+        restart this relay stayed unregistered until the next mesh position
+        arrived -- and GW01, usually the only node heard, never reports one.
+        The main loop calls this whenever the queue has been idle.
+        """
+        if self._writer is None:
+            await self.connect()
+            return
+        await self.refresh_sa()
+
     async def refresh_sa(self) -> None:
         """Re-send SA before stale time so FTS keeps us registered."""
-        if self._last_sa is None:
+        if self._writer is None or self._last_sa is None:
             return
         elapsed = datetime.now(timezone.utc) - self._last_sa
         if elapsed > timedelta(minutes=SA_REFRESH_MINUTES):
@@ -1240,9 +1254,9 @@ async def main() -> None:
                 data = await asyncio.wait_for(queue.get(), timeout=30.0)
             except asyncio.TimeoutError:
                 try:
-                    await fts.refresh_sa()
+                    await fts.keepalive()
                 except Exception:
-                    logger.exception("SA refresh error")
+                    logger.exception("FTS keepalive error")
                 continue
 
             event_type = data.pop("_type", "pli")
