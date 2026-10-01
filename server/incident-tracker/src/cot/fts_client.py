@@ -13,6 +13,11 @@ _MAX_BACKOFF = 60.0
 _BACKOFF_FACTOR = 2.0
 _CLIENT_UID = "incident-tracker-client"
 _SA_REFRESH_MINUTES = 4
+# FTS registers a new connection from its first read and discards anything
+# else in that read, so an event written right after the SA -- e.g. the retry
+# inside send() after a reconnect -- is silently lost. The first send after a
+# connect waits until the registration has had its own read.
+_CONNECT_SETTLE_SECS = 0.5
 
 
 def _build_sa_cot() -> str:
@@ -56,6 +61,7 @@ class FtsClient:
         self._last_sa: datetime | None = None
         self._drain_task: asyncio.Task | None = None
         self._rx_bytes = 0
+        self._connected_at: float = 0.0
 
     async def connect(self) -> None:
         """Establish TCP connection to FTS, retrying with backoff."""
@@ -68,6 +74,7 @@ class FtsClient:
                 logger.info("Connected to FTS at %s:%d", self._host, self._port)
                 await self._send_sa()
                 self._start_drain()
+                self._connected_at = asyncio.get_running_loop().time()
                 return
             except (ConnectionRefusedError, OSError) as e:
                 logger.warning(
@@ -93,12 +100,18 @@ class FtsClient:
         if elapsed > timedelta(minutes=_SA_REFRESH_MINUTES):
             await self._send_sa()
 
+    async def _settle(self) -> None:
+        remaining = _CONNECT_SETTLE_SECS - (asyncio.get_running_loop().time() - self._connected_at)
+        if remaining > 0:
+            await asyncio.sleep(remaining)
+
     async def send(self, cot_xml: str) -> bool:
         """Send a CoT XML event to FTS. Returns True on success."""
         if self._writer is None:
             await self.connect()
 
         await self._refresh_sa_if_needed()
+        await self._settle()
 
         try:
             self._writer.write((cot_xml + "\n").encode("utf-8"))
@@ -110,6 +123,7 @@ class FtsClient:
             await self.connect()
             # Retry once after reconnect
             try:
+                await self._settle()
                 self._writer.write((cot_xml + "\n").encode("utf-8"))
                 await self._writer.drain()
                 return True

@@ -483,3 +483,42 @@ class TestInboundDrain:
             await asyncio.sleep(0)  # let the drain task run once
         assert client._drain_task is not None and client._drain_task.done()
         assert client._writer is writer, "mock reader must not trigger teardown"
+
+
+class TestConnectSettle:
+    async def test_first_event_after_connect_gets_its_own_read(self, monkeypatch):
+        """FTS discards anything sharing its registration read; keep the SA alone."""
+        import time
+        from src.cot import fts_client as mod
+        monkeypatch.setattr(mod, "_CONNECT_SETTLE_SECS", 0.2)
+        reads: list[bytes] = []
+
+        async def fts(reader, writer):
+            try:
+                while True:
+                    data = await reader.read(65536)
+                    if not data:
+                        return
+                    reads.append(data)
+            except (ConnectionResetError, OSError):
+                return
+            finally:
+                writer.close()                           # 3.12: wait_closed() waits for this
+
+        server = await asyncio.start_server(fts, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        client = FtsClient("127.0.0.1", port)
+        try:
+            await client.connect()                       # returns immediately
+            t0 = time.monotonic()
+            assert await client.send("<event uid='first' type='a-f-G-U-C'/>")
+            assert time.monotonic() - t0 >= 0.19         # the wait happens on the first send
+            await asyncio.sleep(0.1)
+            assert len(reads) >= 2 and b"first" not in reads[0]
+            t1 = time.monotonic()
+            assert await client.send("<event uid='second' type='a-f-G-U-C'/>")
+            assert time.monotonic() - t1 < 0.1           # later sends are not delayed
+        finally:
+            await client.close()
+            server.close()
+            await server.wait_closed()
