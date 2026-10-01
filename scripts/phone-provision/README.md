@@ -1,7 +1,7 @@
 # CrypTAK Mission Device Provisioning Guide
 
-**Last updated:** 2026-04-05
-**Target devices:** Pixel 6 Pro (raven), Pixel 6 × 2
+**Last updated:** 2026-04-13
+**Target devices:** Pixel 6 Pro (raven), Pixel 6 × 3
 
 ---
 
@@ -14,6 +14,7 @@ Before touching any phone:
   ```bash
   ssh unraid "docker exec headscale headscale preauthkeys create --user 1 --expiration 72h"
   ```
+- [ ] Phone connected to home WiFi (required for Tailscale enrollment — the provisioning script does not enable WiFi)
 - [ ] Have USB-C cable + Chrome browser ready
 - [ ] GrapheneOS web installer: https://grapheneos.org/install/web
 
@@ -21,11 +22,11 @@ Before touching any phone:
 
 ## Device Assignments
 
-| Device  | Model               | Callsign | Headscale IP | Status                                     |
-| ------- | ------------------- | -------- | ------------ | ------------------------------------------ |
-| Phone 1 | Pixel 6 Pro (raven) | TAK-01   | 100.64.0.4   | Enrolled, online                           |
-| Phone 2 | Pixel 6 (oriole)    | TAK-02   | 100.64.0.5   | Provisioned 2026-04-05                     |
-| Phone 3 | Pixel 6 (oriole)    | TAK-03   | —            | USB-C fastboot HW fault, needs replacement |
+| Device  | Model               | Callsign | Headscale IP | Status                   |
+| ------- | ------------------- | -------- | ------------ | ------------------------ |
+| Phone 1 | Pixel 6 Pro (raven) | TAK-01   | 100.64.0.4   | Enrolled, online         |
+| Phone 2 | Pixel 6 (oriole)    | TAK-02   | 100.64.0.5   | Provisioned 2026-04-05   |
+| Phone 3 | Pixel 6 (oriole)    | TAK-03   | —            | Provisioning in progress |
 
 Pre-auth keys are generated per-session (72h expiry) and passed to the provisioning script.
 Do NOT hardcode keys — generate fresh ones on provisioning day.
